@@ -1,0 +1,20 @@
+{
+  "name": "lnd",
+  "version": "0.0.2",
+  "description": "[![Build Status](https://travis-ci.org/lightningnetwork/lnd.svg?branch=master)](https://travis-ci.org/lightningnetwork/lnd)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublish": "go build -i -v"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LightningNetwork/lnd.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/LightningNetwork/lnd/issues"
+  },
+  "homepage": "https://github.com/LightningNetwork/lnd#readme"
+}
