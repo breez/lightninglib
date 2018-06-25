@@ -235,7 +235,7 @@ type config struct {
 // 	2) Pre-parse the command line to check for an alternative config file
 // 	3) Load configuration file overwriting defaults with any specified options
 // 	4) Parse CLI options and overwrite/add any specified options
-func loadConfig() (*config, error) {
+func loadConfig(args []string) (*config, error) {
 	defaultCfg := config{
 		LndDir:         defaultLndDir,
 		ConfigFile:     defaultConfigFile,
@@ -305,12 +305,12 @@ func loadConfig() (*config, error) {
 	// Pre-parse the command line options to pick up an alternative config
 	// file.
 	preCfg := defaultCfg
-	if _, err := flags.Parse(&preCfg); err != nil {
+	if _, err := flags.ParseArgs(&preCfg, args[1:]); err != nil {
 		return nil, err
 	}
 
 	// Show the version and exit if the version flag was specified.
-	appName := filepath.Base(os.Args[0])
+	appName := filepath.Base(args[0])
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	usageMessage := fmt.Sprintf("Use %s -h to show usage", appName)
 	if preCfg.ShowVersion {
@@ -362,7 +362,7 @@ func loadConfig() (*config, error) {
 
 	// Finally, parse the remaining command line options again to ensure
 	// they take precedence.
-	if _, err := flags.Parse(&cfg); err != nil {
+	if _, err := flags.ParseArgs(&cfg, args[1:]); err != nil {
 		return nil, err
 	}
 
