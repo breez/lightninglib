@@ -712,7 +712,7 @@ func genCertPair(certFile, keyFile string) error {
 	// Collect the host's names into a slice.
 	host, err := os.Hostname()
 	if err != nil {
-		return err
+		host = "localhost"
 	}
 	dnsNames := []string{host}
 	if host != "localhost" {
