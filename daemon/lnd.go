@@ -2,7 +2,7 @@
 // Copyright (c) 2015-2016 The Decred developers
 // Copyright (C) 2015-2017 The Lightning Network Developers
 
-package main
+package daemon
 
 import (
 	"bytes"
@@ -34,7 +34,6 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	flags "github.com/jessevdk/go-flags"
 	"github.com/lightningnetwork/lnd/autopilot"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/keychain"
@@ -89,10 +88,10 @@ var (
 	}
 )
 
-// lndMain is the true entry point for lnd. This function is required since
+// LndMain is the true entry point for lnd. This function is required since
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
-func lndMain() error {
+func LndMain() error {
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
 	loadedConfig, err := loadConfig()
@@ -642,18 +641,6 @@ func lndMain() error {
 	return nil
 }
 
-func main() {
-	// Call the "real" main in a nested manner so the defers will properly
-	// be executed in the case of a graceful shutdown.
-	if err := lndMain(); err != nil {
-		if e, ok := err.(*flags.Error); ok && e.Type == flags.ErrHelp {
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
-	}
-}
-
 // fileExists reports whether the named file or directory exists.
 // This function is taken from https://github.com/btcsuite/btcd
 func fileExists(name string) bool {
@@ -1014,7 +1001,7 @@ func waitForWalletPassword(grpcEndpoints, restEndpoints []string,
 			// Don't leave the file open in case the new wallet
 			// could not be created for whatever reason.
 			if err := loader.UnloadWallet(); err != nil {
-				ltndLog.Errorf("Could not unload new " +
+				ltndLog.Errorf("Could not unload new "+
 					"wallet: %v", err)
 			}
 			return nil, err

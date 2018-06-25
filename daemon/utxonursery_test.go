@@ -1,6 +1,6 @@
 // +build !rpctest
 
-package main
+package daemon
 
 import (
 	"bytes"
