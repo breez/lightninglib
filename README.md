@@ -10,8 +10,8 @@ go get -u github.com/golang/dep/cmd/dep
 ### Installing
 
 ```
-go get -d github.com/lightningnetwork/lnd
-cd $GOPATH/src/github.com/lightningnetwork/lnd
+go get -d github.com/breez/lightninglib
+cd $GOPATH/src/github.com/breez/lightninglib
 dep ensure -v
 ```
 If you want to build lnd and lncli
