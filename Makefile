@@ -1,5 +1,5 @@
-PKG := "github.com/breez/lightninglib
-ESCPKG := "github.comi\/breez\/lightninglib
+PKG := github.com/breez/lightninglib
+ESCPKG := github.comi\/breez\/lightninglib
 
 DEP_PKG := github.com/golang/dep/cmd/dep
 BTCD_PKG := github.com/roasbeef/btcd
@@ -125,12 +125,12 @@ btcd: $(GLIDE_BIN) $(BTCD_DIR)
 
 build:
 	@$(call print, "Building debug lnd and lncli.")
-	$(GOBUILD) -tags=$(TEST_TAGS) -o lnd-debug $(LDFLAGS) $(PKG)
+	$(GOBUILD) -tags=$(TEST_TAGS) -o lnd-debug $(LDFLAGS) $(PKG)/cmd/lnd
 	$(GOBUILD) -tags=$(TEST_TAGS) -o lncli-debug $(LDFLAGS) $(PKG)/cmd/lncli
 
 install:
 	@$(call print, "Installing lnd and lncli.")
-	go install -v $(LDFLAGS) $(PKG)
+	go install -v $(LDFLAGS) $(PKG)/cmd/lnd
 	go install -v $(LDFLAGS) $(PKG)/cmd/lncli
 
 scratch: dep build
