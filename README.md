@@ -18,3 +18,17 @@ If you want to build lnd and lncli
 ```
 go install -v ./cmd/...
 ```
+
+**Updating**
+
+To update your version of `lightninglib` to the latest version run the following
+commands:
+```
+cd $GOPATH/src/github.com/breez/lightninglib
+git pull
+dep ensure -v
+```
+You can rebuild lnd and lncli
+```
+go install -v ./cmd/...
+```
