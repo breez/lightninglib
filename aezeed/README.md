@@ -1,6 +1,6 @@
 # aezeed
 
-[In this PR](https://github.com/lightningnetwork/lnd/pull/773) we add a new package implementing the aezeed cipher
+[In this PR](https://"github.com/breez/lightninglib/pull/773) we add a new package implementing the aezeed cipher
 seed scheme (based on [aez](http://web.cs.ucdavis.edu/~rogaway/aez/) ).
 
 This is a new scheme developed that aims to overcome the
@@ -18,11 +18,11 @@ been added, on my laptop I get about 100ms per attempt):
 
 goos: linux
 goarch: amd64
-pkg: github.com/lightningnetwork/lnd/aezeed
+pkg: "github.com/breez/lightninglib/aezeed
 BenchmarkTomnemonic-4                 20          93280730 ns/op        33559670 B/op         36 allocs/op
 BenchmarkToCipherSeed-4               10         102323892 ns/op        36915684 B/op         41 allocs/op
 PASS
-ok      github.com/lightningnetwork/lnd/aezeed  4.168s
+ok      "github.com/breez/lightninglib/aezeed  4.168s
 ```
 
 Aside from addressing the shortcomings of BIP 39 a cipher  seed

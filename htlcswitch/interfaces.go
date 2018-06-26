@@ -1,9 +1,9 @@
 package htlcswitch
 
 import (
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnpeer"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnpeer"
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
 )
 

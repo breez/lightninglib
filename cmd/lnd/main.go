@@ -5,7 +5,7 @@ import (
 	"os"
 
 	flags "github.com/jessevdk/go-flags"
-	"github.com/lightningnetwork/lnd/daemon"
+	"github.com/breez/lightninglib/daemon"
 )
 
 func main() {

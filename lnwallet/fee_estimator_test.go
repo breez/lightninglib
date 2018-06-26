@@ -3,7 +3,7 @@ package lnwallet_test
 import (
 	"testing"
 
-	"github.com/lightningnetwork/lnd/lnwallet"
+	"github.com/breez/lightninglib/lnwallet"
 	"github.com/roasbeef/btcutil"
 )
 

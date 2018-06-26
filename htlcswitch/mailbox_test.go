@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/lnwire"
 )
 
 // TestMailBoxCouriers tests that both aspects of the mailBox struct works

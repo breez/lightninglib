@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 
 	"github.com/coreos/bbolt"
-	"github.com/lightningnetwork/lnd/macaroons"
+	"github.com/breez/lightninglib/macaroons"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"google.golang.org/grpc/metadata"

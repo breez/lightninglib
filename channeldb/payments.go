@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/coreos/bbolt"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/lnwire"
 )
 
 var (

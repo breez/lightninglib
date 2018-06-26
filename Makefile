@@ -1,5 +1,5 @@
-PKG := github.com/lightningnetwork/lnd
-ESCPKG := github.com\/lightningnetwork\/lnd
+PKG := "github.com/breez/lightninglib
+ESCPKG := "github.comi\/breez\/lightninglib
 
 DEP_PKG := github.com/golang/dep/cmd/dep
 BTCD_PKG := github.com/roasbeef/btcd

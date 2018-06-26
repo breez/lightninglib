@@ -3,9 +3,9 @@ package daemon
 import (
 	"sync"
 
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/contractcourt"
-	"github.com/lightningnetwork/lnd/lnwallet"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/contractcourt"
+	"github.com/breez/lightninglib/lnwallet"
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
 )
 

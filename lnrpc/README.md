@@ -2,8 +2,8 @@ lnrpc
 =====
 
 [![Build Status](http://img.shields.io/travis/lightningnetwork/lnd.svg)](https://travis-ci.org/lightningnetwork/lnd) 
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lightningnetwork/lnd/blob/master/LICENSE)
-[![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg)](http://godoc.org/github.com/lightningnetwork/lnd/lnrpc)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://"github.com/breez/lightninglib/blob/master/LICENSE)
+[![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg)](http://godoc.org/"github.com/breez/lightninglib/lnrpc)
 
 This lnrpc package implements both a client and server for `lnd`s RPC system
 which is based off of the high-performance cross-platform
@@ -135,7 +135,7 @@ description):
 ## Installation and Updating
 
 ```bash
-$ go get -u github.com/lightningnetwork/lnd/lnrpc
+$ go get -u "github.com/breez/lightninglib/lnrpc
 ```
 
 ## Generate protobuf definitions
@@ -165,4 +165,4 @@ $ git reset --hard f2862b476edcef83412c7af8687c9cd8e4097c0f
 $ go install ./protoc-gen-grpc-gateway ./protoc-gen-swagger
 ```
 
-4. Run [`gen_protos.sh`](https://github.com/lightningnetwork/lnd/blob/master/lnrpc/gen_protos.sh) to generate new protobuf definitions.
+4. Run [`gen_protos.sh`](https://"github.com/breez/lightninglib/blob/master/lnrpc/gen_protos.sh) to generate new protobuf definitions.

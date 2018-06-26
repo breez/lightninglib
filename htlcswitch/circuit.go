@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwire"
 )
 
 // EmptyCircuitKey is a default value for an outgoing circuit key returned when

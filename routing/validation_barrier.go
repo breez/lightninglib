@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwire"
 )
 
 // ErrVBarrierShuttingDown signals that the barrier has been requested to

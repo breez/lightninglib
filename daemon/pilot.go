@@ -5,9 +5,9 @@ import (
 	"net"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/lightningnetwork/lnd/autopilot"
-	"github.com/lightningnetwork/lnd/lnwire"
-	"github.com/lightningnetwork/lnd/tor"
+	"github.com/breez/lightninglib/autopilot"
+	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/tor"
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/roasbeef/btcd/wire"
 	"github.com/roasbeef/btcutil"

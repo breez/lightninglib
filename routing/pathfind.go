@@ -10,8 +10,8 @@ import (
 
 	"github.com/coreos/bbolt"
 	"github.com/lightningnetwork/lightning-onion"
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
 	"github.com/roasbeef/btcutil"

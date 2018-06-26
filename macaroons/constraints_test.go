@@ -2,7 +2,7 @@ package macaroons_test
 
 import (
 	"testing"
-	"github.com/lightningnetwork/lnd/macaroons"
+	"github.com/breez/lightninglib/macaroons"
 	"gopkg.in/macaroon.v2"
 	"time"
 	"strings"

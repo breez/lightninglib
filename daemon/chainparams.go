@@ -1,7 +1,7 @@
 package daemon
 
 import (
-	"github.com/lightningnetwork/lnd/keychain"
+	"github.com/breez/lightninglib/keychain"
 	litecoinCfg "github.com/ltcsuite/ltcd/chaincfg"
 	litecoinWire "github.com/ltcsuite/ltcd/wire"
 	"github.com/roasbeef/btcd/chaincfg"

@@ -156,13 +156,13 @@ A quick summary of test practices follows:
 - When you fix a bug, it should be accompanied by tests which exercise the bug
   to both prove it has been resolved and to prevent future regressions
 - Changes to publicly exported packages such as
-  [brontide](https://github.com/lightningnetwork/lnd/tree/master/brontide) should
+  [brontide](https://"github.com/breez/lightninglib/tree/master/brontide) should
   be accompanied by unit tests exercising the new or changed behavior.
 - Changes to behavior within the daemon's interaction with the P2P protocol,
   or RPC's will need to be accompanied by integration tests which use the
-  [`networkHarness`framework](https://github.com/lightningnetwork/lnd/blob/master/lntest/harness.go)
+  [`networkHarness`framework](https://"github.com/breez/lightninglib/blob/master/lntest/harness.go)
   contained within `lnd`. For example integration tests, see
-  [`lnd_test.go`](https://github.com/lightningnetwork/lnd/blob/master/lnd_test.go#L181). 
+  [`lnd_test.go`](https://"github.com/breez/lightninglib/blob/master/lnd_test.go#L181). 
 
 <a name="CodeDocumentation" />
 
@@ -357,7 +357,7 @@ generate identical compiled protos and related files:
    * golang/protobuf: `ab9f9a6dab164b7d1246e0e688b0ab7b94d8553e`
 
 For detailed instructions on how to compile modifications to `lnd`'s `protobuf`
-definitions, check out the [lnrpc README](https://github.com/lightningnetwork/lnd/blob/master/lnrpc/README.md).
+definitions, check out the [lnrpc README](https://"github.com/breez/lightninglib/blob/master/lnrpc/README.md).
 
 Additionally, in order to maintain a uniform display of the RPC responses
 rendered by `lncli`, all added or modified `protof` definitions, _must_ attach
@@ -441,7 +441,7 @@ keep a clean commit history over a tangled weave of merge commits.  However,
 regardless of the specific merge method used, the code will be integrated with
 the master branch and the pull request will be closed.
 
-Rejoice as you will now be listed as a [contributor](https://github.com/lightningnetwork/lnd/graphs/contributors)!
+Rejoice as you will now be listed as a [contributor](https://"github.com/breez/lightninglib/graphs/contributors)!
 
 <a name="Standards" />
 
@@ -474,7 +474,7 @@ Rejoice as you will now be listed as a [contributor](https://github.com/lightnin
 #### 6.2. Licensing of Contributions
 ****
 All contributions must be licensed with the
-[MIT license](https://github.com/lightningnetwork/lnd/blob/master/LICENSE).  This is
+[MIT license](https://"github.com/breez/lightninglib/blob/master/LICENSE).  This is
 the same license as all of the code found within lnd.
 
 

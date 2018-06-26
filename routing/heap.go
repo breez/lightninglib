@@ -1,6 +1,6 @@
 package routing
 
-import "github.com/lightningnetwork/lnd/channeldb"
+import "github.com/breez/lightninglib/channeldb"
 
 // nodeWithDist is a helper struct that couples the distance from the current
 // source to a node with a pointer to the node itself.

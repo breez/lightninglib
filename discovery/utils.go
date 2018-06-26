@@ -2,9 +2,9 @@ package discovery
 
 import (
 	"github.com/go-errors/errors"
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnwallet"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/roasbeef/btcd/btcec"
 )
 

@@ -6,10 +6,10 @@ import (
 	"sync/atomic"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/lightningnetwork/lnd/chainntnfs"
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnwallet"
-	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/breez/lightninglib/chainntnfs"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/roasbeef/btcd/wire"
 )
 

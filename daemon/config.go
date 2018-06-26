@@ -20,10 +20,10 @@ import (
 	"time"
 
 	flags "github.com/jessevdk/go-flags"
-	"github.com/lightningnetwork/lnd/brontide"
-	"github.com/lightningnetwork/lnd/htlcswitch/hodl"
-	"github.com/lightningnetwork/lnd/lnwire"
-	"github.com/lightningnetwork/lnd/tor"
+	"github.com/breez/lightninglib/brontide"
+	"github.com/breez/lightninglib/htlcswitch/hodl"
+	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/tor"
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/roasbeef/btcutil"
 )

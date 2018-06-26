@@ -3,10 +3,10 @@ package daemon
 import (
 	"time"
 
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/discovery"
-	"github.com/lightningnetwork/lnd/lnwire"
-	"github.com/lightningnetwork/lnd/routing"
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/discovery"
+	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/routing"
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
 )
 

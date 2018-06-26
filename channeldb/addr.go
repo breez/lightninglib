@@ -6,7 +6,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/lightningnetwork/lnd/tor"
+	"github.com/breez/lightninglib/tor"
 )
 
 // addressType specifies the network protocol and version that should be used
