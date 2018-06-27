@@ -9,8 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/brontide"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
@@ -19,6 +17,8 @@ import (
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/go-errors/errors"
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
 	"github.com/roasbeef/btcd/connmgr"
@@ -39,6 +39,9 @@ const (
 
 	// idleTimeout is the duration of inactivity before we time out a peer.
 	idleTimeout = 5 * time.Minute
+
+	// writeMessageTimeout is the timeout used when writing a message to peer.
+	writeMessageTimeout = 10 * time.Second
 
 	// outgoingQueueLen is the buffer size of the channel which houses
 	// messages to be sent across the wire, requested by objects outside
@@ -1249,7 +1252,7 @@ func (p *peer) writeMessage(msg lnwire.Message) error {
 	n, err := lnwire.WriteMessage(b, msg, 0)
 	atomic.AddUint64(&p.bytesSent, uint64(n))
 
-	p.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	p.conn.SetWriteDeadline(time.Now().Add(writeMessageTimeout))
 
 	// Finally, write the message itself in a single swoop.
 	_, err = p.conn.Write(b.Bytes())
