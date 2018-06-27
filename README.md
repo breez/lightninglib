@@ -1,4 +1,6 @@
 # lightninglib
+`lightninglib` is a fork of [lnd](https://github.com/lightningnetwork/lnd) which aims to be usable as a go library inside any application, including mobile apps.
+
 ### Preliminaries
 
 This project uses `dep` to manage dependencies as well as to provide *reproducible builds*.
@@ -49,7 +51,8 @@ Then run
 gomobile bind -target=android -tags="android" -o lightningmobile.aar lightningmobile
 ```
 You can now use the aar file in your android application.
-See https://github.com/golang/go/wiki/Mobile for more informations about using go in mobile applications
+
+In https://github.com/golang/go/wiki/Mobile you'll find more informations about using go in mobile apps.
 
 ### Updating
 
