@@ -22,9 +22,9 @@ go install -v ./cmd/...
 ```
 
 ### Using the library
-You can for instance use lightninglib in a mobile application using [gomobile](https://godoc.org/golang.org/x/mobile).
+You can for instance use lightninglib in a mobile app using [gomobile](https://godoc.org/golang.org/x/mobile).
 
-First create a file containing the following code:
+First, create a file containing the following code:
 
 ```
 package lightningmobile
@@ -46,11 +46,11 @@ func Start(appDir string) {
 }
 ```
 
-Then run
+Then run:
 ```
 gomobile bind -target=android -tags="android" -o lightningmobile.aar lightningmobile
 ```
-You can now use the aar file in your android application.
+You can now use the aar file in your android app.
 
 In https://github.com/golang/go/wiki/Mobile you'll find more informations about using go in mobile apps.
 
