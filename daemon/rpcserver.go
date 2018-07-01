@@ -18,15 +18,16 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/coreos/bbolt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
+	"github.com/breez/lightninglib/signal"
 	"github.com/breez/lightninglib/zpay32"
+	"github.com/coreos/bbolt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/roasbeef/btcd/blockchain"
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
@@ -2798,7 +2799,7 @@ func (r *rpcServer) LookupInvoice(ctx context.Context,
 
 	rpcsLog.Tracef("[lookupinvoice] searching for invoice %x", payHash[:])
 
-	invoice, err := r.server.invoices.LookupInvoice(payHash)
+	invoice, _, err := r.server.invoices.LookupInvoice(payHash)
 	if err != nil {
 		return nil, err
 	}
@@ -3415,7 +3416,7 @@ func (r *rpcServer) GetNetworkInfo(ctx context.Context,
 func (r *rpcServer) StopDaemon(ctx context.Context,
 	_ *lnrpc.StopRequest) (*lnrpc.StopResponse, error) {
 
-	shutdownRequestChannel <- struct{}{}
+	signal.RequestShutdown()
 	return &lnrpc.StopResponse{}, nil
 }
 

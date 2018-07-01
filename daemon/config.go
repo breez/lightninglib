@@ -435,25 +435,31 @@ func loadConfig(args []string) (*config, error) {
 	// Validate the Tor config parameters.
 	socks, err := lncfg.ParseAddressString(
 		cfg.Tor.SOCKS, strconv.Itoa(defaultTorSOCKSPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Tor.SOCKS = socks.String()
+
 	dns, err := lncfg.ParseAddressString(
 		cfg.Tor.DNS, strconv.Itoa(defaultTorDNSPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Tor.DNS = dns.String()
+
 	control, err := lncfg.ParseAddressString(
 		cfg.Tor.Control, strconv.Itoa(defaultTorControlPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Tor.Control = control.String()
+
 	switch {
 	case cfg.Tor.V2 && cfg.Tor.V3:
 		return nil, errors.New("either tor.v2 or tor.v3 can be set, " +
@@ -821,6 +827,7 @@ func loadConfig(args []string) (*config, error) {
 	// duplicate addresses.
 	cfg.RPCListeners, err = lncfg.NormalizeAddresses(
 		cfg.RawRPCListeners, strconv.Itoa(defaultRPCPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
@@ -830,6 +837,7 @@ func loadConfig(args []string) (*config, error) {
 	// duplicate addresses.
 	cfg.RESTListeners, err = lncfg.NormalizeAddresses(
 		cfg.RawRESTListeners, strconv.Itoa(defaultRESTPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
@@ -839,6 +847,7 @@ func loadConfig(args []string) (*config, error) {
 	// duplicate addresses.
 	cfg.Listeners, err = lncfg.NormalizeAddresses(
 		cfg.RawListeners, strconv.Itoa(defaultPeerPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
@@ -848,6 +857,7 @@ func loadConfig(args []string) (*config, error) {
 	// duplicate addresses.
 	cfg.ExternalIPs, err = lncfg.NormalizeAddresses(
 		cfg.RawExternalIPs, strconv.Itoa(defaultPeerPort),
+		cfg.net.ResolveTCPAddr,
 	)
 	if err != nil {
 		return nil, err
@@ -869,10 +879,7 @@ func loadConfig(args []string) (*config, error) {
 	// inbound support is enabled.
 	if cfg.Tor.V2 || cfg.Tor.V3 {
 		for _, addr := range cfg.Listeners {
-			// Due to the addresses being normalized above, we can
-			// skip checking the error.
-			host, _, _ := net.SplitHostPort(addr.String())
-			if host == "localhost" || host == "127.0.0.1" {
+			if lncfg.IsLoopback(addr.String()) {
 				continue
 			}
 

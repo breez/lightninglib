@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/breez/lightninglib/autopilot"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lncfg"
@@ -42,6 +41,7 @@ import (
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/macaroons"
+	"github.com/breez/lightninglib/signal"
 	"github.com/breez/lightninglib/walletunlocker"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/roasbeef/btcd/btcec"
@@ -61,7 +61,6 @@ var (
 	Commit string
 
 	cfg              *config
-	shutdownChannel  = make(chan struct{})
 	registeredChains = newChainRegistry()
 
 	macaroonDatabaseDir string
@@ -93,6 +92,12 @@ var (
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
 func LndMain(args []string) error {
+	defer func() {
+		if logRotatorPipe != nil {
+			ltndLog.Info("Shutdown complete")
+		}
+	}()
+
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
 	loadedConfig, err := loadConfig(args)
@@ -499,6 +504,7 @@ func LndMain(args []string) error {
 		return err
 	}
 	server.fundingMgr = fundingMgr
+	defer fundingMgr.Stop()
 
 	// Check macaroon authentication if macaroons aren't disabled.
 	if macaroonService != nil {
@@ -516,6 +522,7 @@ func LndMain(args []string) error {
 	if err := rpcServer.Start(); err != nil {
 		return err
 	}
+	defer rpcServer.Stop()
 
 	grpcServer := grpc.NewServer(serverOpts...)
 	lnrpc.RegisterLightningServer(grpcServer, rpcServer)
@@ -573,18 +580,9 @@ func LndMain(args []string) error {
 		ltndLog.Infof("Waiting for chain backend to finish sync, "+
 			"start_height=%v", bestHeight)
 
-		// We'll add an interrupt handler in order to process shutdown
-		// requests while the chain backend syncs.
-		addInterruptHandler(func() {
-			rpcServer.Stop()
-			fundingMgr.Stop()
-		})
-
 		for {
-			select {
-			case <-shutdownChannel:
+			if !signal.Alive() {
 				return nil
-			default:
 			}
 
 			synced, _, err := activeChainControl.wallet.IsSynced()
@@ -614,10 +612,10 @@ func LndMain(args []string) error {
 		srvrLog.Errorf("unable to start server: %v\n", err)
 		return err
 	}
+	defer server.Stop()
 
 	// Now that the server has started, if the autopilot mode is currently
 	// active, then we'll initialize a fresh instance of it and start it.
-	var pilot *autopilot.Agent
 	if cfg.Autopilot.Active {
 		pilot, err := initAutoPilot(server, cfg.Autopilot)
 		if err != nil {
@@ -630,21 +628,12 @@ func LndMain(args []string) error {
 				err)
 			return err
 		}
+		defer pilot.Stop()
 	}
-
-	addInterruptHandler(func() {
-		rpcServer.Stop()
-		fundingMgr.Stop()
-		if pilot != nil {
-			pilot.Stop()
-		}
-		server.Stop()
-	})
 
 	// Wait for shutdown signal from either a graceful server stop or from
 	// the interrupt handler.
-	<-shutdownChannel
-	ltndLog.Info("Shutdown complete")
+	<-signal.ShutdownChannel()
 	return nil
 }
 
@@ -1048,7 +1037,7 @@ func waitForWalletPassword(grpcEndpoints, restEndpoints []net.Addr,
 		}
 		return walletInitParams, nil
 
-	case <-shutdownChannel:
+	case <-signal.ShutdownChannel():
 		return nil, fmt.Errorf("shutting down")
 	}
 }

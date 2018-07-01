@@ -8,10 +8,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/btcsuite/btclog"
-	"github.com/jrick/logrotate/rotator"
-	"github.com/lightninglabs/neutrino"
-	"github.com/lightningnetwork/lightning-onion"
 	"github.com/breez/lightninglib/autopilot"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
@@ -20,6 +16,11 @@ import (
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/routing"
+	"github.com/breez/lightninglib/signal"
+	"github.com/btcsuite/btclog"
+	"github.com/jrick/logrotate/rotator"
+	"github.com/lightninglabs/neutrino"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 	"github.com/roasbeef/btcd/connmgr"
 )
 
@@ -89,6 +90,7 @@ func init() {
 	autopilot.UseLogger(atplLog)
 	contractcourt.UseLogger(cnctLog)
 	sphinx.UseLogger(sphxLog)
+	signal.UseLogger(ltndLog)
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
