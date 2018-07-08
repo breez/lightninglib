@@ -589,6 +589,7 @@ func (p *peer) String() string {
 // readNextMessage reads, and returns the next message on the wire along with
 // any additional raw payload.
 func (p *peer) readNextMessage() (lnwire.Message, error) {
+	peerLog.Infof("readNextMessage from peer (%x) started", p.PubKey())
 	noiseConn, ok := p.conn.(*brontide.Conn)
 	if !ok {
 		return nil, fmt.Errorf("brontide.Conn required to read messages")
@@ -601,6 +602,7 @@ func (p *peer) readNextMessage() (lnwire.Message, error) {
 	rawMsg, err := noiseConn.ReadNextMessage()
 	atomic.AddUint64(&p.bytesReceived, uint64(len(rawMsg)))
 	if err != nil {
+		peerLog.Infof("readNextMessage from peer (%x) got error (err = %v)", p.PubKey(), err)
 		return nil, err
 	}
 
@@ -609,10 +611,13 @@ func (p *peer) readNextMessage() (lnwire.Message, error) {
 	msgReader := bytes.NewReader(rawMsg)
 	nextMsg, err := lnwire.ReadMessage(msgReader, 0)
 	if err != nil {
+		peerLog.Infof("readNextMessage from peer (%x) got error in reading (err = %v)", p.PubKey(), err)
 		return nil, err
 	}
 
 	p.logWireMessage(nextMsg, true)
+
+	peerLog.Infof("readNextMessage  (type = %v) from peer (%x)  finished (err = %v)", nextMsg.MsgType(), p.PubKey(), err)
 
 	return nextMsg, nil
 }
@@ -1234,6 +1239,7 @@ func (p *peer) logWireMessage(msg lnwire.Message, read bool) {
 
 // writeMessage writes the target lnwire.Message to the remote peer.
 func (p *peer) writeMessage(msg lnwire.Message) error {
+	peerLog.Infof("writeMessage (type = %v) to peer (%x) finished (err = %v)", msg.MsgType, p.PubKey(), err)
 	// Simply exit if we're shutting down.
 	if atomic.LoadInt32(&p.disconnect) != 0 {
 		return ErrPeerExiting
@@ -1256,6 +1262,9 @@ func (p *peer) writeMessage(msg lnwire.Message) error {
 
 	// Finally, write the message itself in a single swoop.
 	_, err = p.conn.Write(b.Bytes())
+
+	peerLog.Infof("writeMessage (type = %v) to peer (%x) finished (err = %v)", msg.MsgType(), p.PubKey(), err)
+
 	return err
 }
 
