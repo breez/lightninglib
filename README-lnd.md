@@ -1,9 +1,9 @@
 ## Lightning Network Daemon
 
-[![Build Status](http://img.shields.io/travis/lightningnetwork/lnd.svg)](https://travis-ci.org/lightningnetwork/lnd)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://"github.com/breez/lightninglib/blob/master/LICENSE)
+[![Build Status](https://img.shields.io/travis/lightningnetwork/lnd.svg)](https://travis-ci.org/lightningnetwork/lnd)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lightningnetwork/lnd/blob/master/LICENSE)
 [![Irc](https://img.shields.io/badge/chat-on%20freenode-brightgreen.svg)](https://webchat.freenode.net/?channels=lnd)
-[![Godoc](https://godoc.org/"github.com/breez/lightninglib?status.svg)](https://godoc.org/"github.com/breez/lightninglib)
+[![Godoc](https://godoc.org/github.com/lightningnetwork/lnd?status.svg)](https://godoc.org/github.com/lightningnetwork/lnd)
 
 <img src="logo.png">
 
@@ -24,7 +24,7 @@ within it.  In the current state `lnd` is capable of:
 * Sending outgoing [onion-encrypted payments](https://github.com/lightningnetwork/lightning-onion)
 through the network.
 * Updating advertised fee schedules.
-* Automatic channel management ([`autopilot`](https://"github.com/breez/lightninglib/tree/master/autopilot)).
+* Automatic channel management ([`autopilot`](https://github.com/lightningnetwork/lnd/tree/master/autopilot)).
 
 ## Lightning Network Specification Compliance
 `lnd` _fully_ conforms to the [Lightning Network specification
@@ -55,9 +55,9 @@ service. The exported API's are not yet stable, so be warned: they may change
 drastically in the near future.
 
 An automatically generated set of documentation for the RPC APIs can be found
-at [api.lightning.community](http://api.lightning.community). A set of developer
+at [api.lightning.community](https://api.lightning.community). A set of developer
 resources including talks, articles, and example applications can be found at:
-[dev.lightning.community](http://dev.lightning.community).
+[dev.lightning.community](https://dev.lightning.community).
 
 Finally, we also have an active
 [Slack](https://join.slack.com/t/lightningcommunity/shared_invite/enQtMzQ0OTQyNjE5NjU1LWRiMGNmOTZiNzU0MTVmYzc1ZGFkZTUyNzUwOGJjMjYwNWRkNWQzZWE3MTkwZjdjZGE5ZGNiNGVkMzI2MDU4ZTE) where protocol developers, application developers, testers and users gather to
@@ -76,5 +76,5 @@ discuss various aspects of `lnd` and also Lightning in general.
   * [webchat](https://webchat.freenode.net/?channels=lnd)
 
 ## Further reading
-* [Step-by-step send payment guide with docker](https://"github.com/breez/lightninglib/tree/master/docker)
-* [Contribution guide](https://"github.com/breez/lightninglib/blob/master/docs/code_contribution_guidelines.md)
+* [Step-by-step send payment guide with docker](https://github.com/lightningnetwork/lnd/tree/master/docker)
+* [Contribution guide](https://github.com/lightningnetwork/lnd/blob/master/docs/code_contribution_guidelines.md)

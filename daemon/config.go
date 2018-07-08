@@ -331,16 +331,23 @@ func loadConfig(args []string) (*config, error) {
 	// If the provided lnd directory is not the default, we'll modify the
 	// path to all of the files and directories that will live within it.
 	lndDir := cleanAndExpandPath(preCfg.LndDir)
+	configFilePath := cleanAndExpandPath(preCfg.ConfigFile)
 	if lndDir != defaultLndDir {
-		defaultCfg.ConfigFile = filepath.Join(lndDir, defaultConfigFilename)
-		defaultCfg.DataDir = filepath.Join(lndDir, defaultDataDirname)
-		defaultCfg.TLSCertPath = filepath.Join(lndDir, defaultTLSCertFilename)
-		defaultCfg.TLSKeyPath = filepath.Join(lndDir, defaultTLSKeyFilename)
-		defaultCfg.AdminMacPath = filepath.Join(lndDir, defaultAdminMacFilename)
-		defaultCfg.InvoiceMacPath = filepath.Join(lndDir, defaultInvoiceMacFilename)
-		defaultCfg.ReadMacPath = filepath.Join(lndDir, defaultReadMacFilename)
-		defaultCfg.LogDir = filepath.Join(lndDir, defaultLogDirname)
-		defaultCfg.Tor.V2PrivateKeyPath = filepath.Join(lndDir, defaultTorV2PrivateKeyFilename)
+		// If the config file path has not been modified by the user,
+		// then we'll use the default config file path. However, if the
+		// user has modified their lnddir, then we should assume they
+		// intend to use the config file within it.
+		if configFilePath == defaultConfigFile {
+			preCfg.ConfigFile = filepath.Join(lndDir, defaultConfigFilename)
+		}
+		preCfg.DataDir = filepath.Join(lndDir, defaultDataDirname)
+		preCfg.TLSCertPath = filepath.Join(lndDir, defaultTLSCertFilename)
+		preCfg.TLSKeyPath = filepath.Join(lndDir, defaultTLSKeyFilename)
+		preCfg.AdminMacPath = filepath.Join(lndDir, defaultAdminMacFilename)
+		preCfg.InvoiceMacPath = filepath.Join(lndDir, defaultInvoiceMacFilename)
+		preCfg.ReadMacPath = filepath.Join(lndDir, defaultReadMacFilename)
+		preCfg.LogDir = filepath.Join(lndDir, defaultLogDirname)
+		preCfg.Tor.V2PrivateKeyPath = filepath.Join(lndDir, defaultTorV2PrivateKeyFilename)
 	}
 
 	// Create the lnd directory if it doesn't already exist.
@@ -364,9 +371,8 @@ func loadConfig(args []string) (*config, error) {
 
 	// Next, load any additional configuration options from the file.
 	var configFileError error
-	cfg := defaultCfg
-	configFile := cleanAndExpandPath(preCfg.ConfigFile)
-	if err := flags.IniParse(configFile, &cfg); err != nil {
+	cfg := preCfg
+	if err := flags.IniParse(cfg.ConfigFile, &cfg); err != nil {
 		configFileError = err
 	}
 
@@ -438,14 +444,18 @@ func loadConfig(args []string) (*config, error) {
 	}
 	cfg.Tor.SOCKS = socks.String()
 
-	dns, err := lncfg.ParseAddressString(
-		cfg.Tor.DNS, strconv.Itoa(defaultTorDNSPort),
-		cfg.net.ResolveTCPAddr,
-	)
-	if err != nil {
-		return nil, err
+	// We'll only attempt to normalize and resolve the DNS host if it hasn't
+	// changed, as it doesn't need to be done for the default.
+	if cfg.Tor.DNS != defaultTorDNS {
+		dns, err := lncfg.ParseAddressString(
+			cfg.Tor.DNS, strconv.Itoa(defaultTorDNSPort),
+			cfg.net.ResolveTCPAddr,
+		)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Tor.DNS = dns.String()
 	}
-	cfg.Tor.DNS = dns.String()
 
 	control, err := lncfg.ParseAddressString(
 		cfg.Tor.Control, strconv.Itoa(defaultTorControlPort),
@@ -548,6 +558,13 @@ func loadConfig(args []string) (*config, error) {
 			return nil, err
 		}
 
+		if cfg.Litecoin.MainNet && cfg.DebugHTLC {
+			str := "%s: debug-htlc mode cannot be used " +
+				"on litecoin mainnet"
+			err := fmt.Errorf(str, funcName)
+			return nil, err
+		}
+
 		// The litecoin chain is the current active chain. However
 		// throughout the codebase we required chaincfg.Params. So as a
 		// temporary hack, we'll mutate the default net params for
@@ -626,6 +643,13 @@ func loadConfig(args []string) (*config, error) {
 			str := "%s: either --bitcoin.mainnet, or " +
 				"bitcoin.testnet, bitcoin.simnet, or bitcoin.regtest " +
 				"must be specified"
+			err := fmt.Errorf(str, funcName)
+			return nil, err
+		}
+
+		if cfg.Bitcoin.MainNet && cfg.DebugHTLC {
+			str := "%s: debug-htlc mode cannot be used " +
+				"on bitcoin mainnet"
 			err := fmt.Errorf(str, funcName)
 			return nil, err
 		}

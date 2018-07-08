@@ -995,12 +995,7 @@ out:
 func (l *channelLink) randomFeeUpdateTimeout() time.Duration {
 	lower := int64(l.cfg.MinFeeUpdateTimeout)
 	upper := int64(l.cfg.MaxFeeUpdateTimeout)
-	rand := prand.Int63n(upper)
-	if rand < lower {
-		rand = lower
-	}
-
-	return time.Duration(rand)
+	return time.Duration(prand.Int63n(upper-lower) + lower)
 }
 
 // handleDownStreamPkt processes an HTLC packet sent from the downstream HTLC
@@ -1566,8 +1561,13 @@ func (l *channelLink) updateCommitTx() error {
 	if err == lnwallet.ErrNoWindow {
 		l.tracef("revocation window exhausted, unable to send: %v, "+
 			"dangling_opens=%v, dangling_closes%v",
-			l.batchCounter, spew.Sdump(l.openedCircuits),
-			spew.Sdump(l.closedCircuits))
+			l.batchCounter, newLogClosure(func() string {
+				return spew.Sdump(l.openedCircuits)
+			}),
+			newLogClosure(func() string {
+				return spew.Sdump(l.closedCircuits)
+			}),
+		)
 		return nil
 	} else if err != nil {
 		return err
