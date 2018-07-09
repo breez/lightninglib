@@ -1239,7 +1239,7 @@ func (p *peer) logWireMessage(msg lnwire.Message, read bool) {
 
 // writeMessage writes the target lnwire.Message to the remote peer.
 func (p *peer) writeMessage(msg lnwire.Message) error {
-	peerLog.Infof("readNextMessage from peer (%x) started", p.PubKey())
+	peerLog.Infof("writeMessage (type = %v) to peer (%x) started", msg.MsgType(), p.PubKey())
 	// Simply exit if we're shutting down.
 	if atomic.LoadInt32(&p.disconnect) != 0 {
 		return ErrPeerExiting
