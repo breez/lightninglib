@@ -857,7 +857,6 @@ func (p *peer) readHandler() {
 out:
 	for atomic.LoadInt32(&p.disconnect) == 0 {
 		nextMsg, err := p.readNextMessage()
-		idleTimer.Stop()
 		if err != nil {
 			peerLog.Infof("unable to read message from %v: %v",
 				p, err)
@@ -868,6 +867,7 @@ out:
 			// us to introduce new messages in a forwards
 			// compatible manner.
 			case *lnwire.UnknownMessage:
+				idleTimer.Stop()
 				idleTimer.Reset(idleTimeout)
 				continue
 
@@ -876,6 +876,7 @@ out:
 			// simply continue parsing the remainder of their
 			// messages.
 			case *lnwire.ErrUnknownAddrType:
+				idleTimer.Stop()
 				idleTimer.Reset(idleTimeout)
 				continue
 
@@ -1023,7 +1024,7 @@ out:
 			// stream so we can continue processing message.
 			chanStream.AddMsg(nextMsg)
 		}
-
+		idleTimer.Stop()
 		idleTimer.Reset(idleTimeout)
 	}
 
