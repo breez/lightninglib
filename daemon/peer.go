@@ -35,10 +35,10 @@ var (
 
 const (
 	// pingInterval is the interval at which ping messages are sent.
-	pingInterval = 1 * time.Minute
+	pingInterval = 20 * time.Second
 
 	// idleTimeout is the duration of inactivity before we time out a peer.
-	idleTimeout = 5 * time.Minute
+	idleTimeout = 1 * time.Minute
 
 	// writeMessageTimeout is the timeout used when writing a message to peer.
 	writeMessageTimeout = 10 * time.Second
@@ -849,6 +849,7 @@ func (p *peer) readHandler() {
 	// We'll stop the timer after a new messages is received, and also
 	// reset it after we process the next message.
 	idleTimer := time.AfterFunc(idleTimeout, func() {
+		peerLog.Errorf("Timeout connection to: %x", p.PubKey())
 		err := fmt.Errorf("Peer %s no answer for %s -- disconnecting",
 			p, idleTimeout)
 		p.Disconnect(err)
@@ -862,7 +863,6 @@ func (p *peer) readHandler() {
 out:
 	for atomic.LoadInt32(&p.disconnect) == 0 {
 		nextMsg, err := p.readNextMessage()
-		idleTimer.Stop()
 		if err != nil {
 			peerLog.Infof("unable to read message from %v: %v",
 				p, err)
@@ -873,6 +873,7 @@ out:
 			// us to introduce new messages in a forwards
 			// compatible manner.
 			case *lnwire.UnknownMessage:
+				idleTimer.Stop()
 				idleTimer.Reset(idleTimeout)
 				continue
 
@@ -881,6 +882,7 @@ out:
 			// simply continue parsing the remainder of their
 			// messages.
 			case *lnwire.ErrUnknownAddrType:
+				idleTimer.Stop()
 				idleTimer.Reset(idleTimeout)
 				continue
 
@@ -899,6 +901,7 @@ out:
 
 		switch msg := nextMsg.(type) {
 		case *lnwire.Pong:
+			peerLog.Errorf("Pong received from: %x", p.PubKey())
 			// When we receive a Pong message in response to our
 			// last ping message, we'll use the time in which we
 			// sent the ping message to measure a rough estimate of
@@ -1028,7 +1031,7 @@ out:
 			// stream so we can continue processing message.
 			chanStream.AddMsg(nextMsg)
 		}
-
+		idleTimer.Stop()
 		idleTimer.Reset(idleTimeout)
 	}
 
@@ -1287,6 +1290,7 @@ out:
 			// use the delay as a rough estimate of latency to the
 			// remote peer.
 			case *lnwire.Ping:
+				peerLog.Errorf("Ping sent to: %x", p.PubKey())
 				// TODO(roasbeef): do this before the write?
 				// possibly account for processing within func?
 				now := time.Now().UnixNano()
