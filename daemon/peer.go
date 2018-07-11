@@ -844,6 +844,7 @@ func (p *peer) readHandler() {
 	// We'll stop the timer after a new messages is received, and also
 	// reset it after we process the next message.
 	idleTimer := time.AfterFunc(idleTimeout, func() {
+		peerLog.Errorf("Timeout connection to: %x", p.PubKey())
 		err := fmt.Errorf("Peer %s no answer for %s -- disconnecting",
 			p, idleTimeout)
 		p.Disconnect(err)
@@ -895,6 +896,7 @@ out:
 
 		switch msg := nextMsg.(type) {
 		case *lnwire.Pong:
+			peerLog.Errorf("Pong received from: %x", p.PubKey())
 			// When we receive a Pong message in response to our
 			// last ping message, we'll use the time in which we
 			// sent the ping message to measure a rough estimate of
@@ -1279,6 +1281,7 @@ out:
 			// use the delay as a rough estimate of latency to the
 			// remote peer.
 			case *lnwire.Ping:
+				peerLog.Errorf("Ping sent to: %x", p.PubKey())
 				// TODO(roasbeef): do this before the write?
 				// possibly account for processing within func?
 				now := time.Now().UnixNano()
