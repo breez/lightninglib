@@ -21,9 +21,14 @@
     sudo ln -s /usr/lib/go-1.10/bin/go /usr/local/bin/go
     ```
 
-    On Mac OS X
+    On Mac OS X:
     ```
     brew install go
+    ```
+
+    On FreeBSD:
+    ```
+    pkg install go
     ```
 
     Alternatively, one can download the pre-compiled binaries hosted on the
@@ -72,6 +77,8 @@ For Windows WSL users, make will need to be referenced directly via /usr/bin/mak
 "make" && "make" install
 ```
 
+On FreeBSD, use gmake instead of make.
+
 Alternatively, if one doesn't wish to use `make`, then the `go` commands can be
 used directly:
 ```
@@ -89,6 +96,8 @@ git pull
 make && make install
 ```
 
+On FreeBSD, use gmake instead of make.
+
 Alternatively, if one doesn't wish to use `make`, then the `go` commands can be
 used directly:
 ```
@@ -104,6 +113,8 @@ To check that `lnd` was installed properly run the following command:
 ```
 make check
 ```
+
+On FreeBSD, use gmake instead of make.
 
 ### Installing btcd
 
