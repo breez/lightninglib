@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,15 +30,14 @@ import (
 	"github.com/breez/lightninglib/nat"
 	"github.com/breez/lightninglib/routing"
 	"github.com/breez/lightninglib/tor"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/connmgr"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/coreos/bbolt"
 	"github.com/go-errors/errors"
-	"github.com/lightningnetwork/lightning-onion"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/connmgr"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
-	"golang.org/x/net/context"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 )
 
 const (

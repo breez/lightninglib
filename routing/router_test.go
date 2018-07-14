@@ -11,12 +11,12 @@ import (
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
-	"github.com/roasbeef/btcd/wire"
+	"github.com/btcsuite/btcd/wire"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/lightningnetwork/lightning-onion"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/davecgh/go-spew/spew"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 )
 
 // defaultNumRoutes is the default value for the maximum number of routes to

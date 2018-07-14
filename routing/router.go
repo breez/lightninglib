@@ -2,6 +2,7 @@ package routing
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"runtime"
 	"sort"
@@ -9,22 +10,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/bbolt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/multimutex"
 	"github.com/breez/lightninglib/routing/chainview"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
-
-	"crypto/sha256"
-
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/coreos/bbolt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/go-errors/errors"
-	"github.com/lightningnetwork/lightning-onion"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 )
 
 const (

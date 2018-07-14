@@ -43,11 +43,11 @@ import (
 	"github.com/breez/lightninglib/macaroons"
 	"github.com/breez/lightninglib/signal"
 	"github.com/breez/lightninglib/walletunlocker"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcwallet/wallet"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
-	"github.com/roasbeef/btcwallet/wallet"
 )
 
 const (

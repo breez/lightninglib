@@ -7,7 +7,7 @@ import (
 	"github.com/breez/lightninglib/discovery"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
 // chanSeries is an implementation of the discovery.ChannelGraphTimeSeries

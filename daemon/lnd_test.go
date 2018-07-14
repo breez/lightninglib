@@ -22,18 +22,18 @@ import (
 	"crypto/sha256"
 	prand "math/rand"
 
-	"github.com/btcsuite/btclog"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lntest"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/integration/rpctest"
-	"github.com/roasbeef/btcd/rpcclient"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/integration/rpctest"
+	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btclog"
+	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/go-errors/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -2809,7 +2809,7 @@ func updateChannelPolicy(t *harnessTest, node *lntest.HarnessNode,
 
 	// Wait for listener node to receive the channel update from node.
 	ctxt, _ = context.WithTimeout(ctxb, timeout)
-	listenerUpdates, aQuit := subscribeGraphNotifications(t, ctxt, 
+	listenerUpdates, aQuit := subscribeGraphNotifications(t, ctxt,
 		listenerNode)
 	defer close(aQuit)
 
@@ -2980,8 +2980,8 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 
 	time.Sleep(time.Millisecond * 50)
 
-	// Set the fee policies of the Alice -> Bob and the Dave -> Alice 
-	// channel edges to relatively large non default values. This makes it 
+	// Set the fee policies of the Alice -> Bob and the Dave -> Alice
+	// channel edges to relatively large non default values. This makes it
 	// possible to pick up more subtle fee calculation errors.
 	updateChannelPolicy(t, net.Alice, chanPointAlice, 1000, 100000,
 		144, carol)
@@ -3017,10 +3017,10 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 	assertAmountPaid(t, ctxb, "Alice(local) => Bob(remote)", net.Alice,
 		aliceFundPoint, expectedAmountPaidAtoB, int64(0))
 
-	// To forward a payment of 1000 sat, Alice is charging a fee of 
+	// To forward a payment of 1000 sat, Alice is charging a fee of
 	// 1 sat + 10% = 101 sat.
 	const expectedFeeAlice = 5 * 101
-	
+
 	// Dave needs to pay what Alice pays plus Alice's fee.
 	expectedAmountPaidDtoA := expectedAmountPaidAtoB + expectedFeeAlice
 
@@ -3029,7 +3029,7 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 	assertAmountPaid(t, ctxb, "Dave(local) => Alice(remote)", dave,
 		daveFundPoint, expectedAmountPaidDtoA, int64(0))
 
-	// To forward a payment of 1101 sat, Dave is charging a fee of 
+	// To forward a payment of 1101 sat, Dave is charging a fee of
 	// 5 sat + 15% = 170.15 sat. This is rounded down in rpcserver to 170.
 	const expectedFeeDave = 5 * 170
 

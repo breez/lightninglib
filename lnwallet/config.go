@@ -4,7 +4,7 @@ import (
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/keychain"
-	"github.com/roasbeef/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg"
 )
 
 // Config is a struct which houses configuration parameters which modify the

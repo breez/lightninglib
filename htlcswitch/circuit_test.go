@@ -6,13 +6,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lightningnetwork/lightning-onion"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/btcec"
-	bitcoinCfg "github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/btcec"
+	bitcoinCfg "github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 )
 
 var (

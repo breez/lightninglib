@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/breez/lightninglib/chainntnfs"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcd/rpcclient"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/rpcclient"
 )
 
 // createNewNotifier creates a new instance of the ChainNotifier interface

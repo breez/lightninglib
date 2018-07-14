@@ -6,7 +6,7 @@ import (
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/lnwallet"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
 // preimageSubscriber reprints an active subscription to be notified once the

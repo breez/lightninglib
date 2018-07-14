@@ -8,9 +8,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/coreos/bbolt"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/wire"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/coreos/bbolt"
 )
 
 var (

@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lightninglabs/neutrino"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/chainntnfs/bitcoindnotify"
 	"github.com/breez/lightninglib/chainntnfs/btcdnotify"
@@ -24,12 +23,13 @@ import (
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing/chainview"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/rpcclient"
-	"github.com/roasbeef/btcutil"
-	"github.com/roasbeef/btcwallet/chain"
-	"github.com/roasbeef/btcwallet/walletdb"
-	"github.com/roasbeef/btcwallet/wallet"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcwallet/chain"
+	"github.com/btcsuite/btcwallet/wallet"
+	"github.com/btcsuite/btcwallet/walletdb"
+	"github.com/lightninglabs/neutrino"
 )
 
 const (
@@ -229,7 +229,6 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 				return ips, nil
 			},
 		}
-		neutrino.WaitForMoreCFHeaders = time.Second * 1
 		neutrino.MaxPeers = 8
 		neutrino.BanDuration = 5 * time.Second
 		svc, err := neutrino.NewChainService(config)

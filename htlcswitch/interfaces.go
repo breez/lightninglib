@@ -4,7 +4,7 @@ import (
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
 // InvoiceDatabase is an interface which represents the persistent subsystem

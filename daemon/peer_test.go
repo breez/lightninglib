@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/btcsuite/btclog"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/contractcourt"
@@ -14,8 +13,9 @@ import (
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btclog"
+	"github.com/btcsuite/btcutil"
 )
 
 func init() {

@@ -3,13 +3,13 @@ package daemon
 import (
 	"fmt"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/txscript"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
 )
 
 var (
