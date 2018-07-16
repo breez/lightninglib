@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/autopilot"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/tor"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
 )
 
 // chanController is an implementation of the autopilot.ChannelController

@@ -12,19 +12,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/btcsuite/fastsha256"
-	"github.com/go-errors/errors"
-	"github.com/lightningnetwork/lightning-onion"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/txscript"
-	"github.com/roasbeef/btcd/wire"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/fastsha256"
+	"github.com/go-errors/errors"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 )
 
 type mockPreimageCache struct {
@@ -673,7 +673,9 @@ func (i *mockInvoiceRegistry) LookupInvoice(rHash chainhash.Hash) (channeldb.Inv
 	return invoice, i.finalDelta, nil
 }
 
-func (i *mockInvoiceRegistry) SettleInvoice(rhash chainhash.Hash) error {
+func (i *mockInvoiceRegistry) SettleInvoice(rhash chainhash.Hash,
+	amt lnwire.MilliSatoshi) error {
+
 	i.Lock()
 	defer i.Unlock()
 
@@ -687,6 +689,7 @@ func (i *mockInvoiceRegistry) SettleInvoice(rhash chainhash.Hash) error {
 	}
 
 	invoice.Terms.Settled = true
+	invoice.AmtPaid = amt
 	i.invoices[rhash] = invoice
 
 	return nil

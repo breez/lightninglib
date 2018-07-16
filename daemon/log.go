@@ -17,11 +17,11 @@ import (
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/routing"
 	"github.com/breez/lightninglib/signal"
+	"github.com/btcsuite/btcd/connmgr"
 	"github.com/btcsuite/btclog"
 	"github.com/jrick/logrotate/rotator"
 	"github.com/lightninglabs/neutrino"
 	sphinx "github.com/lightningnetwork/lightning-onion"
-	"github.com/roasbeef/btcd/connmgr"
 )
 
 // logWriter implements an io.Writer that outputs to both standard output and

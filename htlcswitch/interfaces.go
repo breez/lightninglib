@@ -4,7 +4,7 @@ import (
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
 // InvoiceDatabase is an interface which represents the persistent subsystem
@@ -18,7 +18,7 @@ type InvoiceDatabase interface {
 
 	// SettleInvoice attempts to mark an invoice corresponding to the
 	// passed payment hash as fully settled.
-	SettleInvoice(chainhash.Hash) error
+	SettleInvoice(payHash chainhash.Hash, paidAmount lnwire.MilliSatoshi) error
 }
 
 // ChannelLink is an interface which represents the subsystem for managing the

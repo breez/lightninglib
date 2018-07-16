@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/aezeed"
+	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcwallet/wallet"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcwallet/wallet"
 	"golang.org/x/net/context"
-	"github.com/breez/lightninglib/keychain"
 )
 
 // WalletInitMsg is a message sent by the UnlockerService when a user wishes to

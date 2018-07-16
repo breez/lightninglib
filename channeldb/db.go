@@ -10,8 +10,8 @@ import (
 
 	"github.com/coreos/bbolt"
 	"github.com/go-errors/errors"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/wire"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/wire"
 )
 
 const (
@@ -46,6 +46,18 @@ var (
 			// added.
 			number:    1,
 			migration: migrateNodeAndEdgeUpdateIndex,
+		},
+		{
+			// The DB version that added the invoice event time
+			// series.
+			number:    2,
+			migration: migrateInvoiceTimeSeries,
+		},
+		{
+			// The DB version that updated the embedded invoice in
+			// outgoing payments to match the new format.
+			number:    3,
+			migration: migrateInvoiceTimeSeriesOutgoingPayments,
 		},
 	}
 

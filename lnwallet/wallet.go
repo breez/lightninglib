@@ -8,20 +8,19 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/blockchain"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcutil/hdkeychain"
-
 	"github.com/breez/lightninglib/shachain"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/txscript"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
-	"github.com/roasbeef/btcutil/txsort"
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/btcsuite/btcutil/txsort"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -262,15 +261,15 @@ type LightningWallet struct {
 	// is removed from limbo. Each reservation is tracked by a unique
 	// monotonically integer. All requests concerning the channel MUST
 	// carry a valid, active funding ID.
-	fundingLimbo  map[uint64]*ChannelReservation
-	limboMtx      sync.RWMutex
+	fundingLimbo map[uint64]*ChannelReservation
+	limboMtx     sync.RWMutex
 
 	// lockedOutPoints is a set of the currently locked outpoint. This
 	// information is kept in order to provide an easy way to unlock all
 	// the currently locked outpoints.
 	lockedOutPoints map[wire.OutPoint]struct{}
 
-	quit     chan struct{}
+	quit chan struct{}
 
 	wg sync.WaitGroup
 

@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/aezeed"
+	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/walletunlocker"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcwallet/wallet"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcwallet/wallet"
 	"golang.org/x/net/context"
-	"github.com/breez/lightninglib/keychain"
 )
 
 const (

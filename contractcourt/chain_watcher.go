@@ -5,14 +5,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwallet"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcd/txscript"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
 )
 
 // LocalUnilateralCloseInfo encapsulates all the informnation we need to act

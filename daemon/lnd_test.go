@@ -19,20 +19,21 @@ import (
 	"reflect"
 
 	"crypto/rand"
+	"crypto/sha256"
 	prand "math/rand"
 
-	"github.com/btcsuite/btclog"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lntest"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/integration/rpctest"
-	"github.com/roasbeef/btcd/rpcclient"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/integration/rpctest"
+	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btclog"
+	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/go-errors/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -653,7 +654,7 @@ func testBasicChannelFunding(net *lntest.NetworkHarness, t *harnessTest) {
 		t.Fatalf("bob didn't report channel: %v", err)
 	}
 
-	// With then channel open, ensure that the amount specified above has
+	// With the channel open, ensure that the amount specified above has
 	// properly been pushed to Bob.
 	balReq := &lnrpc.ChannelBalanceRequest{}
 	aliceBal, err := net.Alice.ChannelBalance(ctxb, balReq)
@@ -2808,7 +2809,7 @@ func updateChannelPolicy(t *harnessTest, node *lntest.HarnessNode,
 
 	// Wait for listener node to receive the channel update from node.
 	ctxt, _ = context.WithTimeout(ctxb, timeout)
-	listenerUpdates, aQuit := subscribeGraphNotifications(t, ctxt, 
+	listenerUpdates, aQuit := subscribeGraphNotifications(t, ctxt,
 		listenerNode)
 	defer close(aQuit)
 
@@ -2979,8 +2980,8 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 
 	time.Sleep(time.Millisecond * 50)
 
-	// Set the fee policies of the Alice -> Bob and the Dave -> Alice 
-	// channel edges to relatively large non default values. This makes it 
+	// Set the fee policies of the Alice -> Bob and the Dave -> Alice
+	// channel edges to relatively large non default values. This makes it
 	// possible to pick up more subtle fee calculation errors.
 	updateChannelPolicy(t, net.Alice, chanPointAlice, 1000, 100000,
 		144, carol)
@@ -3016,10 +3017,10 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 	assertAmountPaid(t, ctxb, "Alice(local) => Bob(remote)", net.Alice,
 		aliceFundPoint, expectedAmountPaidAtoB, int64(0))
 
-	// To forward a payment of 1000 sat, Alice is charging a fee of 
+	// To forward a payment of 1000 sat, Alice is charging a fee of
 	// 1 sat + 10% = 101 sat.
 	const expectedFeeAlice = 5 * 101
-	
+
 	// Dave needs to pay what Alice pays plus Alice's fee.
 	expectedAmountPaidDtoA := expectedAmountPaidAtoB + expectedFeeAlice
 
@@ -3028,7 +3029,7 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 	assertAmountPaid(t, ctxb, "Dave(local) => Alice(remote)", dave,
 		daveFundPoint, expectedAmountPaidDtoA, int64(0))
 
-	// To forward a payment of 1101 sat, Dave is charging a fee of 
+	// To forward a payment of 1101 sat, Dave is charging a fee of
 	// 5 sat + 15% = 170.15 sat. This is rounded down in rpcserver to 170.
 	const expectedFeeDave = 5 * 170
 
@@ -3452,10 +3453,11 @@ func testSendToRouteErrorPropagation(net *lntest.NetworkHarness, t *harnessTest)
 		t.Fatalf("alice didn't advertise her channel: %v", err)
 	}
 
-	// Create a new nodes (Carol and Charlie), load her with some funds, then establish
-	// a connection between Carol and Charlie with a channel that has
-	// identical capacity to the one created above.Then we will get route via queryroutes call
-	// which will be fake route for Alice -> Bob graph.
+	// Create a new nodes (Carol and Charlie), load her with some funds,
+	// then establish a connection between Carol and Charlie with a channel
+	// that has identical capacity to the one created above.Then we will
+	// get route via queryroutes call which will be fake route for Alice ->
+	// Bob graph.
 	//
 	// The network topology should now look like: Alice -> Bob; Carol -> Charlie.
 	carol, err := net.NewNode("Carol", nil)
@@ -4298,15 +4300,18 @@ func testInvoiceSubscriptions(net *lntest.NetworkHarness, t *harnessTest) {
 	if err != nil {
 		t.Fatalf("unable to add invoice: %v", err)
 	}
+	lastAddIndex := invoiceResp.AddIndex
 
 	// Create a new invoice subscription client for Bob, the notification
 	// should be dispatched shortly below.
 	req := &lnrpc.InvoiceSubscription{}
-	bobInvoiceSubscription, err := net.Bob.SubscribeInvoices(ctxb, req)
+	ctx, cancelInvoiceSubscription := context.WithCancel(context.Background())
+	bobInvoiceSubscription, err := net.Bob.SubscribeInvoices(ctx, req)
 	if err != nil {
 		t.Fatalf("unable to subscribe to bob's invoice updates: %v", err)
 	}
 
+	var settleIndex uint64
 	quit := make(chan struct{})
 	updateSent := make(chan struct{})
 	go func() {
@@ -4335,6 +4340,12 @@ func testInvoiceSubscriptions(net *lntest.NetworkHarness, t *harnessTest) {
 			t.Fatalf("payment preimages don't match: expected %v, got %v",
 				invoice.RPreimage, invoiceUpdate.RPreimage)
 		}
+
+		if invoiceUpdate.SettleIndex == 0 {
+			t.Fatalf("invoice should have settle index")
+		}
+
+		settleIndex = invoiceUpdate.SettleIndex
 
 		close(updateSent)
 	}()
@@ -4371,6 +4382,126 @@ func testInvoiceSubscriptions(net *lntest.NetworkHarness, t *harnessTest) {
 		close(quit)
 		t.Fatalf("update not sent after 10 seconds")
 	case <-updateSent: // Fall through on success
+	}
+
+	// With the base case working, we'll now cancel Bob's current
+	// subscription in order to exercise the backlog fill behavior.
+	cancelInvoiceSubscription()
+
+	// We'll now add 3 more invoices to Bob's invoice registry.
+	const numInvoices = 3
+	newInvoices := make([]*lnrpc.Invoice, numInvoices)
+	payReqs := make([]string, numInvoices)
+	for i := 0; i < numInvoices; i++ {
+		preimage := bytes.Repeat([]byte{byte(90 + 1 + i)}, 32)
+		invoice := &lnrpc.Invoice{
+			Memo:      "testing",
+			RPreimage: preimage,
+			Value:     paymentAmt,
+		}
+		resp, err := net.Bob.AddInvoice(ctxb, invoice)
+		if err != nil {
+			t.Fatalf("unable to add invoice: %v", err)
+		}
+
+		newInvoices[i] = invoice
+		payReqs[i] = resp.PaymentRequest
+	}
+
+	// Now that the set of invoices has been added, we'll re-register for
+	// streaming invoice notifications for Bob, this time specifying the
+	// add invoice of the last prior invoice.
+	req = &lnrpc.InvoiceSubscription{
+		AddIndex: lastAddIndex,
+	}
+	ctx, cancelInvoiceSubscription = context.WithCancel(context.Background())
+	bobInvoiceSubscription, err = net.Bob.SubscribeInvoices(ctx, req)
+	if err != nil {
+		t.Fatalf("unable to subscribe to bob's invoice updates: %v", err)
+	}
+
+	// Since we specified a value of the prior add index above, we should
+	// now immediately get the invoices we just added as we should get the
+	// backlog of notifications.
+	for i := 0; i < numInvoices; i++ {
+		invoiceUpdate, err := bobInvoiceSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to receive subscription")
+		}
+
+		// We should now get the ith invoice we added, as they should
+		// be returned in order.
+		if invoiceUpdate.Settled {
+			t.Fatalf("should have only received add events")
+		}
+		originalInvoice := newInvoices[i]
+		rHash := sha256.Sum256(originalInvoice.RPreimage[:])
+		if !bytes.Equal(invoiceUpdate.RHash, rHash[:]) {
+			t.Fatalf("invoices have mismatched payment hashes: "+
+				"expected %x, got %x", rHash[:],
+				invoiceUpdate.RHash)
+		}
+	}
+
+	cancelInvoiceSubscription()
+
+	// We'll now have Bob settle out the remainder of these invoices so we
+	// can test that all settled invoices are properly notified.
+	ctxt, _ = context.WithTimeout(ctxb, timeout)
+	err = completePaymentRequests(
+		ctxt, net.Alice, payReqs, true,
+	)
+	if err != nil {
+		t.Fatalf("unable to send payment: %v", err)
+	}
+
+	// With the set of invoices paid, we'll now cancel the old
+	// subscription, and create a new one for Bob, this time using the
+	// settle index to obtain the backlog of settled invoices.
+	req = &lnrpc.InvoiceSubscription{
+		SettleIndex: settleIndex,
+	}
+	ctx, cancelInvoiceSubscription = context.WithCancel(context.Background())
+	bobInvoiceSubscription, err = net.Bob.SubscribeInvoices(ctx, req)
+	if err != nil {
+		t.Fatalf("unable to subscribe to bob's invoice updates: %v", err)
+	}
+
+	defer cancelInvoiceSubscription()
+
+	// As we specified the index of the past settle index, we should now
+	// receive notifications for the three HTLCs that we just settled. As
+	// the order that the HTLCs will be settled in is partially randomized,
+	// we'll use a map to assert that the proper set has been settled.
+	settledInvoices := make(map[[32]byte]struct{})
+	for _, invoice := range newInvoices {
+		rHash := sha256.Sum256(invoice.RPreimage[:])
+		settledInvoices[rHash] = struct{}{}
+	}
+	for i := 0; i < numInvoices; i++ {
+		invoiceUpdate, err := bobInvoiceSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to receive subscription")
+		}
+
+		// We should now get the ith invoice we added, as they should
+		// be returned in order.
+		if !invoiceUpdate.Settled {
+			t.Fatalf("should have only received settle events")
+		}
+
+		var rHash [32]byte
+		copy(rHash[:], invoiceUpdate.RHash)
+		if _, ok := settledInvoices[rHash]; !ok {
+			t.Fatalf("unknown invoice settled: %x", rHash)
+		}
+
+		delete(settledInvoices, rHash)
+	}
+
+	// At this point, all the invoices should be fully settled.
+	if len(settledInvoices) != 0 {
+		t.Fatalf("not all invoices settled")
 	}
 
 	ctxt, _ = context.WithTimeout(ctxb, timeout)
@@ -5986,7 +6117,8 @@ func subscribeGraphNotifications(t *harnessTest, ctxb context.Context,
 	// We'll first start by establishing a notification client which will
 	// send us notifications upon detected changes in the channel graph.
 	req := &lnrpc.GraphTopologySubscription{}
-	topologyClient, err := node.SubscribeChannelGraph(ctxb, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	topologyClient, err := node.SubscribeChannelGraph(ctx, req)
 	if err != nil {
 		t.Fatalf("unable to create topology client: %v", err)
 	}
@@ -5997,6 +6129,8 @@ func subscribeGraphNotifications(t *harnessTest, ctxb context.Context,
 	graphUpdates := make(chan *lnrpc.GraphTopologyUpdate, 20)
 	go func() {
 		for {
+			defer cancelFunc()
+
 			select {
 			case <-quit:
 				return

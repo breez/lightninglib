@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,15 +30,14 @@ import (
 	"github.com/breez/lightninglib/nat"
 	"github.com/breez/lightninglib/routing"
 	"github.com/breez/lightninglib/tor"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/connmgr"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/coreos/bbolt"
 	"github.com/go-errors/errors"
-	"github.com/lightningnetwork/lightning-onion"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/connmgr"
-	"github.com/roasbeef/btcd/wire"
-	"github.com/roasbeef/btcutil"
-	"golang.org/x/net/context"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 )
 
 const (
@@ -753,6 +753,10 @@ func (s *server) Start() error {
 	}
 	s.connMgr.Start()
 
+	if err := s.invoices.Start(); err != nil {
+		return err
+	}
+
 	// With all the relevant sub-systems started, we'll now attempt to
 	// establish persistent connections to our direct channel collaborators
 	// within the network.
@@ -809,6 +813,7 @@ func (s *server) Stop() error {
 	s.cc.chainView.Stop()
 	s.connMgr.Stop()
 	s.cc.feeEstimator.Stop()
+	s.invoices.Stop()
 
 	// Disconnect from each active peers to ensure that
 	// peerTerminationWatchers signal completion to each peer.

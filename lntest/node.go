@@ -20,13 +20,13 @@ import (
 	"google.golang.org/grpc/credentials"
 	macaroon "gopkg.in/macaroon.v2"
 
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/macaroons"
-	"github.com/roasbeef/btcd/chaincfg"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/rpcclient"
-	"github.com/roasbeef/btcd/wire"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/go-errors/errors"
 )
 
 var (
@@ -639,9 +639,9 @@ func (hn *HarnessNode) lightningNetworkWatcher() {
 	go func() {
 		defer hn.wg.Done()
 
-		ctxb := context.Background()
 		req := &lnrpc.GraphTopologySubscription{}
-		topologyClient, err := hn.SubscribeChannelGraph(ctxb, req)
+		ctx, cancelFunc := context.WithCancel(context.Background())
+		topologyClient, err := hn.SubscribeChannelGraph(ctx, req)
 		if err != nil {
 			// We panic here in case of an error as failure to
 			// create the topology client will cause all subsequent
@@ -649,6 +649,8 @@ func (hn *HarnessNode) lightningNetworkWatcher() {
 			panic(fmt.Errorf("unable to create topology "+
 				"client: %v", err))
 		}
+
+		defer cancelFunc()
 
 		for {
 			update, err := topologyClient.Recv()

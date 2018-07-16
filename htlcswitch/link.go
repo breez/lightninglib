@@ -9,15 +9,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/htlcswitch/hodl"
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/go-errors/errors"
 )
 
 func init() {
@@ -2298,8 +2298,9 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 			}
 
 			preimage := invoice.Terms.PaymentPreimage
-			err = l.channel.SettleHTLC(preimage,
-				pd.HtlcIndex, pd.SourceRef, nil, nil)
+			err = l.channel.SettleHTLC(
+				preimage, pd.HtlcIndex, pd.SourceRef, nil, nil,
+			)
 			if err != nil {
 				l.fail(LinkFailureError{code: ErrInternalError},
 					"unable to settle htlc: %v", err)
@@ -2307,8 +2308,11 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 			}
 
 			// Notify the invoiceRegistry of the invoices we just
-			// settled with this latest commitment update.
-			err = l.cfg.Registry.SettleInvoice(invoiceHash)
+			// settled (with the amount accepted at settle time)
+			// with this latest commitment update.
+			err = l.cfg.Registry.SettleInvoice(
+				invoiceHash, pd.Amount,
+			)
 			if err != nil {
 				l.fail(LinkFailureError{code: ErrInternalError},
 					"unable to settle invoice: %v", err)

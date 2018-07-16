@@ -1,11 +1,11 @@
 package discovery
 
 import (
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/go-errors/errors"
 )
 
 // CreateChanAnnouncement is a helper function which creates all channel

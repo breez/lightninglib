@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
 )
 
 type maybeNetConn struct {

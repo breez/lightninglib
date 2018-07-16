@@ -17,7 +17,7 @@ import (
 	"github.com/breez/lightninglib/lncfg"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/macaroons"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcutil"
 	"github.com/urfave/cli"
 
 	"google.golang.org/grpc"

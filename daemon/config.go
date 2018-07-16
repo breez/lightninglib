@@ -24,9 +24,9 @@ import (
 	"github.com/breez/lightninglib/lncfg"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/tor"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcutil"
 	flags "github.com/jessevdk/go-flags"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/roasbeef/btcutil"
 )
 
 const (
