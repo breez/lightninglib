@@ -179,3 +179,7 @@ func (c logClosure) String() string {
 func newLogClosure(c func() string) logClosure {
 	return logClosure(c)
 }
+
+func BackendLog() (*btclog.Backend) {
+	return backendLog
+}
