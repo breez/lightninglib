@@ -18,6 +18,9 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-errors/errors"
 	"github.com/lightningnetwork/lnd/chainntnfs"
@@ -26,9 +29,6 @@ import (
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing"
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 )
 
 var (
@@ -258,13 +258,18 @@ func newMockNotifier() *mockNotifier {
 }
 
 func (m *mockNotifier) RegisterConfirmationsNtfn(txid *chainhash.Hash,
-	numConfs, _ uint32) (*chainntnfs.ConfirmationEvent, error) {
+	_ []byte, numConfs, _ uint32) (*chainntnfs.ConfirmationEvent, error) {
 
 	return nil, nil
 }
 
+<<<<<<< HEAD
 func (m *mockNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 	_ uint32) (*chainntnfs.SpendEvent, error) {
+=======
+func (m *mockNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint, _ []byte,
+	_ uint32, _ bool) (*chainntnfs.SpendEvent, error) {
+>>>>>>> fefde08f... discovery: update unit tests to account for new ChainNotifier API
 	return nil, nil
 }
 
