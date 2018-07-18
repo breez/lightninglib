@@ -5,14 +5,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/lightningnetwork/lnd/chainntnfs"
-	"github.com/lightningnetwork/lnd/channeldb"
-	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/lightningnetwork/lnd/chainntnfs"
+	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/lnwallet"
 )
 
 // LocalUnilateralCloseInfo encapsulates all the informnation we need to act
@@ -172,8 +172,21 @@ func (c *chainWatcher) Start() error {
 		heightHint = chanState.FundingBroadcastHeight
 	}
 
+	localKey := chanState.LocalChanCfg.MultiSigKey.PubKey.SerializeCompressed()
+	remoteKey := chanState.RemoteChanCfg.MultiSigKey.PubKey.SerializeCompressed()
+	multiSigScript, err := lnwallet.GenMultiSigScript(
+		localKey, remoteKey,
+	)
+	if err != nil {
+		return err
+	}
+	pkScript, err := lnwallet.WitnessScriptHash(multiSigScript)
+	if err != nil {
+		return err
+	}
+
 	spendNtfn, err := c.cfg.notifier.RegisterSpendNtfn(
-		fundingOut, heightHint,
+		fundingOut, pkScript, heightHint,
 	)
 	if err != nil {
 		return err
