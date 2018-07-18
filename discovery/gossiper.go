@@ -2404,9 +2404,11 @@ func (d *AuthenticatedGossiper) sendAnnSigReliably(
 
 			select {
 			case <-connected:
-				log.Infof("peer %x reconnected. Retry sending" +
-					" AnnounceSignatures.")
 				// Retry sending.
+				log.Infof("peer %x reconnected. Retry sending"+
+					" AnnounceSignatures.",
+					remotePeer.SerializeCompressed())
+
 			case <-d.quit:
 				log.Infof("Gossiper shutting down, did not send" +
 					" AnnounceSignatures.")
