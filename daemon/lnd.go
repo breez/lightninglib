@@ -676,7 +676,9 @@ func MemDial() (net.Conn, error) {
 	if atomic.LoadInt32(&ready) == 0 {
 		return nil, errors.New("Deamon is not ready")
 	}
-
+	if memoryRPCListener == nil {
+		return nil, errors.New("Memory RPC is not configured")
+	}
 	return memoryRPCListener.Dial()
 }
 
