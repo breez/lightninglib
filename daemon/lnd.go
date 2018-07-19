@@ -32,6 +32,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/keychain"
@@ -50,6 +51,14 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
 )
 
+// Events is the type used to notify changes via the event channel privided in the LNDMain
+type Events int
+
+const (
+	//RPCReady is sent to the events channel when the RPC listeners are ready
+	RPCReady Events = 0
+)
+
 const (
 	// Make certificate valid for 14 months.
 	autogenCertValidity = 14 /*months*/ * 30 /*days*/ * 24 * time.Hour
@@ -59,6 +68,9 @@ var (
 	//Commit stores the current commit hash of this build. This should be
 	//set using -ldflags during compilation.
 	Commit string
+
+	//MemoryRPCListener is used to enable in memory grpc API usage
+	MemoryRPCListener *bufconn.Listener
 
 	cfg              *config
 	registeredChains = newChainRegistry()
@@ -91,7 +103,7 @@ var (
 // LndMain is the true entry point for lnd. This function is required since
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
-func LndMain(args []string) error {
+func LndMain(args []string, eventsChan chan Events) error {
 	defer func() {
 		if logRotatorPipe != nil {
 			ltndLog.Info("Shutdown complete")
@@ -543,28 +555,42 @@ func LndMain(args []string) error {
 		}()
 	}
 
-	// Finally, start the REST proxy for our gRPC server above.
-	mux := proxy.NewServeMux()
-	err = lnrpc.RegisterLightningHandlerFromEndpoint(
-		ctx, mux, cfg.RPCListeners[0].String(), proxyOpts,
-	)
-	if err != nil {
-		return err
+	if cfg.RPCMemListen {
+		MemoryRPCListener = bufconn.Listen(100)
+		defer MemoryRPCListener.Close()
+		go func() {
+			rpcsLog.Infof("RPC server listening on %s", MemoryRPCListener.Addr())
+			grpcServer.Serve(MemoryRPCListener)
+		}()
+		if eventsChan != nil {
+			eventsChan <- RPCReady
+		}
 	}
-	for _, restEndpoint := range cfg.RESTListeners {
-		lis, err := lncfg.TlsListenOnAddress(restEndpoint, tlsConf)
+
+	// Finally, start the REST proxy for our gRPC server above.
+	if len(cfg.RPCListeners) > 0 {
+		mux := proxy.NewServeMux()
+		err = lnrpc.RegisterLightningHandlerFromEndpoint(
+			ctx, mux, cfg.RPCListeners[0].String(), proxyOpts,
+		)
 		if err != nil {
-			ltndLog.Errorf(
-				"gRPC proxy unable to listen on %s",
-				restEndpoint,
-			)
 			return err
 		}
-		defer lis.Close()
-		go func() {
-			rpcsLog.Infof("gRPC proxy started at %s", lis.Addr())
-			http.Serve(lis, mux)
-		}()
+		for _, restEndpoint := range cfg.RESTListeners {
+			lis, err := lncfg.TlsListenOnAddress(restEndpoint, tlsConf)
+			if err != nil {
+				ltndLog.Errorf(
+					"gRPC proxy unable to listen on %s",
+					restEndpoint,
+				)
+				return err
+			}
+			defer lis.Close()
+			go func() {
+				rpcsLog.Infof("gRPC proxy started at %s", lis.Addr())
+				http.Serve(lis, mux)
+			}()
+		}
 	}
 
 	// If we're not in simnet mode, We'll wait until we're fully synced to
