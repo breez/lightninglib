@@ -24,6 +24,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -32,6 +33,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/keychain"
@@ -43,6 +45,7 @@ import (
 	"github.com/breez/lightninglib/macaroons"
 	"github.com/breez/lightninglib/signal"
 	"github.com/breez/lightninglib/walletunlocker"
+	"github.com/go-errors/errors"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/roasbeef/btcd/wire"
@@ -59,6 +62,11 @@ var (
 	//Commit stores the current commit hash of this build. This should be
 	//set using -ldflags during compilation.
 	Commit string
+
+	//MemoryRPCListener is used to enable in memory grpc API usage
+	memoryRPCListener *bufconn.Listener
+
+	ready int32
 
 	cfg              *config
 	registeredChains = newChainRegistry()
@@ -91,7 +99,7 @@ var (
 // LndMain is the true entry point for lnd. This function is required since
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
-func LndMain(args []string) error {
+func LndMain(args []string, readyChan chan interface{}) error {
 	defer func() {
 		if logRotatorPipe != nil {
 			ltndLog.Info("Shutdown complete")
@@ -543,28 +551,43 @@ func LndMain(args []string) error {
 		}()
 	}
 
-	// Finally, start the REST proxy for our gRPC server above.
-	mux := proxy.NewServeMux()
-	err = lnrpc.RegisterLightningHandlerFromEndpoint(
-		ctx, mux, cfg.RPCListeners[0].String(), proxyOpts,
-	)
-	if err != nil {
-		return err
+	if cfg.RPCMemListen {
+		memoryRPCListener = bufconn.Listen(100)
+		defer memoryRPCListener.Close()
+		go func() {
+			rpcsLog.Infof("RPC server listening on %s", memoryRPCListener.Addr())
+			grpcServer.Serve(memoryRPCListener)
+		}()
+		if readyChan != nil {
+			readyChan <- struct{}{}
+		}
+		atomic.StoreInt32(&ready, 1)
 	}
-	for _, restEndpoint := range cfg.RESTListeners {
-		lis, err := lncfg.TlsListenOnAddress(restEndpoint, tlsConf)
+
+	// Finally, start the REST proxy for our gRPC server above.
+	if len(cfg.RPCListeners) > 0 {
+		mux := proxy.NewServeMux()
+		err = lnrpc.RegisterLightningHandlerFromEndpoint(
+			ctx, mux, cfg.RPCListeners[0].String(), proxyOpts,
+		)
 		if err != nil {
-			ltndLog.Errorf(
-				"gRPC proxy unable to listen on %s",
-				restEndpoint,
-			)
 			return err
 		}
-		defer lis.Close()
-		go func() {
-			rpcsLog.Infof("gRPC proxy started at %s", lis.Addr())
-			http.Serve(lis, mux)
-		}()
+		for _, restEndpoint := range cfg.RESTListeners {
+			lis, err := lncfg.TlsListenOnAddress(restEndpoint, tlsConf)
+			if err != nil {
+				ltndLog.Errorf(
+					"gRPC proxy unable to listen on %s",
+					restEndpoint,
+				)
+				return err
+			}
+			defer lis.Close()
+			go func() {
+				rpcsLog.Infof("gRPC proxy started at %s", lis.Addr())
+				http.Serve(lis, mux)
+			}()
+		}
 	}
 
 	// If we're not in simnet mode, We'll wait until we're fully synced to
@@ -646,6 +669,17 @@ func fileExists(name string) bool {
 		}
 	}
 	return true
+}
+
+//MemDial returns a net.Conn for in-memory RPC
+func MemDial() (net.Conn, error) {
+	if atomic.LoadInt32(&ready) == 0 {
+		return nil, errors.New("Deamon is not ready")
+	}
+	if memoryRPCListener == nil {
+		return nil, errors.New("Memory RPC is not configured")
+	}
+	return memoryRPCListener.Dial()
 }
 
 // genCertPair generates a key/cert pair to the paths provided. The
