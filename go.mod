@@ -37,7 +37,7 @@ require (
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 // indirect
-	github.com/lightninglabs/neutrino v0.0.0-20180726020449-6a4aba4c8fb6
+	github.com/lightninglabs/neutrino v0.0.0-20180730005614-d625670bd65f
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
 	github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
@@ -59,3 +59,5 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
+
+replace github.com/lightninglabs/neutrino v0.0.0-20180730005614-d625670bd65f => github.com/breez/neutrino v0.0.0-20180730064541-059944269307

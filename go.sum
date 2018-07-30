@@ -12,6 +12,8 @@ github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885 h1:bBmEG9/q1xH07CqeeF
 github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e h1:24jix3mqu421BBMWbVBOl5pDw0f9ncazW10kaMywzHQ=
 github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e/go.mod h1:GEV5wmg4YquNw7v1kkyoX9etIk8yVmXj+AkDHuuETHs=
+github.com/breez/neutrino v0.0.0-20180730064541-059944269307 h1:eKN9ZHgdDYkhmWuwIasDlaShO8e9puFlTsDuA7GOg20=
+github.com/breez/neutrino v0.0.0-20180730064541-059944269307/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
 github.com/btcsuite/btcd v0.0.0-20180717031623-bc3861a5a277 h1:ji/CoYMmENsHMmIhE19AF60wFVbuQIpkkiZDscG5blo=
 github.com/btcsuite/btcd v0.0.0-20180717031623-bc3861a5a277/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f h1:bAs4lUbRJpnnkd9VhRV3jjAVU7DJVjMaK+IsvSeZvFo=
@@ -77,6 +79,8 @@ github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 h1:fTLuPUkaKII
 github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885/go.mod h1:KUh15naRlx/TmUMFS/p4JJrCrE6F7RGF7rsnvuu45E4=
 github.com/lightninglabs/neutrino v0.0.0-20180726020449-6a4aba4c8fb6 h1:H/Pa2t0qWJhn4LyLDQlm4K1ro1UIRpo5GMCzJMCfqtI=
 github.com/lightninglabs/neutrino v0.0.0-20180726020449-6a4aba4c8fb6/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
+github.com/lightninglabs/neutrino v0.0.0-20180730005614-d625670bd65f h1:+0rKzLiQWB0r+8bv47g7dJMI1jb4LikeTOBRuT8UVzU=
+github.com/lightninglabs/neutrino v0.0.0-20180730005614-d625670bd65f/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6 h1:ONLGrYJVQdbtP6CE/ff1KNWZtygRGEh12RzonTiCzPs=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6/go.mod h1:8EgEt4a/NUOVQd+3kk6n9aZCJ1Ssj96Pb6lCrci+6oc=
 github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9 h1:aLgtHOvaE6DjIKS5IpQU6ZLjdcQzjxHTMPOpq4pAY+M=
