@@ -110,7 +110,7 @@ type server struct {
 	inboundPeers  map[string]*peer
 	outboundPeers map[string]*peer
 
-	peerConnectedListeners map[string][]chan<- struct{}
+	peerConnectedListeners map[string][]chan<- lnpeer.Peer
 
 	persistentPeers        map[string]struct{}
 	persistentPeersBackoff map[string]time.Duration
@@ -264,7 +264,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 		peersByPub:             make(map[string]*peer),
 		inboundPeers:           make(map[string]*peer),
 		outboundPeers:          make(map[string]*peer),
-		peerConnectedListeners: make(map[string][]chan<- struct{}),
+		peerConnectedListeners: make(map[string][]chan<- lnpeer.Peer),
 
 		globalFeatures: lnwire.NewFeatureVector(globalFeatures,
 			lnwire.GlobalFeatures),
@@ -661,6 +661,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 				return ErrServerShuttingDown
 			}
 		},
+		DisableChannel: s.disableChannel,
 	}, chanDB)
 
 	s.breachArbiter = newBreachArbiter(&BreachConfig{
@@ -759,7 +760,12 @@ func (s *server) Start() error {
 
 	// With all the relevant sub-systems started, we'll now attempt to
 	// establish persistent connections to our direct channel collaborators
-	// within the network.
+	// within the network. Before doing so however, we'll prune our set of
+	// link nodes found within the database to ensure we don't reconnect to
+	// any nodes we no longer have open channels with.
+	if err := s.chanDB.PruneLinkNodes(); err != nil {
+		return err
+	}
 	if err := s.establishPersistentConnections(); err != nil {
 		return err
 	}
@@ -1476,6 +1482,22 @@ func (s *server) establishPersistentConnections() error {
 	return nil
 }
 
+// prunePersistentPeerConnection removes all internal state related to
+// persistent connections to a peer within the server. This is used to avoid
+// persistent connection retries to peers we do not have any open channels with.
+func (s *server) prunePersistentPeerConnection(compressedPubKey [33]byte) {
+	srvrLog.Infof("Pruning peer %x from persistent connections, number of "+
+		"open channels is now zero", compressedPubKey)
+
+	pubKeyStr := string(compressedPubKey[:])
+
+	s.mu.Lock()
+	delete(s.persistentPeers, pubKeyStr)
+	delete(s.persistentPeersBackoff, pubKeyStr)
+	s.cancelConnReqs(pubKeyStr, nil)
+	s.mu.Unlock()
+}
+
 // BroadcastMessage sends a request to the server to broadcast a set of
 // messages to all peers other than the one specified by the `skips` parameter.
 //
@@ -1568,31 +1590,38 @@ func (s *server) SendToPeer(target *btcec.PublicKey,
 }
 
 // NotifyWhenOnline can be called by other subsystems to get notified when a
-// particular peer comes online.
+// particular peer comes online. The peer itself is sent across the peerChan.
 //
 // NOTE: This function is safe for concurrent access.
-func (s *server) NotifyWhenOnline(peer *btcec.PublicKey,
-	connectedChan chan<- struct{}) {
+func (s *server) NotifyWhenOnline(peerKey *btcec.PublicKey,
+	peerChan chan<- lnpeer.Peer) {
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Compute the target peer's identifier.
-	pubStr := string(peer.SerializeCompressed())
+	pubStr := string(peerKey.SerializeCompressed())
 
 	// Check if peer is connected.
-	_, ok := s.peersByPub[pubStr]
+	peer, ok := s.peersByPub[pubStr]
 	if ok {
 		// Connected, can return early.
 		srvrLog.Debugf("Notifying that peer %x is online",
-			peer.SerializeCompressed())
-		close(connectedChan)
+			peerKey.SerializeCompressed())
+
+		select {
+		case peerChan <- peer:
+		case <-s.quit:
+		}
+
 		return
 	}
 
 	// Not connected, store this listener such that it can be notified when
 	// the peer comes online.
 	s.peerConnectedListeners[pubStr] = append(
-		s.peerConnectedListeners[pubStr], connectedChan)
+		s.peerConnectedListeners[pubStr], peerChan,
+	)
 }
 
 // sendPeerMessages enqueues a list of messages into the outgoingQueue of the
@@ -2240,8 +2269,12 @@ func (s *server) addPeer(p *peer) {
 	}
 
 	// Check if there are listeners waiting for this peer to come online.
-	for _, con := range s.peerConnectedListeners[pubStr] {
-		close(con)
+	for _, peerChan := range s.peerConnectedListeners[pubStr] {
+		select {
+		case peerChan <- p:
+		case <-s.quit:
+			return
+		}
 	}
 	delete(s.peerConnectedListeners, pubStr)
 }
@@ -2509,7 +2542,7 @@ func (s *server) OpenChannel(nodeKey *btcec.PublicKey,
 
 	// TODO(roasbeef): pass in chan that's closed if/when funding succeeds
 	// so can track as persistent peer?
-	go s.fundingMgr.initFundingWorkflow(targetPeer.addr, req)
+	go s.fundingMgr.initFundingWorkflow(targetPeer, req)
 
 	return updateChan, errChan
 }
@@ -2587,4 +2620,123 @@ func (s *server) fetchNodeAdvertisedAddr(pub *btcec.PublicKey) (net.Addr, error)
 	}
 
 	return node.Addresses[0], nil
+}
+
+// disableChannel disables a channel, resulting in it not being able to forward
+// payments. This is done by sending a new channel update across the network
+// with the disabled flag set.
+func (s *server) disableChannel(op wire.OutPoint) error {
+	// Retrieve the latest update for this channel. We'll use this
+	// as our starting point to send the new update.
+	chanUpdate, err := s.fetchLastChanUpdateByOutPoint(op)
+	if err != nil {
+		return err
+	}
+
+	// Set the bit responsible for marking a channel as disabled.
+	chanUpdate.Flags |= lnwire.ChanUpdateDisabled
+
+	// We must now update the message's timestamp and generate a new
+	// signature.
+	chanUpdate.Timestamp = uint32(time.Now().Unix())
+
+	chanUpdateMsg, err := chanUpdate.DataToSign()
+	if err != nil {
+		return err
+	}
+
+	pubKey := s.identityPriv.PubKey()
+	sig, err := s.nodeSigner.SignMessage(pubKey, chanUpdateMsg)
+	if err != nil {
+		return err
+	}
+	chanUpdate.Signature, err = lnwire.NewSigFromSignature(sig)
+	if err != nil {
+		return err
+	}
+
+	// Once signed, we'll send the new update to all of our peers.
+	return s.applyChannelUpdate(chanUpdate)
+}
+
+// fetchLastChanUpdateByOutPoint fetches the latest update for a channel from
+// our point of view.
+func (s *server) fetchLastChanUpdateByOutPoint(op wire.OutPoint) (*lnwire.ChannelUpdate, error) {
+	graph := s.chanDB.ChannelGraph()
+	info, edge1, edge2, err := graph.FetchChannelEdgesByOutpoint(&op)
+	if err != nil {
+		return nil, err
+	}
+
+	if edge1 == nil || edge2 == nil {
+		return nil, fmt.Errorf("unable to find channel(%v)", op)
+	}
+
+	// If we're the outgoing node on the first edge, then that
+	// means the second edge is our policy. Otherwise, the first
+	// edge is our policy.
+	var local *channeldb.ChannelEdgePolicy
+
+	ourPubKey := s.identityPriv.PubKey().SerializeCompressed()
+	if bytes.Equal(edge1.Node.PubKeyBytes[:], ourPubKey) {
+		local = edge2
+	} else {
+		local = edge1
+	}
+
+	return extractChannelUpdate(info, local)
+}
+
+// extractChannelUpdate retrieves a lnwire.ChannelUpdate message from an edge's
+// info and routing policy.
+func extractChannelUpdate(info *channeldb.ChannelEdgeInfo,
+	policy *channeldb.ChannelEdgePolicy) (*lnwire.ChannelUpdate, error) {
+
+	update := &lnwire.ChannelUpdate{
+		ChainHash:       info.ChainHash,
+		ShortChannelID:  lnwire.NewShortChanIDFromInt(policy.ChannelID),
+		Timestamp:       uint32(policy.LastUpdate.Unix()),
+		Flags:           policy.Flags,
+		TimeLockDelta:   policy.TimeLockDelta,
+		HtlcMinimumMsat: policy.MinHTLC,
+		BaseFee:         uint32(policy.FeeBaseMSat),
+		FeeRate:         uint32(policy.FeeProportionalMillionths),
+	}
+
+	var err error
+	update.Signature, err = lnwire.NewSigFromRawSignature(policy.SigBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return update, nil
+}
+
+// applyChannelUpdate applies the channel update to the different sub-systems of
+// the server.
+func (s *server) applyChannelUpdate(update *lnwire.ChannelUpdate) error {
+	newChannelPolicy := &channeldb.ChannelEdgePolicy{
+		SigBytes:                  update.Signature.ToSignatureBytes(),
+		ChannelID:                 update.ShortChannelID.ToUint64(),
+		LastUpdate:                time.Unix(int64(update.Timestamp), 0),
+		Flags:                     update.Flags,
+		TimeLockDelta:             update.TimeLockDelta,
+		MinHTLC:                   update.HtlcMinimumMsat,
+		FeeBaseMSat:               lnwire.MilliSatoshi(update.BaseFee),
+		FeeProportionalMillionths: lnwire.MilliSatoshi(update.FeeRate),
+	}
+
+	err := s.chanRouter.UpdateEdge(newChannelPolicy)
+	if err != nil && !routing.IsError(err, routing.ErrIgnored) {
+		return err
+	}
+
+	pubKey := s.identityPriv.PubKey()
+	errChan := s.authGossiper.ProcessLocalAnnouncement(update, pubKey)
+	select {
+	case err := <-errChan:
+		return err
+	case <-s.quit:
+		return ErrServerShuttingDown
+	}
 }

@@ -962,7 +962,7 @@ func (u *utxoNursery) createSweepTx(kgtnOutputs []kidOutput,
 		// sweep.
 		case lnwallet.HtlcOfferedTimeoutSecondLevel:
 			weightEstimate.AddWitnessInput(
-				lnwallet.SecondLevelHtlcSuccessWitnessSize,
+				lnwallet.ToLocalTimeoutWitnessSize,
 			)
 			csvOutputs = append(csvOutputs, input)
 
@@ -971,7 +971,7 @@ func (u *utxoNursery) createSweepTx(kgtnOutputs []kidOutput,
 		// sweep.
 		case lnwallet.HtlcAcceptedSuccessSecondLevel:
 			weightEstimate.AddWitnessInput(
-				lnwallet.SecondLevelHtlcSuccessWitnessSize,
+				lnwallet.ToLocalTimeoutWitnessSize,
 			)
 			csvOutputs = append(csvOutputs, input)
 

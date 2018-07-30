@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -517,6 +518,16 @@ func (s *mockServer) IdentityKey() *btcec.PublicKey {
 	return pubkey
 }
 
+func (s *mockServer) Address() net.Addr {
+	return nil
+}
+
+func (s *mockServer) AddNewChannel(channel *lnwallet.LightningChannel,
+	cancel <-chan struct{}) error {
+
+	return nil
+}
+
 func (s *mockServer) WipeChannel(*wire.OutPoint) error {
 	return nil
 }
@@ -790,7 +801,7 @@ func (m *mockNotifier) Stop() error {
 }
 
 func (m *mockNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
-	heightHint uint32, mempool bool) (*chainntnfs.SpendEvent, error) {
+	heightHint uint32) (*chainntnfs.SpendEvent, error) {
 
 	return &chainntnfs.SpendEvent{
 		Spend: make(chan *chainntnfs.SpendDetail),

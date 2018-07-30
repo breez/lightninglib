@@ -380,6 +380,13 @@ func (r *ChannelRouter) Start() error {
 		return err
 	}
 
+	// Finally, before we proceed, we'll prune any unconnected nodes from
+	// the graph in order to ensure we maintain a tight graph of "useful"
+	// nodes.
+	if err := r.cfg.Graph.PruneGraphNodes(); err != nil {
+		return err
+	}
+
 	r.wg.Add(1)
 	go r.networkHandler()
 
@@ -947,34 +954,6 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 				"chan_id=%v", msg.ChannelID)
 		}
 
-		// Query the database for the existence of the two nodes in this
-		// channel. If not found, add a partial node to the database,
-		// containing only the node keys.
-		_, exists, _ = r.cfg.Graph.HasLightningNode(msg.NodeKey1Bytes)
-		if !exists {
-			node1 := &channeldb.LightningNode{
-				PubKeyBytes:          msg.NodeKey1Bytes,
-				HaveNodeAnnouncement: false,
-			}
-			err := r.cfg.Graph.AddLightningNode(node1)
-			if err != nil {
-				return errors.Errorf("unable to add node %v to"+
-					" the graph: %v", node1.PubKeyBytes, err)
-			}
-		}
-		_, exists, _ = r.cfg.Graph.HasLightningNode(msg.NodeKey2Bytes)
-		if !exists {
-			node2 := &channeldb.LightningNode{
-				PubKeyBytes:          msg.NodeKey2Bytes,
-				HaveNodeAnnouncement: false,
-			}
-			err := r.cfg.Graph.AddLightningNode(node2)
-			if err != nil {
-				return errors.Errorf("unable to add node %v to"+
-					" the graph: %v", node2.PubKeyBytes, err)
-			}
-		}
-
 		// Before we can add the channel to the channel graph, we need
 		// to obtain the full funding outpoint that's encoded within
 		// the channel ID.
@@ -1150,7 +1129,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		}
 
 		invalidateCache = true
-		log.Debugf("New channel update applied: %v", spew.Sdump(msg))
+		log.Tracef("New channel update applied: %v", spew.Sdump(msg))
 
 	default:
 		return errors.Errorf("wrong routing update message type")

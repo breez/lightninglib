@@ -14,6 +14,7 @@ import (
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/htlcswitch"
+	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
@@ -184,6 +185,9 @@ type peer struct {
 	quit      chan struct{}
 	wg        sync.WaitGroup
 }
+
+// A compile-time check to ensure that peer satisfies the lnpeer.Peer interface.
+var _ lnpeer.Peer = (*peer)(nil)
 
 // newPeer creates a new peer from an establish connection object, and a
 // pointer to the main server.
@@ -908,15 +912,15 @@ out:
 			p.queueMsg(lnwire.NewPong(pongBytes), nil)
 
 		case *lnwire.OpenChannel:
-			p.server.fundingMgr.processFundingOpen(msg, p.addr)
+			p.server.fundingMgr.processFundingOpen(msg, p)
 		case *lnwire.AcceptChannel:
-			p.server.fundingMgr.processFundingAccept(msg, p.addr)
+			p.server.fundingMgr.processFundingAccept(msg, p)
 		case *lnwire.FundingCreated:
-			p.server.fundingMgr.processFundingCreated(msg, p.addr)
+			p.server.fundingMgr.processFundingCreated(msg, p)
 		case *lnwire.FundingSigned:
-			p.server.fundingMgr.processFundingSigned(msg, p.addr)
+			p.server.fundingMgr.processFundingSigned(msg, p)
 		case *lnwire.FundingLocked:
-			p.server.fundingMgr.processFundingLocked(msg, p.addr)
+			p.server.fundingMgr.processFundingLocked(msg, p)
 
 		case *lnwire.Shutdown:
 			select {
@@ -932,8 +936,9 @@ out:
 			}
 
 		case *lnwire.Error:
-			switch {
+			key := p.addr.IdentityKey
 
+			switch {
 			// In the case of an all-zero channel ID we want to
 			// forward the error to all channels with this peer.
 			case msg.ChanID == lnwire.ConnectionWideID:
@@ -949,8 +954,8 @@ out:
 			// If the channel ID for the error message corresponds
 			// to a pending channel, then the funding manager will
 			// handle the error.
-			case p.server.fundingMgr.IsPendingChannel(msg.ChanID, p.addr):
-				p.server.fundingMgr.processFundingError(msg, p.addr)
+			case p.server.fundingMgr.IsPendingChannel(msg.ChanID, key):
+				p.server.fundingMgr.processFundingError(msg, key)
 
 			// If not we hand the error to the channel link for
 			// this channel.
@@ -1678,6 +1683,7 @@ func (p *peer) fetchActiveChanCloser(chanID lnwire.ChannelID) (*channelCloser, e
 				channel:           channel,
 				unregisterChannel: p.server.htlcSwitch.RemoveLink,
 				broadcastTx:       p.server.cc.wallet.PublishTransaction,
+				disableChannel:    p.server.disableChannel,
 				quit:              p.quit,
 			},
 			deliveryAddr,
@@ -1693,9 +1699,6 @@ func (p *peer) fetchActiveChanCloser(chanID lnwire.ChannelID) (*channelCloser, e
 
 // handleLocalCloseReq kicks-off the workflow to execute a cooperative or
 // forced unilateral closure of the channel initiated by a local subsystem.
-//
-// TODO(roasbeef): if no more active channels with peer call Remove on connMgr
-// with peerID
 func (p *peer) handleLocalCloseReq(req *htlcswitch.ChanClose) {
 	chanID := lnwire.NewChanIDFromOutPoint(req.ChanPoint)
 
@@ -1734,11 +1737,13 @@ func (p *peer) handleLocalCloseReq(req *htlcswitch.ChanClose) {
 			req.Err <- err
 			return
 		}
+
 		chanCloser := newChannelCloser(
 			chanCloseCfg{
 				channel:           channel,
 				unregisterChannel: p.server.htlcSwitch.RemoveLink,
 				broadcastTx:       p.server.cc.wallet.PublishTransaction,
+				disableChannel:    p.server.disableChannel,
 				quit:              p.quit,
 			},
 			deliveryAddr,
@@ -1848,6 +1853,18 @@ func (p *peer) finalizeChanClosure(chanCloser *channelCloser) {
 					},
 				}
 			}
+
+			// Remove the persistent connection to this peer if we
+			// no longer have open channels with them.
+			p.activeChanMtx.Lock()
+			numActiveChans := len(p.activeChannels)
+			p.activeChanMtx.Unlock()
+
+			if numActiveChans == 0 {
+				p.server.prunePersistentPeerConnection(
+					p.pubKeyBytes,
+				)
+			}
 		})
 }
 
@@ -1901,6 +1918,9 @@ func (p *peer) WipeChannel(chanPoint *wire.OutPoint) error {
 	if channel, ok := p.activeChannels[chanID]; ok {
 		channel.Stop()
 		delete(p.activeChannels, chanID)
+		if len(p.activeChannels) == 0 {
+			p.server.prunePersistentPeerConnection(p.pubKeyBytes)
+		}
 	}
 	p.activeChanMtx.Unlock()
 
@@ -2000,6 +2020,41 @@ func (p *peer) IdentityKey() *btcec.PublicKey {
 	return p.addr.IdentityKey
 }
 
+// Address returns the network address of the remote peer.
+func (p *peer) Address() net.Addr {
+	return p.addr.Address
+}
+
+// AddNewChannel adds a new channel to the peer. The channel should fail to be
+// added if the cancel channel is closed.
+func (p *peer) AddNewChannel(channel *lnwallet.LightningChannel,
+	cancel <-chan struct{}) error {
+
+	newChanDone := make(chan struct{})
+	newChanMsg := &newChannelMsg{
+		channel: channel,
+		done:    newChanDone,
+	}
+
+	select {
+	case p.newChannels <- newChanMsg:
+	case <-cancel:
+		return errors.New("canceled adding new channel")
+	case <-p.quit:
+		return ErrPeerExiting
+	}
+
+	// We pause here to wait for the peer to recognize the new channel
+	// before we close the channel barrier corresponding to the channel.
+	select {
+	case <-newChanDone:
+	case <-p.quit:
+		return ErrPeerExiting
+	}
+
+	return nil
+}
+
 // TODO(roasbeef): make all start/stop mutexes a CAS
 
 // fetchLastChanUpdate returns a function which is able to retrieve the last
@@ -2014,8 +2069,8 @@ func fetchLastChanUpdate(s *server,
 		}
 
 		if edge1 == nil || edge2 == nil {
-			return nil, errors.Errorf("unable to find "+
-				"channel by ShortChannelID(%v)", cid)
+			return nil, fmt.Errorf("unable to find channel by "+
+				"ShortChannelID(%v)", cid)
 		}
 
 		// If we're the outgoing node on the first edge, then that
@@ -2028,27 +2083,6 @@ func fetchLastChanUpdate(s *server,
 			local = edge1
 		}
 
-		update := lnwire.ChannelUpdate{
-			ChainHash:       info.ChainHash,
-			ShortChannelID:  lnwire.NewShortChanIDFromInt(local.ChannelID),
-			Timestamp:       uint32(local.LastUpdate.Unix()),
-			Flags:           local.Flags,
-			TimeLockDelta:   local.TimeLockDelta,
-			HtlcMinimumMsat: local.MinHTLC,
-			BaseFee:         uint32(local.FeeBaseMSat),
-			FeeRate:         uint32(local.FeeProportionalMillionths),
-		}
-		update.Signature, err = lnwire.NewSigFromRawSignature(local.SigBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		hswcLog.Tracef("Sending latest channel_update: %v",
-			newLogClosure(func() string {
-				return spew.Sdump(update)
-			}),
-		)
-
-		return &update, nil
+		return extractChannelUpdate(info, local)
 	}
 }

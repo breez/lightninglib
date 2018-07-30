@@ -169,45 +169,17 @@ func (h *htlcTimeoutResolver) Resolve() (ContractResolver, error) {
 	// spent, and the spending transaction has been fully confirmed.
 	waitForOutputResolution := func() error {
 		// We first need to register to see when the HTLC output itself
-		// has been spent so we can wait for the spending transaction
-		// to confirm.
+		// has been spent by a confirmed transaction.
 		spendNtfn, err := h.Notifier.RegisterSpendNtfn(
 			&h.htlcResolution.ClaimOutpoint,
-			h.broadcastHeight, true,
+			h.broadcastHeight,
 		)
 		if err != nil {
 			return err
 		}
 
-		var spendDetail *chainntnfs.SpendDetail
 		select {
-		case s, ok := <-spendNtfn.Spend:
-			if !ok {
-				return fmt.Errorf("notifier quit")
-			}
-
-			spendDetail = s
-
-		case <-h.Quit:
-			return fmt.Errorf("quitting")
-		}
-
-		// Now that the output has been spent, we'll also wait for the
-		// transaction to be confirmed before proceeding.
-		confNtfn, err := h.Notifier.RegisterConfirmationsNtfn(
-			spendDetail.SpenderTxHash, 1,
-			uint32(spendDetail.SpendingHeight-1),
-		)
-		if err != nil {
-			return err
-		}
-
-		log.Infof("%T(%v): waiting for spending (txid=%v) to be fully "+
-			"confirmed", h, h.htlcResolution.ClaimOutpoint,
-			spendDetail.SpenderTxHash)
-
-		select {
-		case _, ok := <-confNtfn.Confirmed:
+		case _, ok := <-spendNtfn.Spend:
 			if !ok {
 				return fmt.Errorf("notifier quit")
 			}
@@ -608,7 +580,7 @@ func (h *htlcSuccessResolver) Resolve() (ContractResolver, error) {
 	// To wrap this up, we'll wait until the second-level transaction has
 	// been spent, then fully resolve the contract.
 	spendNtfn, err := h.Notifier.RegisterSpendNtfn(
-		&h.htlcResolution.ClaimOutpoint, h.broadcastHeight, true,
+		&h.htlcResolution.ClaimOutpoint, h.broadcastHeight,
 	)
 	if err != nil {
 		return nil, err
@@ -819,8 +791,7 @@ func (h *htlcOutgoingContestResolver) Resolve() (ContractResolver, error) {
 	// First, we'll register for a spend notification for this output. If
 	// the remote party sweeps with the pre-image, we'll  be notified.
 	spendNtfn, err := h.Notifier.RegisterSpendNtfn(
-		&outPointToWatch,
-		h.broadcastHeight, true,
+		&outPointToWatch, h.broadcastHeight,
 	)
 	if err != nil {
 		return nil, err
@@ -1041,20 +1012,13 @@ func (h *htlcIncomingContestResolver) Resolve() (ContractResolver, error) {
 		copy(h.htlcResolution.Preimage[:], preimage[:])
 	}
 
-	// If the HTLC hasn't yet expired, then we'll query to see if we
-	// already know the preimage.
-	preimage, ok := h.PreimageDB.LookupPreimage(h.payHash[:])
-	if ok {
-		// If we do, then this means we can claim the HTLC!  However,
-		// we don't know how to ourselves, so we'll return our inner
-		// resolver which has the knowledge to do so.
-		applyPreimage(preimage[:])
-		return &h.htlcSuccessResolver, nil
-	}
-
 	// If the HTLC hasn't expired yet, then we may still be able to claim
-	// it if we learn of the pre-image, so we'll wait and see if it pops
-	// up, or the HTLC times out.
+	// it if we learn of the pre-image, so we'll subscribe to the preimage
+	// database to see if it turns up, or the HTLC times out.
+	//
+	// NOTE: This is done BEFORE opportunistically querying the db, to
+	// ensure the preimage can't be delivered between querying and
+	// registering for the preimage subscription.
 	preimageSubscription := h.PreimageDB.SubscribeUpdates()
 	blockEpochs, err := h.Notifier.RegisterBlockEpochNtfn()
 	if err != nil {
@@ -1064,6 +1028,18 @@ func (h *htlcIncomingContestResolver) Resolve() (ContractResolver, error) {
 		preimageSubscription.CancelSubscription()
 		blockEpochs.Cancel()
 	}()
+
+	// With the epochs and preimage subscriptions initialized, we'll query
+	// to see if we already know the preimage.
+	preimage, ok := h.PreimageDB.LookupPreimage(h.payHash[:])
+	if ok {
+		// If we do, then this means we can claim the HTLC!  However,
+		// we don't know how to ourselves, so we'll return our inner
+		// resolver which has the knowledge to do so.
+		applyPreimage(preimage[:])
+		return &h.htlcSuccessResolver, nil
+	}
+
 	for {
 
 		select {
@@ -1316,7 +1292,7 @@ func (c *commitSweepResolver) Resolve() (ContractResolver, error) {
 		// until the commitment output has been spent.
 		spendNtfn, err := c.Notifier.RegisterSpendNtfn(
 			&c.commitResolution.SelfOutPoint,
-			c.broadcastHeight, true,
+			c.broadcastHeight,
 		)
 		if err != nil {
 			return nil, err

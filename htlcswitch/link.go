@@ -2155,7 +2155,7 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 					"soon: expiry=%v, best_height=%v",
 					pd.RHash[:], pd.Timeout, heightNow)
 
-				failure := lnwire.FailFinalIncorrectCltvExpiry{}
+				failure := lnwire.FailFinalExpiryTooSoon{}
 				l.sendHTLCError(
 					pd.HtlcIndex, &failure, obfuscator, pd.SourceRef,
 				)

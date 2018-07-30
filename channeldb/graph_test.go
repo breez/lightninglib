@@ -421,6 +421,13 @@ func TestDisconnectBlockAtHeight(t *testing.T) {
 	}
 
 	graph := db.ChannelGraph()
+	sourceNode, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create source node: %v", err)
+	}
+	if err := graph.SetSourceNode(sourceNode); err != nil {
+		t.Fatalf("unable to set source node: %v", err)
+	}
 
 	// We'd like to test the insertion/deletion of edges, so we create two
 	// vertexes to connect.
@@ -964,12 +971,29 @@ func assertNumChans(t *testing.T, graph *ChannelGraph, n int) {
 		return nil
 	}); err != nil {
 		_, _, line, _ := runtime.Caller(1)
-		t.Fatalf("line %v:unable to scan channels: %v", line, err)
+		t.Fatalf("line %v: unable to scan channels: %v", line, err)
 	}
 	if numChans != n {
 		_, _, line, _ := runtime.Caller(1)
 		t.Fatalf("line %v: expected %v chans instead have %v", line,
 			n, numChans)
+	}
+}
+
+func assertNumNodes(t *testing.T, graph *ChannelGraph, n int) {
+	numNodes := 0
+	err := graph.ForEachNode(nil, func(_ *bolt.Tx, _ *LightningNode) error {
+		numNodes++
+		return nil
+	})
+	if err != nil {
+		_, _, line, _ := runtime.Caller(1)
+		t.Fatalf("line %v: unable to scan nodes: %v", line, err)
+	}
+
+	if numNodes != n {
+		_, _, line, _ := runtime.Caller(1)
+		t.Fatalf("line %v: expected %v nodes, got %v", line, n, numNodes)
 	}
 }
 
@@ -1003,6 +1027,13 @@ func TestGraphPruning(t *testing.T) {
 	}
 
 	graph := db.ChannelGraph()
+	sourceNode, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create source node: %v", err)
+	}
+	if err := graph.SetSourceNode(sourceNode); err != nil {
+		t.Fatalf("unable to set source node: %v", err)
+	}
 
 	// As initial set up for the test, we'll create a graph with 5 vertexes
 	// and enough edges to create a fully connected graph. The graph will
@@ -1137,9 +1168,11 @@ func TestGraphPruning(t *testing.T) {
 		t.Fatalf("channels were pruned but shouldn't have been")
 	}
 
-	// Once again, the prune tip should have been updated.
+	// Once again, the prune tip should have been updated. We should still
+	// see both channels and their participants, along with the source node.
 	assertPruneTip(t, graph, &blockHash, blockHeight)
 	assertNumChans(t, graph, 2)
+	assertNumNodes(t, graph, 4)
 
 	// Finally, create a block that prunes the remainder of the channels
 	// from the graph.
@@ -1159,10 +1192,11 @@ func TestGraphPruning(t *testing.T) {
 			"expected %v, got %v", 2, len(prunedChans))
 	}
 
-	// The prune tip should be updated, and no channels should be found
-	// within the current graph.
+	// The prune tip should be updated, no channels should be found, and
+	// only the source node should remain within the current graph.
 	assertPruneTip(t, graph, &blockHash, blockHeight)
 	assertNumChans(t, graph, 0)
+	assertNumNodes(t, graph, 1)
 
 	// Finally, the channel view at this point in the graph should now be
 	// completely empty.  Those channels should also be missing from the
@@ -1888,6 +1922,13 @@ func TestChannelEdgePruningUpdateIndexDeletion(t *testing.T) {
 	}
 
 	graph := db.ChannelGraph()
+	sourceNode, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create source node: %v", err)
+	}
+	if err := graph.SetSourceNode(sourceNode); err != nil {
+		t.Fatalf("unable to set source node: %v", err)
+	}
 
 	// We'll first populate our graph with two nodes. All channels created
 	// below will be made between these two nodes.
@@ -2014,6 +2055,155 @@ func TestChannelEdgePruningUpdateIndexDeletion(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("unable to read update index: %v", err)
+	}
+}
+
+// TestPruneGraphNodes tests that unconnected vertexes are pruned via the
+// PruneSyncState method.
+func TestPruneGraphNodes(t *testing.T) {
+	t.Parallel()
+
+	db, cleanUp, err := makeTestDB()
+	defer cleanUp()
+	if err != nil {
+		t.Fatalf("unable to make test database: %v", err)
+	}
+
+	// We'll start off by inserting our source node, to ensure that it's
+	// the only node left after we prune the graph.
+	graph := db.ChannelGraph()
+	sourceNode, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create source node: %v", err)
+	}
+	if err := graph.SetSourceNode(sourceNode); err != nil {
+		t.Fatalf("unable to set source node: %v", err)
+	}
+
+	// With the source node inserted, we'll now add three nodes to the
+	// channel graph, at the end of the scenario, only two of these nodes
+	// should still be in the graph.
+	node1, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create test node: %v", err)
+	}
+	if err := graph.AddLightningNode(node1); err != nil {
+		t.Fatalf("unable to add node: %v", err)
+	}
+	node2, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create test node: %v", err)
+	}
+	if err := graph.AddLightningNode(node2); err != nil {
+		t.Fatalf("unable to add node: %v", err)
+	}
+	node3, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create test node: %v", err)
+	}
+	if err := graph.AddLightningNode(node3); err != nil {
+		t.Fatalf("unable to add node: %v", err)
+	}
+
+	// We'll now add a new edge to the graph, but only actually advertise
+	// the edge of *one* of the nodes.
+	edgeInfo, chanID := createEdge(100, 0, 0, 0, node1, node2)
+	if err := graph.AddChannelEdge(&edgeInfo); err != nil {
+		t.Fatalf("unable to add edge: %v", err)
+	}
+
+	// We'll now insert an advertised edge, but it'll only be the edge that
+	// points from the first to the second node.
+	edge1 := randEdgePolicy(chanID.ToUint64(), edgeInfo.ChannelPoint, db)
+	edge1.Flags = 0
+	edge1.Node = node1
+	edge1.SigBytes = testSig.Serialize()
+	if err := graph.UpdateEdgePolicy(edge1); err != nil {
+		t.Fatalf("unable to update edge: %v", err)
+	}
+
+	// We'll now initiate a around of graph pruning.
+	if err := graph.PruneGraphNodes(); err != nil {
+		t.Fatalf("unable to prune graph nodes: %v", err)
+	}
+
+	// At this point, there should be 3 nodes left in the graph still: the
+	// source node (which can't be pruned), and node 1+2. Nodes 1 and two
+	// should still be left in the graph as there's half of an advertised
+	// edge between them.
+	assertNumNodes(t, graph, 3)
+
+	// Finally, we'll ensure that node3, the only fully unconnected node as
+	// properly deleted from the graph and not another node in its place.
+	node3Pub, err := node3.PubKey()
+	if err != nil {
+		t.Fatalf("unable to fetch the pubkey of node3: %v", err)
+	}
+	if _, err := graph.FetchLightningNode(node3Pub); err == nil {
+		t.Fatalf("node 3 should have been deleted!")
+	}
+}
+
+// TestAddChannelEdgeShellNodes tests that when we attempt to add a ChannelEdge
+// to the graph, one or both of the nodes the edge involves aren't found in the
+// database, then shell edges are created for each node if needed.
+func TestAddChannelEdgeShellNodes(t *testing.T) {
+	t.Parallel()
+
+	db, cleanUp, err := makeTestDB()
+	defer cleanUp()
+	if err != nil {
+		t.Fatalf("unable to make test database: %v", err)
+	}
+
+	graph := db.ChannelGraph()
+
+	// To start, we'll create two nodes, and only add one of them to the
+	// channel graph.
+	node1, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create test node: %v", err)
+	}
+	if err := graph.AddLightningNode(node1); err != nil {
+		t.Fatalf("unable to add node: %v", err)
+	}
+	node2, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create test node: %v", err)
+	}
+
+	// We'll now create an edge between the two nodes, as a result, node2
+	// should be inserted into the database as a shell node.
+	edgeInfo, _ := createEdge(100, 0, 0, 0, node1, node2)
+	if err := graph.AddChannelEdge(&edgeInfo); err != nil {
+		t.Fatalf("unable to add edge: %v", err)
+	}
+
+	node1Pub, err := node1.PubKey()
+	if err != nil {
+		t.Fatalf("unable to parse node 1 pub: %v", err)
+	}
+	node2Pub, err := node2.PubKey()
+	if err != nil {
+		t.Fatalf("unable to parse node 2 pub: %v", err)
+	}
+
+	// Ensure that node1 was inserted as a full node, while node2 only has
+	// a shell node present.
+	node1, err = graph.FetchLightningNode(node1Pub)
+	if err != nil {
+		t.Fatalf("unable to fetch node1: %v", err)
+	}
+	if !node1.HaveNodeAnnouncement {
+		t.Fatalf("have shell announcement for node1, shouldn't")
+	}
+
+	node2, err = graph.FetchLightningNode(node2Pub)
+	if err != nil {
+		t.Fatalf("unable to fetch node2: %v", err)
+	}
+	if node2.HaveNodeAnnouncement {
+		t.Fatalf("should have shell announcement for node2, but is full")
 	}
 }
 

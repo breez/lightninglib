@@ -2445,6 +2445,12 @@ func (r *rpcServer) AddInvoice(ctx context.Context,
 			len(invoice.DescriptionHash), channeldb.MaxPaymentRequestSize)
 	}
 
+	// The value of the invoice must not be negative.
+	if invoice.Value < 0 {
+		return nil, fmt.Errorf("payments of negative value "+
+			"are not allowed, value is %v", invoice.Value)
+	}
+	
 	amt := btcutil.Amount(invoice.Value)
 	amtMSat := lnwire.NewMSatFromSatoshis(amt)
 
@@ -3059,6 +3065,7 @@ func marshalDbEdge(edgeInfo *channeldb.ChannelEdgeInfo,
 			MinHtlc:          int64(c1.MinHTLC),
 			FeeBaseMsat:      int64(c1.FeeBaseMSat),
 			FeeRateMilliMsat: int64(c1.FeeProportionalMillionths),
+			Disabled:         c1.Flags&lnwire.ChanUpdateDisabled != 0,
 		}
 	}
 
@@ -3068,6 +3075,7 @@ func marshalDbEdge(edgeInfo *channeldb.ChannelEdgeInfo,
 			MinHtlc:          int64(c2.MinHTLC),
 			FeeBaseMsat:      int64(c2.FeeBaseMSat),
 			FeeRateMilliMsat: int64(c2.FeeProportionalMillionths),
+			Disabled:         c2.Flags&lnwire.ChanUpdateDisabled != 0,
 		}
 	}
 
@@ -3535,6 +3543,7 @@ func marshallTopologyChange(topChange *routing.TopologyChange) *lnrpc.GraphTopol
 				MinHtlc:          int64(channelUpdate.MinHTLC),
 				FeeBaseMsat:      int64(channelUpdate.BaseFee),
 				FeeRateMilliMsat: int64(channelUpdate.FeeRate),
+				Disabled:         channelUpdate.Disabled,
 			},
 			AdvertisingNode: encodeKey(channelUpdate.AdvertisingNode),
 			ConnectingNode:  encodeKey(channelUpdate.ConnectingNode),
