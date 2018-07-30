@@ -77,7 +77,7 @@
   revision = "761fd5fbb34e4c2c138c280395b65b48e4ff5a53"
 
 [[projects]]
-  digest = "1:416060ec2d91a73830352d0162f565b1468924353ef3590b12caf4ea60d55735"
+  digest = "1:f64910578ed062771ef6af87647050460ac27664da166a4787c0e6a53d417383"
   name = "github.com/btcsuite/btcd"
   packages = [
     "addrmgr",
@@ -95,7 +95,7 @@
     "wire",
   ]
   pruneopts = "UT"
-  revision = "86fed781132ac890ee03e906e4ecd5d6fa180c64"
+  revision = "bc3861a5a2779773d7d19408a7e2bed0f5feab2c"
 
 [[projects]]
   digest = "1:30d4a548e09bca4a0c77317c58e7407e2a65c15325e944f9c08a7b7992f8a59e"
@@ -105,7 +105,7 @@
   revision = "84c8d2346e9fc8c7b947e243b9c24e6df9fd206a"
 
 [[projects]]
-  digest = "1:68dc07b92ba15632155057de558701982bd58ebabfced81bdb5faeb781e5117d"
+  digest = "1:44296034d8b60d73d921e62a8d68e3bfefae618e8a70d94cfda7d649e6e931b9"
   name = "github.com/btcsuite/btcutil"
   packages = [
     ".",
@@ -117,10 +117,10 @@
     "txsort",
   ]
   pruneopts = "UT"
-  revision = "d4cc87b860166d00d6b5b9e0d3b3d71d6088d4d4"
+  revision = "ab6388e0c60ae4834a1f57511e20c17b5f78be4b"
 
 [[projects]]
-  digest = "1:3b3dc91e0970e6e2eb0a2e154068315631049c50636a92589df8b3d710f01b32"
+  digest = "1:c02a498b4ad9805aea750f178299907663394edb6a691a2ed7be0832778770d0"
   name = "github.com/btcsuite/btcwallet"
   packages = [
     "chain",
@@ -140,7 +140,7 @@
     "wtxmgr",
   ]
   pruneopts = "UT"
-  revision = "64b5b448f5e6853a2d870f388504a7807bc951f1"
+  revision = "5b3d124de2557fe1fb5c510ac87d356b7ab85fde"
 
 [[projects]]
   branch = "master"
@@ -279,7 +279,7 @@
   revision = "462a8a75388506b68f76661af8d649f0b88e5301"
 
 [[projects]]
-  digest = "1:999660fb729590148e6dfecc3d43bb98f38e288b024812c4c9ab3ab224783c7d"
+  digest = "1:0a15a3c866daebde09cbb3c51dbd9f2d0bd13eb0e9df0135b6f38ac3609387ec"
   name = "github.com/lightninglabs/neutrino"
   packages = [
     ".",
@@ -287,7 +287,7 @@
     "headerfs",
   ]
   pruneopts = "UT"
-  revision = "03f4c660ea0d1586331f32561185d45eab1ba4c9"
+  revision = "6a4aba4c8fb6d3ee148d3f152ed916ca636101be"
 
 [[projects]]
   digest = "1:58ab6d6525898cbeb86dc29a68f8e9bfe95254b9032134eb9458779574872260"
@@ -439,7 +439,7 @@
   revision = "df60624c1e9b9d2973e889c7a1cff73155da81c4"
 
 [[projects]]
-  digest = "1:cb717d3e69eab97d1807c7ab99e0aa1a673ee979a0080cbe8ea7509dac395d51"
+  digest = "1:135a4f69dc0b606b1ff951f51816bd99aff183a230efa589a70145c1dd86f7b1"
   name = "google.golang.org/grpc"
   packages = [
     ".",
@@ -456,6 +456,7 @@
     "stats",
     "status",
     "tap",
+    "test/bufconn",
     "transport",
   ]
   pruneopts = "UT"
@@ -555,6 +556,7 @@
     "google.golang.org/grpc/metadata",
     "google.golang.org/grpc/peer",
     "google.golang.org/grpc/status",
+    "google.golang.org/grpc/test/bufconn",
     "gopkg.in/macaroon-bakery.v2/bakery",
     "gopkg.in/macaroon-bakery.v2/bakery/checkers",
     "gopkg.in/macaroon.v2",

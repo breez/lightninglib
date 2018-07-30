@@ -970,8 +970,18 @@ func (l *LightningWallet) handleFundingCounterPartySigs(msg *addCounterPartySigs
 
 			// Fetch the alleged previous output along with the
 			// pkscript referenced by this input.
-			// TODO(roasbeef): when dual funder pass actual height-hint
-			output, err := l.Cfg.ChainIO.GetUtxo(&txin.PreviousOutPoint, 0)
+			//
+			// TODO(roasbeef): when dual funder pass actual
+			// height-hint
+			pkScript, err := WitnessScriptHash(
+				txin.Witness[len(txin.Witness)-1],
+			)
+			if err != nil {
+			}
+			output, err := l.Cfg.ChainIO.GetUtxo(
+				&txin.PreviousOutPoint,
+				pkScript, 0,
+			)
 			if output == nil {
 				msg.err <- fmt.Errorf("input to funding tx "+
 					"does not exist: %v", err)

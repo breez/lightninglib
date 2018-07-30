@@ -745,8 +745,24 @@ func (b *BtcWallet) IsSynced() (bool, int64, error) {
 		return false, 0, err
 	}
 
-	// If the timestamp no the best header is more than 2 hours in the
+	// If the timestamp on the best header is more than 2 hours in the
 	// past, then we're not yet synced.
 	minus24Hours := time.Now().Add(-2 * time.Hour)
-	return !blockHeader.Timestamp.Before(minus24Hours), bestTimestamp, nil
+	if blockHeader.Timestamp.Before(minus24Hours) {
+		return false, bestTimestamp, nil
+	}
+
+	// If this is neutrino, then we'll also want to wait until the set of
+	// filter headers also match
+	if neutrinoNode, ok := b.chain.(*chain.NeutrinoClient); ok {
+		filterDB := neutrinoNode.CS.RegFilterHeaders
+		_, filterHeaderTip, err := filterDB.ChainTip()
+		if err != nil {
+			return false, 0, err
+		}
+
+		return filterHeaderTip == uint32(bestHeight), bestTimestamp, nil
+	}
+
+	return true, bestTimestamp, nil
 }

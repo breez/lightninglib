@@ -44,7 +44,7 @@
 
 [[constraint]]
   name = "github.com/lightninglabs/neutrino"
-  revision = "03f4c660ea0d1586331f32561185d45eab1ba4c9"
+  revision = "6a4aba4c8fb6d3ee148d3f152ed916ca636101be"
 
 [[constraint]]
   name = "github.com/lightningnetwork/lightning-onion"
@@ -64,15 +64,15 @@
 
 [[constraint]]
   name = "github.com/btcsuite/btcutil"
-  revision = "d4cc87b860166d00d6b5b9e0d3b3d71d6088d4d4"
+  revision = "ab6388e0c60ae4834a1f57511e20c17b5f78be4b"
 
 [[constraint]]
   name = "github.com/btcsuite/btcd"
-  revision = "86fed781132ac890ee03e906e4ecd5d6fa180c64"
+  revision = "bc3861a5a2779773d7d19408a7e2bed0f5feab2c"
 
 [[constraint]]
   name = "github.com/btcsuite/btcwallet"
-  revision = "64b5b448f5e6853a2d870f388504a7807bc951f1"
+  revision = "5b3d124de2557fe1fb5c510ac87d356b7ab85fde"
 
 [[constraint]]
   name = "github.com/tv42/zbase32"

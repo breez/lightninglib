@@ -258,13 +258,18 @@ func newMockNotifier() *mockNotifier {
 }
 
 func (m *mockNotifier) RegisterConfirmationsNtfn(txid *chainhash.Hash,
-	numConfs, _ uint32) (*chainntnfs.ConfirmationEvent, error) {
+	_ []byte, numConfs, _ uint32) (*chainntnfs.ConfirmationEvent, error) {
 
 	return nil, nil
 }
 
+<<<<<<< HEAD
 func (m *mockNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 	_ uint32) (*chainntnfs.SpendEvent, error) {
+=======
+func (m *mockNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint, _ []byte,
+	_ uint32, _ bool) (*chainntnfs.SpendEvent, error) {
+>>>>>>> fefde08f... discovery: update unit tests to account for new ChainNotifier API
 	return nil, nil
 }
 

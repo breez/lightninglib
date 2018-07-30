@@ -1,47 +1,61 @@
 module github.com/breez/lightninglib
 
 require (
-	git.schwanenlied.me/yawning/bsaes.git v0.0.0-20170730032402-e06297f34865
-	github.com/NebulousLabs/fastrand v0.0.0-20180208210444-3cf7173006a0
+	git.schwanenlied.me/yawning/bsaes.git v0.0.0-20170730032402-e06297f34865 // indirect
+	github.com/NebulousLabs/fastrand v0.0.0-20180208210444-3cf7173006a0 // indirect
 	github.com/NebulousLabs/go-upnp v0.0.0-20180202185039-29b680b06c82
 	github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2
-	github.com/aead/chacha20 v0.0.0-20180503225822-e2538746bfea
-	github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885
+	github.com/aead/chacha20 v0.0.0-20180503225822-e2538746bfea // indirect
+	github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885 // indirect
 	github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e
-	github.com/btcsuite/btcd v0.0.0-20180531025944-86fed781132a
+	github.com/btcsuite/btcd v0.0.0-20180717031623-bc3861a5a277
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
-	github.com/btcsuite/btcutil v0.0.0-20180524032703-d4cc87b86016
-	github.com/btcsuite/btcwallet v0.0.0-20180713235317-64b5b448f5e6
+	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
+	github.com/btcsuite/btcwallet v0.0.0-20180718020517-5b3d124de255
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
-	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd
-	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8
-	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792
+	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
+	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8 // indirect
+	github.com/btcsuite/goleveldb v1.0.0 // indirect
+	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
 	github.com/coreos/bbolt v0.0.0-20180223184059-4f5275f4ebbf
 	github.com/davecgh/go-spew v0.0.0-20180221232628-8991bc29aa16
+	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/go-errors/errors v1.0.1
 	github.com/golang/protobuf v0.0.0-20180202184318-bbd03ef6da3a
 	github.com/grpc-ecosystem/grpc-gateway v0.0.0-20170724004829-f2862b476edc
+	github.com/hpcloud/tail v1.0.0 // indirect
 	github.com/jackpal/gateway v1.0.4
 	github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad
 	github.com/jessevdk/go-flags v0.0.0-20170926144705-f88afde2fa19
 	github.com/jrick/logrotate v1.0.0
-	github.com/juju/loggo v0.0.0-20180524022052-584905176618
+	github.com/juju/errors v0.0.0-20180726005433-812b06ada177 // indirect
+	github.com/juju/loggo v0.0.0-20180524022052-584905176618 // indirect
+	github.com/juju/retry v0.0.0-20160928201858-1998d01ba1c3 // indirect
+	github.com/juju/testing v0.0.0-20180517134105-72703b1e95eb // indirect
+	github.com/juju/utils v0.0.0-20180619112806-c746c6e86f4f // indirect
+	github.com/juju/version v0.0.0-20180108022336-b64dbd566305 // indirect
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23
-	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885
-	github.com/lightninglabs/neutrino v0.0.0-20180713201822-03f4c660ea0d
+	github.com/kr/pretty v0.1.0 // indirect
+	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 // indirect
+	github.com/lightninglabs/neutrino v0.0.0-20180726020449-6a4aba4c8fb6
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
 	github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
-	github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af
+	github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af // indirect
 	github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02
 	github.com/urfave/cli v1.18.0
 	golang.org/x/crypto v0.0.0-20180222182404-49796115aa4b
-	golang.org/x/net v0.0.0-20180311174755-ae89d30ce0c6
-	golang.org/x/sys v0.0.0-20180613171135-56ede360ec1c
-	golang.org/x/text v0.3.0
+	golang.org/x/net v0.0.0-20180719180050-a680a1efc54d
+	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
+	golang.org/x/sys v0.0.0-20180613171135-56ede360ec1c // indirect
 	google.golang.org/genproto v0.0.0-20180306020942-df60624c1e9b
 	google.golang.org/grpc v1.5.2
-	gopkg.in/errgo.v1 v1.0.0-20180502123906-c17903c6b19d
+	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
+	gopkg.in/errgo.v1 v1.0.0-20180502123906-c17903c6b19d // indirect
+	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/macaroon-bakery.v2 v2.0.1
 	gopkg.in/macaroon.v2 v2.0.0
+	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce // indirect
+	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
+	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )

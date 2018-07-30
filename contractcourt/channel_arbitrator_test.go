@@ -18,7 +18,7 @@ func (*mockChainIO) GetBestBlock() (*chainhash.Hash, int32, error) {
 	return nil, 0, nil
 }
 
-func (*mockChainIO) GetUtxo(op *wire.OutPoint,
+func (*mockChainIO) GetUtxo(op *wire.OutPoint, _ []byte,
 	heightHint uint32) (*wire.TxOut, error) {
 	return nil, nil
 }
