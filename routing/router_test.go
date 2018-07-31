@@ -1941,3 +1941,16 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 		t.Fatalf("router failed to detect fresh edge policy")
 	}
 }
+
+// TestEmptyRoutesGenerateSphinxPacket tests that the generateSphinxPacket
+// function is able to gracefully handle being passed a nil set of hops for the
+// route by the caller.
+func TestEmptyRoutesGenerateSphinxPacket(t *testing.T) {
+	t.Parallel()
+
+	emptyRoute := &Route{}
+	_, _, err := generateSphinxPacket(emptyRoute, testHash[:])
+	if err != ErrNoRouteHopsProvided {
+		t.Fatalf("expected empty hops error: instead got: %v", err)
+	}
+}
