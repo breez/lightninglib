@@ -1489,7 +1489,8 @@ func newSingleLinkTestHarness(chanAmt, chanReserve btcutil.Amount) (
 		},
 		FetchLastChannelUpdate: mockGetChanUpdateMessage,
 		PreimageCache:          pCache,
-		OnChannelFailure: func(lnwire.ChannelID, lnwire.ShortChannelID, LinkFailureError) {
+		OnChannelFailure: func(lnwire.ChannelID,
+			lnwire.ShortChannelID, LinkFailureError) {
 		},
 		UpdateContractSignals: func(*contractcourt.ContractSignals) error {
 			return nil
@@ -1497,7 +1498,7 @@ func newSingleLinkTestHarness(chanAmt, chanReserve btcutil.Amount) (
 		Registry:       invoiceRegistry,
 		ChainEvents:    &contractcourt.ChainEventSubscription{},
 		BatchTicker:    ticker,
-		FwdPkgGCTicker: NewBatchTicker(time.NewTicker(5 * time.Second)),
+		FwdPkgGCTicker: NewBatchTicker(5 * time.Second),
 		// Make the BatchSize and Min/MaxFeeUpdateTimeout large enough
 		// to not trigger commit updates automatically during tests.
 		BatchSize:           10000,
@@ -3879,13 +3880,16 @@ func restartLink(aliceChannel *lnwallet.LightningChannel, aliceSwitch *Switch,
 		},
 		FetchLastChannelUpdate: mockGetChanUpdateMessage,
 		PreimageCache:          pCache,
+		OnChannelFailure: func(lnwire.ChannelID,
+			lnwire.ShortChannelID, LinkFailureError) {
+		},
 		UpdateContractSignals: func(*contractcourt.ContractSignals) error {
 			return nil
 		},
 		Registry:       invoiceRegistry,
 		ChainEvents:    &contractcourt.ChainEventSubscription{},
 		BatchTicker:    ticker,
-		FwdPkgGCTicker: NewBatchTicker(time.NewTicker(5 * time.Second)),
+		FwdPkgGCTicker: NewBatchTicker(5 * time.Second),
 		// Make the BatchSize and Min/MaxFeeUpdateTimeout large enough
 		// to not trigger commit updates automatically during tests.
 		BatchSize:           10000,

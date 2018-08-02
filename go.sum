@@ -14,12 +14,18 @@ github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e h1:24jix
 github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e/go.mod h1:GEV5wmg4YquNw7v1kkyoX9etIk8yVmXj+AkDHuuETHs=
 github.com/btcsuite/btcd v0.0.0-20180531025944-86fed781132a h1:fuEu3WaOzatbWFGlCa2e/TL/GR397Da8QSKNKrDRa3s=
 github.com/btcsuite/btcd v0.0.0-20180531025944-86fed781132a/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
+github.com/btcsuite/btcd v0.0.0-20180722020238-9a2f95240248 h1:Sx7MsKAQPkGIpoatgXK63/aDiluok4ts+lrYWdE07bs=
+github.com/btcsuite/btcd v0.0.0-20180722020238-9a2f95240248/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f h1:bAs4lUbRJpnnkd9VhRV3jjAVU7DJVjMaK+IsvSeZvFo=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=
 github.com/btcsuite/btcutil v0.0.0-20180524032703-d4cc87b86016 h1:BsZAJgCuMsoFZMZNyj7Lyt6sS8anDhedVrAMCOyPMIo=
 github.com/btcsuite/btcutil v0.0.0-20180524032703-d4cc87b86016/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
+github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a h1:RQMUrEILyYJEoAT34XS/kLu40vC0+po/UfxrBBA4qZE=
+github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
 github.com/btcsuite/btcwallet v0.0.0-20180713235317-64b5b448f5e6 h1:GEfvpojCtruISWrR9hY93t4AfCBRoA835yoJI3NQDc8=
 github.com/btcsuite/btcwallet v0.0.0-20180713235317-64b5b448f5e6/go.mod h1:+q7/nPeXqu8jJ0ah0fcMOlWGZ2GeL2QoL6c7nCFUEVA=
+github.com/btcsuite/btcwallet v0.0.0-20180724032834-a4d9da433fcf h1:xuhcVOvXf2ZR7RXebaeHoOSkXyX0IXoVW4n6AhZKJjo=
+github.com/btcsuite/btcwallet v0.0.0-20180724032834-a4d9da433fcf/go.mod h1:+q7/nPeXqu8jJ0ah0fcMOlWGZ2GeL2QoL6c7nCFUEVA=
 github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941 h1:kij1x2aL7VE6gtx8KMIt8PGPgI5GV9LgtHFG5KaEMPY=
 github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941/go.mod h1:QcFA8DZHtuIAdYKCq/BzELOaznRsCvwf4zTPmaYwaig=
 github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd h1:R/opQEbFEy9JGkIguV40SvRY1uliPX8ifOvi6ICsFCw=
@@ -54,6 +60,8 @@ github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 h1:fTLuPUkaKII
 github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885/go.mod h1:KUh15naRlx/TmUMFS/p4JJrCrE6F7RGF7rsnvuu45E4=
 github.com/lightninglabs/neutrino v0.0.0-20180713201822-03f4c660ea0d h1:rVOJt6Wt3pYQ5LUrhpUPmYW39m5jAeOZzG31dMexcyU=
 github.com/lightninglabs/neutrino v0.0.0-20180713201822-03f4c660ea0d/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
+github.com/lightninglabs/neutrino v0.0.0-20180731190350-d5054cea8fe4 h1:9AtCPb2Ar2EAAUzNOr0oPeVUNg8Z/GWp/Gl9ci8MFn4=
+github.com/lightninglabs/neutrino v0.0.0-20180731190350-d5054cea8fe4/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6 h1:ONLGrYJVQdbtP6CE/ff1KNWZtygRGEh12RzonTiCzPs=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6/go.mod h1:8EgEt4a/NUOVQd+3kk6n9aZCJ1Ssj96Pb6lCrci+6oc=
 github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9 h1:aLgtHOvaE6DjIKS5IpQU6ZLjdcQzjxHTMPOpq4pAY+M=

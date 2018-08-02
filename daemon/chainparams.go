@@ -2,12 +2,12 @@ package daemon
 
 import (
 	"github.com/breez/lightninglib/keychain"
-	litecoinCfg "github.com/ltcsuite/ltcd/chaincfg"
-	litecoinWire "github.com/ltcsuite/ltcd/wire"
 	"github.com/btcsuite/btcd/chaincfg"
 	bitcoinCfg "github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bitcoinWire "github.com/btcsuite/btcd/wire"
+	litecoinCfg "github.com/ltcsuite/ltcd/chaincfg"
+	litecoinWire "github.com/ltcsuite/ltcd/wire"
 )
 
 // activeNetParams is a pointer to the parameters specific to the currently
