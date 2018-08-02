@@ -1,3 +1,5 @@
+9fans.net/go v0.0.0-20180727211846-5d4fa602e1e8 h1:I5as7fR6RT+wVrs+vOeEtOHJ4z2vnUnIR+cqvAiQ80s=
+9fans.net/go v0.0.0-20180727211846-5d4fa602e1e8/go.mod h1:diCsxrliIURU9xsYtjCp5AbpQKqdhKmf0ujWDUSkfoY=
 git.schwanenlied.me/yawning/bsaes.git v0.0.0-20170730032402-e06297f34865 h1:klrEuB96cVuhSrRreiKgfrIy2P87cPhHNE/S7APK28g=
 git.schwanenlied.me/yawning/bsaes.git v0.0.0-20170730032402-e06297f34865/go.mod h1:BWqTsj8PgcPriQJGl7el20J/7TuT1d/hSyFDXMEpoEo=
 github.com/NebulousLabs/fastrand v0.0.0-20180208210444-3cf7173006a0 h1:g/ETZwHx5wN2fqKWS3gCUrEU7dLko+DvVs3hakQCfyE=
@@ -6,6 +8,8 @@ github.com/NebulousLabs/go-upnp v0.0.0-20180202185039-29b680b06c82 h1:MG93+PZYs9
 github.com/NebulousLabs/go-upnp v0.0.0-20180202185039-29b680b06c82/go.mod h1:GbuBk21JqF+driLX3XtJYNZjGa45YDoa9IqCTzNSfEc=
 github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2 h1:2be4ykKKov3M1yISM2E8gnGXZ/N2SsPawfnGiXxaYEU=
 github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2/go.mod h1:9pIqrY6SXNL8vjRQE5Hd/OL5GyK/9MrGUWs87z/eFfk=
+github.com/acroca/go-symbols v0.0.0-20180523203557-953befd75e22 h1:Lfw7U4QD/rq1M7QEOcj5uttr9pybuV6YS6w6OeCN3yc=
+github.com/acroca/go-symbols v0.0.0-20180523203557-953befd75e22/go.mod h1:RKAIDWtcELAw6/wjNJGWRYZ7QEinSWoJeJ2H5cfK6AM=
 github.com/aead/chacha20 v0.0.0-20180503225822-e2538746bfea h1:4TWhIyhkCidam3XlmAPM3XPPK3q8NM+kd0bomC9Yg+8=
 github.com/aead/chacha20 v0.0.0-20180503225822-e2538746bfea/go.mod h1:eHEWzANqSiWQsof+nXEI9bUVUyV6F53Fp89EuCh2EAA=
 github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885 h1:bBmEG9/q1xH07CqeeFw1ejup6Kw+/88WhhLHqIJ0ngQ=
@@ -38,6 +42,12 @@ github.com/coreos/bbolt v0.0.0-20180223184059-4f5275f4ebbf h1:tJpA9/rXV/dIbGH2eW
 github.com/coreos/bbolt v0.0.0-20180223184059-4f5275f4ebbf/go.mod h1:iRUV2dpdMOn7Bo10OQBFzIJO9kkE559Wcmn+qkEiiKk=
 github.com/davecgh/go-spew v0.0.0-20180221232628-8991bc29aa16 h1:HqkufMBR7waVfFFRABWqHa1WgTvjtVDJTLJe3CR576A=
 github.com/davecgh/go-spew v0.0.0-20180221232628-8991bc29aa16/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/fatih/camelcase v0.0.0-20171027104257-44e46d280b43 h1:3RIS+pIRWsJm1s9tnI/t5LXJcfPFtlkE6kj2uC+aBtk=
+github.com/fatih/camelcase v0.0.0-20171027104257-44e46d280b43/go.mod h1:yN2Sb0lFhZJUdVvtELVWefmrXpuZESvPmqwoZc+/fpc=
+github.com/fatih/gomodifytags v0.0.0-20180122092213-db1e1dec6c55 h1:z/jXhv2d8arDvEBdvLaCFFNYQ5XPSZuqTOpCjhT0Srg=
+github.com/fatih/gomodifytags v0.0.0-20180122092213-db1e1dec6c55/go.mod h1:0v00WCSoB6NOvydakcJfKt9Q8Y9DYQ0tORi3oMWysPQ=
+github.com/fatih/structtag v0.1.0 h1:l4PD+O/sJ5iSvou7UoLjxhNgpb23b+cq2mBYhrQ2hP0=
+github.com/fatih/structtag v0.1.0/go.mod h1:IKitwq45uXL/yqi5mYghiD3w9H6eTOvI9vnk8tXMphA=
 github.com/go-errors/errors v1.0.1 h1:LUHzmkK3GUKUrL/1gfBUxAHzcev3apQlezX/+O7ma6w=
 github.com/go-errors/errors v1.0.1/go.mod h1:f4zRHt4oKfwPJE5k8C9vpYG+aDHdBFUsgrm6/TyX73Q=
 github.com/golang/protobuf v0.0.0-20180202184318-bbd03ef6da3a h1:9xtEQaWwpPa1IeJROAONpl9Q0rXujyf4RISq8tRGQFo=
@@ -50,6 +60,8 @@ github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad h1:heFfj7z0pGsN
 github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad/go.mod h1:QPH045xvCAeXUZOxsnwmrtiCoxIr9eob+4orBN1SBKc=
 github.com/jessevdk/go-flags v0.0.0-20170926144705-f88afde2fa19 h1:k9/LaykApavRKKlaWkunBd48Um+vMxnUNNsIjS7OJn8=
 github.com/jessevdk/go-flags v0.0.0-20170926144705-f88afde2fa19/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
+github.com/josharian/impl v0.0.0-20180228163738-3d0f908298c4 h1:gmIVMdGlVf5e6Yo6+ZklxdOrvtOvyrAjJyXAbmOznyo=
+github.com/josharian/impl v0.0.0-20180228163738-3d0f908298c4/go.mod h1:t4Tr0tn92eq5ISef4cS5plFAMYAqZlAXtgUcKE6y8nw=
 github.com/jrick/logrotate v1.0.0 h1:lQ1bL/n9mBNeIXoTUoYRlK4dHuNJVofX9oWqBtPnSzI=
 github.com/jrick/logrotate v1.0.0/go.mod h1:LNinyqDIJnpAur+b8yyulnQw/wDuN1+BYKlTRt3OuAQ=
 github.com/juju/loggo v0.0.0-20180524022052-584905176618 h1:MK144iBQF9hTSwBW/9eJm034bVoG30IshVm688T2hi8=
@@ -66,10 +78,18 @@ github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6 h
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6/go.mod h1:8EgEt4a/NUOVQd+3kk6n9aZCJ1Ssj96Pb6lCrci+6oc=
 github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9 h1:aLgtHOvaE6DjIKS5IpQU6ZLjdcQzjxHTMPOpq4pAY+M=
 github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9/go.mod h1:EHxR9R4IfKfcjAQ/nQiimQSLaRxdyNz926as4KTtNTg=
+github.com/mdempsky/gocode v0.0.0-20180727200127-00e7f5ac290a h1:ecO2aKe95WVgaFwU2NH0OefPUnwrGcsC4+hfokbKESM=
+github.com/mdempsky/gocode v0.0.0-20180727200127-00e7f5ac290a/go.mod h1:hltEC42XzfMNgg0S1v6JTywwra2Mu6F6cLR03debVQ8=
 github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8 h1:PRMAcldsl4mXKJeRNB/KVNz6TlbS6hk2Rs42PqgU3Ws=
 github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
+github.com/ramya-rao-a/go-outline v0.0.0-20170803230019-9e9d089bb61a h1:B4BHwip49jjfBeBBIh2WrAuvgGNHQgpxMg7V2Dv7BsE=
+github.com/ramya-rao-a/go-outline v0.0.0-20170803230019-9e9d089bb61a/go.mod h1:1WL5IqM+CnRCAbXetRnL1YVoS9KtU2zMhOi/5oAVPo4=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af h1:gu+uRPtBe88sKxUCEXRoeCvVG90TJmwhiqRpvdhQFng=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
+github.com/rogpeppe/godef v0.0.0-20170920080713-b692db1de522 h1:MzB6wOOru/yUkJs6iTkTa0UuKZlc2WAo/jr1TnBH+Sw=
+github.com/rogpeppe/godef v0.0.0-20170920080713-b692db1de522/go.mod h1:ZBiG/aArN4rqpDocvOY8PVZIVqBTm7A2uOasqHjXt9Y=
+github.com/sqs/goreturns v0.0.0-20180302073349-83e02874ec12 h1:/iJCbsc+t41LGK/YJblzm1o3HwM162j66hkq2L57nis=
+github.com/sqs/goreturns v0.0.0-20180302073349-83e02874ec12/go.mod h1:CKI4AZ4XmGV240rTHfO0hfE83S6/a3/Q1siZJ/vXf7A=
 github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02 h1:tcJ6OjwOMvExLlzrAVZute09ocAGa7KqOON60++Gz4E=
 github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02/go.mod h1:tHlrkM198S068ZqfrO6S8HsoJq2bF3ETfTL+kt4tInY=
 github.com/urfave/cli v1.18.0 h1:m9MfmZWX7bwr9kUcs/Asr95j0IVXzGNNc+/5ku2m26Q=
@@ -82,6 +102,8 @@ golang.org/x/sys v0.0.0-20180613171135-56ede360ec1c h1:MXZD94RFXTTtcEuUwFza91dzA
 golang.org/x/sys v0.0.0-20180613171135-56ede360ec1c/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/text v0.3.0 h1:g61tztE5qeGQ89tm6NTjjM9VPIm088od1l6aSorWRWg=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+golang.org/x/tools v0.0.0-20180801205936-1801cb7c1535 h1:08FO10sorVC11FZGbyDxtKbuXHaXNHMPXdJ5vXssOK0=
+golang.org/x/tools v0.0.0-20180801205936-1801cb7c1535/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 google.golang.org/genproto v0.0.0-20180306020942-df60624c1e9b h1:XeiFoG4FHSBJUL3qKCkMrkwBFRXB+hyQiTPg82JUssI=
 google.golang.org/genproto v0.0.0-20180306020942-df60624c1e9b/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
 google.golang.org/grpc v1.5.2 h1:b6oAqMSH36Omv3KU5KuN6qB2jaJClahvIWSmfQtfyFw=
