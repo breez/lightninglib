@@ -45,7 +45,7 @@ require (
 	github.com/sqs/goreturns v0.0.0-20180302073349-83e02874ec12 // indirect
 	github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02
 	github.com/urfave/cli v1.18.0
-	golang.org/x/crypto v0.0.0-20180222182404-49796115aa4b
+	golang.org/x/crypto v0.0.0-20180802221240-56440b844dfe
 	golang.org/x/net v0.0.0-20180311174755-ae89d30ce0c6
 	golang.org/x/sys v0.0.0-20180613171135-56ede360ec1c // indirect
 	golang.org/x/text v0.3.0 // indirect

@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcutil/bech32"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/autopilot"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/tor"
 	"github.com/miekg/dns"
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/btcsuite/btcutil/bech32"
 )
 
 func init() {
