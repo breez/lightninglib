@@ -34,7 +34,7 @@ require (
 	github.com/juju/loggo v0.0.0-20180524022052-584905176618 // indirect
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23
 	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 // indirect
-	github.com/lightninglabs/neutrino v0.0.0-20180731190350-d5054cea8fe4
+	github.com/lightninglabs/neutrino v0.0.0-20180809021943-b451667d6991
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
 	github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9
 	github.com/mdempsky/gocode v0.0.0-20180727200127-00e7f5ac290a // indirect
