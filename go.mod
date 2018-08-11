@@ -8,23 +8,19 @@ require (
 	github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2
 	github.com/acroca/go-symbols v0.0.0-20180523203557-953befd75e22 // indirect
 	github.com/aead/chacha20 v0.0.0-20180503225822-e2538746bfea // indirect
-	github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885 // indirect
 	github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e
 	github.com/btcsuite/btcd v0.0.0-20180722020238-9a2f95240248
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
 	github.com/btcsuite/btcwallet v0.0.0-20180724032834-a4d9da433fcf
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
-	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
-	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8 // indirect
-	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
 	github.com/coreos/bbolt v0.0.0-20180223184059-4f5275f4ebbf
 	github.com/davecgh/go-spew v0.0.0-20180221232628-8991bc29aa16
 	github.com/fatih/camelcase v0.0.0-20171027104257-44e46d280b43 // indirect
 	github.com/fatih/gomodifytags v0.0.0-20180122092213-db1e1dec6c55 // indirect
 	github.com/fatih/structtag v0.1.0 // indirect
 	github.com/go-errors/errors v1.0.1
-	github.com/golang/protobuf v0.0.0-20180202184318-bbd03ef6da3a
+	github.com/golang/protobuf v0.0.0-20180712042225-70b3af33377e
 	github.com/grpc-ecosystem/grpc-gateway v0.0.0-20170724004829-f2862b476edc
 	github.com/jackpal/gateway v1.0.4
 	github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad
@@ -46,8 +42,7 @@ require (
 	github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02
 	github.com/urfave/cli v1.18.0
 	golang.org/x/crypto v0.0.0-20180802221240-56440b844dfe
-	golang.org/x/net v0.0.0-20180311174755-ae89d30ce0c6
-	golang.org/x/sys v0.0.0-20180613171135-56ede360ec1c // indirect
+	golang.org/x/net v0.0.0-20180712202826-d0887baf81f4
 	golang.org/x/text v0.3.0 // indirect
 	golang.org/x/tools v0.0.0-20180801205936-1801cb7c1535 // indirect
 	google.golang.org/genproto v0.0.0-20180306020942-df60624c1e9b
