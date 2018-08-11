@@ -21,6 +21,7 @@ import (
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -1474,8 +1475,9 @@ func newSingleLinkTestHarness(chanAmt, chanReserve btcutil.Amount) (
 		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	t := make(chan time.Time)
-	ticker := &mockTicker{t}
+	// Instantiate with a long interval, so that we can precisely control
+	// the firing via force feeding.
+	bticker := ticker.MockNew(time.Hour)
 	aliceCfg := ChannelLinkConfig{
 		FwrdingPolicy:      globalPolicy,
 		Peer:               alicePeer,
@@ -1497,8 +1499,8 @@ func newSingleLinkTestHarness(chanAmt, chanReserve btcutil.Amount) (
 		},
 		Registry:       invoiceRegistry,
 		ChainEvents:    &contractcourt.ChainEventSubscription{},
-		BatchTicker:    ticker,
-		FwdPkgGCTicker: NewBatchTicker(5 * time.Second),
+		BatchTicker:    bticker,
+		FwdPkgGCTicker: ticker.MockNew(5 * time.Second),
 		// Make the BatchSize and Min/MaxFeeUpdateTimeout large enough
 		// to not trigger commit updates automatically during tests.
 		BatchSize:           10000,
@@ -1528,7 +1530,7 @@ func newSingleLinkTestHarness(chanAmt, chanReserve btcutil.Amount) (
 		defer bobChannel.Stop()
 	}
 
-	return aliceLink, bobChannel, t, start, cleanUp, restore, nil
+	return aliceLink, bobChannel, bticker.Force, start, cleanUp, restore, nil
 }
 
 func assertLinkBandwidth(t *testing.T, link ChannelLink,
@@ -1726,14 +1728,11 @@ func TestChannelLinkBandwidthConsistency(t *testing.T) {
 	coreLink.cfg.HodlMask = hodl.MaskFromFlags(hodl.ExitSettle)
 	coreLink.cfg.DebugHTLC = true
 
-	estimator := &lnwallet.StaticFeeEstimator{
-		FeeRate: 24,
-	}
-	feeRate, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 6000}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)
 	}
-	feePerKw := feeRate.FeePerKWeight()
 	htlcFee := lnwire.NewMSatFromSatoshis(
 		feePerKw.FeeForWeight(lnwallet.HtlcWeight),
 	)
@@ -2140,14 +2139,11 @@ func TestChannelLinkBandwidthConsistencyOverflow(t *testing.T) {
 		aliceMsgs              = coreLink.cfg.Peer.(*mockPeer).sentMsgs
 	)
 
-	estimator := &lnwallet.StaticFeeEstimator{
-		FeeRate: 24,
-	}
-	feeRate, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 6000}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)
 	}
-	feePerKw := feeRate.FeePerKWeight()
 
 	var htlcID uint64
 	addLinkHTLC := func(id uint64, amt lnwire.MilliSatoshi) [32]byte {
@@ -2390,17 +2386,15 @@ func TestChannelLinkTrimCircuitsPending(t *testing.T) {
 
 	// Compute the static fees that will be used to determine the
 	// correctness of Alice's bandwidth when forwarding HTLCs.
-	estimator := &lnwallet.StaticFeeEstimator{
-		FeeRate: 24,
-	}
-	feeRate, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 6000}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)
 	}
 
 	defaultCommitFee := alice.channel.StateSnapshot().CommitFee
 	htlcFee := lnwire.NewMSatFromSatoshis(
-		feeRate.FeePerKWeight().FeeForWeight(lnwallet.HtlcWeight),
+		feePerKw.FeeForWeight(lnwallet.HtlcWeight),
 	)
 
 	// The starting bandwidth of the channel should be exactly the amount
@@ -2666,17 +2660,15 @@ func TestChannelLinkTrimCircuitsNoCommit(t *testing.T) {
 
 	// Compute the static fees that will be used to determine the
 	// correctness of Alice's bandwidth when forwarding HTLCs.
-	estimator := &lnwallet.StaticFeeEstimator{
-		FeeRate: 24,
-	}
-	feeRate, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 6000}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)
 	}
 
 	defaultCommitFee := alice.channel.StateSnapshot().CommitFee
 	htlcFee := lnwire.NewMSatFromSatoshis(
-		feeRate.FeePerKWeight().FeeForWeight(lnwallet.HtlcWeight),
+		feePerKw.FeeForWeight(lnwallet.HtlcWeight),
 	)
 
 	// The starting bandwidth of the channel should be exactly the amount
@@ -2926,14 +2918,11 @@ func TestChannelLinkBandwidthChanReserve(t *testing.T) {
 		aliceMsgs              = coreLink.cfg.Peer.(*mockPeer).sentMsgs
 	)
 
-	estimator := &lnwallet.StaticFeeEstimator{
-		FeeRate: 24,
-	}
-	feeRate, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 6000}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)
 	}
-	feePerKw := feeRate.FeePerKWeight()
 	htlcFee := lnwire.NewMSatFromSatoshis(
 		feePerKw.FeeForWeight(lnwallet.HtlcWeight),
 	)
@@ -3460,15 +3449,9 @@ func TestChannelLinkUpdateCommitFee(t *testing.T) {
 
 	startingFeeRate := channels.aliceToBob.CommitFeeRate()
 
-	// Convert starting fee rate to sat/vbyte. This is usually a
-	// lossy conversion, but since the startingFeeRate is
-	// 6000 sat/kw in this case, we won't lose precision.
-	startingFeeRateSatPerVByte := lnwallet.SatPerVByte(
-		startingFeeRate * 4 / 1000)
-
 	// Next, we'll send the first fee rate response to Alice.
 	select {
-	case n.feeEstimator.byteFeeIn <- startingFeeRateSatPerVByte:
+	case n.feeEstimator.byteFeeIn <- startingFeeRate:
 	case <-time.After(time.Second * 5):
 		t.Fatalf("alice didn't query for the new network fee")
 	}
@@ -3497,7 +3480,7 @@ func TestChannelLinkUpdateCommitFee(t *testing.T) {
 	// fee update.
 	newFeeRate := startingFeeRate * 3
 	select {
-	case n.feeEstimator.byteFeeIn <- startingFeeRateSatPerVByte * 3:
+	case n.feeEstimator.byteFeeIn <- newFeeRate:
 	case <-time.After(time.Second * 5):
 		t.Fatalf("alice didn't query for the new network fee")
 	}
@@ -3865,8 +3848,9 @@ func restartLink(aliceChannel *lnwallet.LightningChannel, aliceSwitch *Switch,
 		}
 	}
 
-	t := make(chan time.Time)
-	ticker := &mockTicker{t}
+	// Instantiate with a long interval, so that we can precisely control
+	// the firing via force feeding.
+	bticker := ticker.MockNew(time.Hour)
 	aliceCfg := ChannelLinkConfig{
 		FwrdingPolicy:      globalPolicy,
 		Peer:               alicePeer,
@@ -3888,8 +3872,8 @@ func restartLink(aliceChannel *lnwallet.LightningChannel, aliceSwitch *Switch,
 		},
 		Registry:       invoiceRegistry,
 		ChainEvents:    &contractcourt.ChainEventSubscription{},
-		BatchTicker:    ticker,
-		FwdPkgGCTicker: NewBatchTicker(5 * time.Second),
+		BatchTicker:    bticker,
+		FwdPkgGCTicker: ticker.New(5 * time.Second),
 		// Make the BatchSize and Min/MaxFeeUpdateTimeout large enough
 		// to not trigger commit updates automatically during tests.
 		BatchSize:           10000,
@@ -3920,7 +3904,7 @@ func restartLink(aliceChannel *lnwallet.LightningChannel, aliceSwitch *Switch,
 		defer aliceLink.Stop()
 	}
 
-	return aliceLink, t, cleanUp, nil
+	return aliceLink, bticker.Force, cleanUp, nil
 }
 
 // gnerateHtlc generates a simple payment from Bob to Alice.

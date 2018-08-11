@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/keychain"
@@ -191,6 +192,7 @@ type mockWalletController struct {
 	rootKey               *btcec.PrivateKey
 	prevAddres            btcutil.Address
 	publishedTransactions chan *wire.MsgTx
+	index                 uint32
 }
 
 // BackEnd returns "mock" to signify a mock wallet controller.
@@ -224,23 +226,24 @@ func (*mockWalletController) GetPrivKey(a btcutil.Address) (*btcec.PrivateKey, e
 }
 
 func (*mockWalletController) SendOutputs(outputs []*wire.TxOut,
-	_ lnwallet.SatPerVByte) (*chainhash.Hash, error) {
+	_ lnwallet.SatPerKWeight) (*chainhash.Hash, error) {
 
 	return nil, nil
 }
 
 // ListUnspentWitness is called by the wallet when doing coin selection. We just
 // need one unspent for the funding transaction.
-func (*mockWalletController) ListUnspentWitness(confirms int32) ([]*lnwallet.Utxo, error) {
+func (m *mockWalletController) ListUnspentWitness(confirms int32) ([]*lnwallet.Utxo, error) {
 	utxo := &lnwallet.Utxo{
 		AddressType: lnwallet.WitnessPubKey,
 		Value:       btcutil.Amount(10 * btcutil.SatoshiPerBitcoin),
 		PkScript:    make([]byte, 22),
 		OutPoint: wire.OutPoint{
 			Hash:  chainhash.Hash{},
-			Index: 0,
+			Index: m.index,
 		},
 	}
+	atomic.AddUint32(&m.index, 1)
 	var ret []*lnwallet.Utxo
 	ret = append(ret, utxo)
 	return ret, nil

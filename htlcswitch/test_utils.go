@@ -21,6 +21,7 @@ import (
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/shachain"
+	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -271,14 +272,11 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 		return nil, nil, nil, nil, err
 	}
 
-	estimator := &lnwallet.StaticFeeEstimator{
-		FeeRate: 24,
-	}
-	feePerVSize, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 6000}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	feePerKw := feePerVSize.FeePerKWeight()
 	commitFee := feePerKw.FeeForWeight(724)
 
 	const broadcastHeight = 1
@@ -873,7 +871,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 	carolDecoder := newMockIteratorDecoder()
 
 	feeEstimator := &mockFeeEstimator{
-		byteFeeIn: make(chan lnwallet.SatPerVByte),
+		byteFeeIn: make(chan lnwallet.SatPerKWeight),
 		quit:      make(chan struct{}),
 	}
 
@@ -918,8 +916,8 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			ChainEvents:         &contractcourt.ChainEventSubscription{},
 			SyncStates:          true,
 			BatchSize:           10,
-			BatchTicker:         &mockTicker{time.NewTicker(batchTimeout).C},
-			FwdPkgGCTicker:      &mockTicker{time.NewTicker(fwdPkgTimeout).C},
+			BatchTicker:         ticker.MockNew(batchTimeout),
+			FwdPkgGCTicker:      ticker.MockNew(fwdPkgTimeout),
 			MinFeeUpdateTimeout: minFeeUpdateTimeout,
 			MaxFeeUpdateTimeout: maxFeeUpdateTimeout,
 			OnChannelFailure:    func(lnwire.ChannelID, lnwire.ShortChannelID, LinkFailureError) {},
@@ -961,8 +959,8 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			ChainEvents:         &contractcourt.ChainEventSubscription{},
 			SyncStates:          true,
 			BatchSize:           10,
-			BatchTicker:         &mockTicker{time.NewTicker(batchTimeout).C},
-			FwdPkgGCTicker:      &mockTicker{time.NewTicker(fwdPkgTimeout).C},
+			BatchTicker:         ticker.MockNew(batchTimeout),
+			FwdPkgGCTicker:      ticker.MockNew(fwdPkgTimeout),
 			MinFeeUpdateTimeout: minFeeUpdateTimeout,
 			MaxFeeUpdateTimeout: maxFeeUpdateTimeout,
 			OnChannelFailure:    func(lnwire.ChannelID, lnwire.ShortChannelID, LinkFailureError) {},
@@ -1004,8 +1002,8 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			ChainEvents:         &contractcourt.ChainEventSubscription{},
 			SyncStates:          true,
 			BatchSize:           10,
-			BatchTicker:         &mockTicker{time.NewTicker(batchTimeout).C},
-			FwdPkgGCTicker:      &mockTicker{time.NewTicker(fwdPkgTimeout).C},
+			BatchTicker:         ticker.MockNew(batchTimeout),
+			FwdPkgGCTicker:      ticker.MockNew(fwdPkgTimeout),
 			MinFeeUpdateTimeout: minFeeUpdateTimeout,
 			MaxFeeUpdateTimeout: maxFeeUpdateTimeout,
 			OnChannelFailure:    func(lnwire.ChannelID, lnwire.ShortChannelID, LinkFailureError) {},
@@ -1047,8 +1045,8 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			ChainEvents:         &contractcourt.ChainEventSubscription{},
 			SyncStates:          true,
 			BatchSize:           10,
-			BatchTicker:         &mockTicker{time.NewTicker(batchTimeout).C},
-			FwdPkgGCTicker:      &mockTicker{time.NewTicker(fwdPkgTimeout).C},
+			BatchTicker:         ticker.MockNew(batchTimeout),
+			FwdPkgGCTicker:      ticker.MockNew(fwdPkgTimeout),
 			MinFeeUpdateTimeout: minFeeUpdateTimeout,
 			MaxFeeUpdateTimeout: maxFeeUpdateTimeout,
 			OnChannelFailure:    func(lnwire.ChannelID, lnwire.ShortChannelID, LinkFailureError) {},

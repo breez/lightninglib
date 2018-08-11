@@ -18,6 +18,7 @@ import (
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/connmgr"
@@ -417,7 +418,8 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 		)
 		if err != nil {
 			lnChan.Stop()
-			return err
+			return fmt.Errorf("unable to add link %v to switch: %v",
+				chanPoint, err)
 		}
 
 		p.activeChanMtx.Lock()
@@ -545,8 +547,8 @@ func (p *peer) addLink(chanPoint *wire.OutPoint,
 		},
 		OnChannelFailure:    onChannelFailure,
 		SyncStates:          syncStates,
-		BatchTicker:         htlcswitch.NewBatchTicker(50 * time.Millisecond),
-		FwdPkgGCTicker:      htlcswitch.NewBatchTicker(time.Minute),
+		BatchTicker:         ticker.New(50 * time.Millisecond),
+		FwdPkgGCTicker:      ticker.New(time.Minute),
 		BatchSize:           10,
 		UnsafeReplay:        cfg.UnsafeReplay,
 		MinFeeUpdateTimeout: htlcswitch.DefaultMinLinkFeeUpdateTimeout,
@@ -576,7 +578,7 @@ func (p *peer) Disconnect(reason error) {
 		return
 	}
 
-	peerLog.Tracef("Disconnecting %s, reason: %v", p, reason)
+	peerLog.Debugf("Disconnecting %s, reason: %v", p, reason)
 
 	// Ensure that the TCP connection is properly closed before continuing.
 	p.conn.Close()
@@ -1659,17 +1661,12 @@ func (p *peer) fetchActiveChanCloser(chanID lnwire.ChannelID) (*channelCloser, e
 		// In order to begin fee negotiations, we'll first compute our
 		// target ideal fee-per-kw. We'll set this to a lax value, as
 		// we weren't the ones that initiated the channel closure.
-		feePerVSize, err := p.server.cc.feeEstimator.EstimateFeePerVSize(6)
+		feePerKw, err := p.server.cc.feeEstimator.EstimateFeePerKW(6)
 		if err != nil {
 			peerLog.Errorf("unable to query fee estimator: %v", err)
 
 			return nil, fmt.Errorf("unable to estimate fee")
 		}
-
-		// We'll then convert the sat per weight to sat per k/w as this
-		// is the native unit used within the protocol when dealing
-		// with fees.
-		targetFeePerKw := feePerVSize.FeePerKWeight()
 
 		_, startingHeight, err := p.server.cc.chainIO.GetBestBlock()
 		if err != nil {
@@ -1686,7 +1683,7 @@ func (p *peer) fetchActiveChanCloser(chanID lnwire.ChannelID) (*channelCloser, e
 				quit:              p.quit,
 			},
 			deliveryAddr,
-			targetFeePerKw,
+			feePerKw,
 			uint32(startingHeight),
 			nil,
 		)

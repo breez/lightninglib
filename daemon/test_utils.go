@@ -18,6 +18,7 @@ import (
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/shachain"
+	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -201,12 +202,11 @@ func createTestPeer(notifier chainntnfs.ChainNotifier,
 		return nil, nil, nil, nil, err
 	}
 
-	estimator := &lnwallet.StaticFeeEstimator{FeeRate: 50}
-	feePerVSize, err := estimator.EstimateFeePerVSize(1)
+	estimator := &lnwallet.StaticFeeEstimator{FeePerKW: 12500}
+	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	feePerKw := feePerVSize.FeePerKWeight()
 
 	// TODO(roasbeef): need to factor in commit fee?
 	aliceCommit := channeldb.ChannelCommitment{
@@ -351,6 +351,10 @@ func createTestPeer(notifier chainntnfs.ChainNotifier,
 		DB:             dbAlice,
 		SwitchPackager: channeldb.NewSwitchPackager(),
 		Notifier:       notifier,
+		FwdEventTicker: ticker.New(
+			htlcswitch.DefaultFwdEventInterval),
+		LogEventTicker: ticker.New(
+			htlcswitch.DefaultLogInterval),
 	}, uint32(currentHeight))
 	if err != nil {
 		return nil, nil, nil, nil, err

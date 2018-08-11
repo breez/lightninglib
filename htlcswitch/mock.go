@@ -19,6 +19,7 @@ import (
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
@@ -58,12 +59,14 @@ func (m *mockPreimageCache) SubscribeUpdates() *contractcourt.WitnessSubscriptio
 }
 
 type mockFeeEstimator struct {
-	byteFeeIn chan lnwallet.SatPerVByte
+	byteFeeIn chan lnwallet.SatPerKWeight
 
 	quit chan struct{}
 }
 
-func (m *mockFeeEstimator) EstimateFeePerVSize(numBlocks uint32) (lnwallet.SatPerVByte, error) {
+func (m *mockFeeEstimator) EstimateFeePerKW(
+	numBlocks uint32) (lnwallet.SatPerKWeight, error) {
+
 	select {
 	case feeRate := <-m.byteFeeIn:
 		return feeRate, nil
@@ -143,7 +146,9 @@ func initSwitchWithDB(startingHeight uint32, db *channeldb.DB) (*Switch, error) 
 		FetchLastChannelUpdate: func(lnwire.ShortChannelID) (*lnwire.ChannelUpdate, error) {
 			return nil, nil
 		},
-		Notifier: &mockNotifier{},
+		Notifier:       &mockNotifier{},
+		FwdEventTicker: ticker.MockNew(DefaultFwdEventInterval),
+		LogEventTicker: ticker.MockNew(DefaultLogInterval),
 	}
 
 	return New(cfg, startingHeight)
@@ -806,15 +811,4 @@ func (m *mockNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint, _ []byte,
 	return &chainntnfs.SpendEvent{
 		Spend: make(chan *chainntnfs.SpendDetail),
 	}, nil
-}
-
-type mockTicker struct {
-	ticker <-chan time.Time
-}
-
-func (m *mockTicker) Start() <-chan time.Time {
-	return m.ticker
-}
-
-func (m *mockTicker) Stop() {
 }
