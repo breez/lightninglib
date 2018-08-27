@@ -194,7 +194,7 @@ func newActiveChannelArbitrator(channel *channeldb.OpenChannel,
 	//
 	// TODO(roasbeef): instead 1 block epoch that multi-plexes to the rest?
 	//  * reduces the number of goroutines
-	blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn()
+	blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +243,8 @@ func newActiveChannelArbitrator(channel *channeldb.OpenChannel,
 			return chanMachine.ForceClose()
 		},
 		MarkCommitmentBroadcasted: channel.MarkCommitmentBroadcasted,
+		MarkChannelClosed:         channel.CloseChannel,
+		IsPendingClose:            false,
 		ChainArbitratorConfig:     c.cfg,
 		ChainEvents:               chanEvents,
 	}
@@ -384,7 +386,7 @@ func (c *ChainArbitrator) Start() error {
 	// the chain any longer, only resolve the contracts on the confirmed
 	// commitment.
 	for _, closeChanInfo := range closingChannels {
-		blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn()
+		blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(nil)
 		if err != nil {
 			return err
 		}
@@ -398,6 +400,9 @@ func (c *ChainArbitrator) Start() error {
 			BlockEpochs:           blockEpoch,
 			ChainArbitratorConfig: c.cfg,
 			ChainEvents:           &ChainEventSubscription{},
+			IsPendingClose:        true,
+			ClosingHeight:         closeChanInfo.CloseHeight,
+			CloseType:             closeChanInfo.CloseType,
 		}
 		chanLog, err := newBoltArbitratorLog(
 			c.chanSource.DB, arbCfg, c.cfg.ChainHash, chanPoint,

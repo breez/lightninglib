@@ -4432,6 +4432,22 @@ func (lc *LightningChannel) LoadFwdPkgs() ([]*channeldb.FwdPkg, error) {
 	return lc.channelState.LoadFwdPkgs()
 }
 
+// AckAddHtlcs sets a bit in the FwdFilter of a forwarding package belonging to
+// this channel, that corresponds to the given AddRef. This method also succeeds
+// if no forwarding package is found.
+func (lc *LightningChannel) AckAddHtlcs(addRef channeldb.AddRef) error {
+	return lc.channelState.AckAddHtlcs(addRef)
+}
+
+// AckSettleFails sets a bit in the SettleFailFilter of a forwarding package
+// belonging to this channel, that corresponds to the given SettleFailRef. This
+// method also succeeds if no forwarding package is found.
+func (lc *LightningChannel) AckSettleFails(
+	settleFailRefs ...channeldb.SettleFailRef) error {
+
+	return lc.channelState.AckSettleFails(settleFailRefs...)
+}
+
 // SetFwdFilter writes the forwarding decision for a given remote commitment
 // height.
 func (lc *LightningChannel) SetFwdFilter(height uint64,
@@ -4571,21 +4587,18 @@ func (lc *LightningChannel) SettleHTLC(preimage [32]byte,
 
 	htlc := lc.remoteUpdateLog.lookupHtlc(htlcIndex)
 	if htlc == nil {
-		return fmt.Errorf("No HTLC with ID %d in channel %v", htlcIndex,
-			lc.ShortChanID())
+		return ErrUnknownHtlcIndex{lc.ShortChanID(), htlcIndex}
 	}
 
 	// Now that we know the HTLC exists, before checking to see if the
 	// preimage matches, we'll ensure that we haven't already attempted to
 	// modify the HTLC.
 	if lc.remoteUpdateLog.htlcHasModification(htlcIndex) {
-		return fmt.Errorf("HTLC with ID %d has already been settled",
-			htlcIndex)
+		return ErrHtlcIndexAlreadySettled(htlcIndex)
 	}
 
 	if htlc.RHash != sha256.Sum256(preimage[:]) {
-		return fmt.Errorf("Invalid payment preimage %x for hash %x",
-			preimage[:], htlc.RHash[:])
+		return ErrInvalidSettlePreimage{preimage[:], htlc.RHash[:]}
 	}
 
 	pd := &PaymentDescriptor{
@@ -4619,21 +4632,18 @@ func (lc *LightningChannel) ReceiveHTLCSettle(preimage [32]byte, htlcIndex uint6
 
 	htlc := lc.localUpdateLog.lookupHtlc(htlcIndex)
 	if htlc == nil {
-		return fmt.Errorf("No HTLC with ID %d in channel %v", htlcIndex,
-			lc.ShortChanID())
+		return ErrUnknownHtlcIndex{lc.ShortChanID(), htlcIndex}
 	}
 
 	// Now that we know the HTLC exists, before checking to see if the
 	// preimage matches, we'll ensure that they haven't already attempted
 	// to modify the HTLC.
 	if lc.localUpdateLog.htlcHasModification(htlcIndex) {
-		return fmt.Errorf("HTLC with ID %d has already been settled",
-			htlcIndex)
+		return ErrHtlcIndexAlreadySettled(htlcIndex)
 	}
 
 	if htlc.RHash != sha256.Sum256(preimage[:]) {
-		return fmt.Errorf("Invalid payment preimage %x for hash %x",
-			preimage[:], htlc.RHash[:])
+		return ErrInvalidSettlePreimage{preimage[:], htlc.RHash[:]}
 	}
 
 	pd := &PaymentDescriptor{
@@ -4687,15 +4697,13 @@ func (lc *LightningChannel) FailHTLC(htlcIndex uint64, reason []byte,
 
 	htlc := lc.remoteUpdateLog.lookupHtlc(htlcIndex)
 	if htlc == nil {
-		return fmt.Errorf("No HTLC with ID %d in channel %v", htlcIndex,
-			lc.ShortChanID())
+		return ErrUnknownHtlcIndex{lc.ShortChanID(), htlcIndex}
 	}
 
 	// Now that we know the HTLC exists, we'll ensure that we haven't
 	// already attempted to fail the HTLC.
 	if lc.remoteUpdateLog.htlcHasModification(htlcIndex) {
-		return fmt.Errorf("HTLC with ID %d has already been failed",
-			htlcIndex)
+		return ErrHtlcIndexAlreadyFailed(htlcIndex)
 	}
 
 	pd := &PaymentDescriptor{
@@ -4739,15 +4747,13 @@ func (lc *LightningChannel) MalformedFailHTLC(htlcIndex uint64,
 
 	htlc := lc.remoteUpdateLog.lookupHtlc(htlcIndex)
 	if htlc == nil {
-		return fmt.Errorf("No HTLC with ID %d in channel %v", htlcIndex,
-			lc.ShortChanID())
+		return ErrUnknownHtlcIndex{lc.ShortChanID(), htlcIndex}
 	}
 
 	// Now that we know the HTLC exists, we'll ensure that we haven't
 	// already attempted to fail the HTLC.
 	if lc.remoteUpdateLog.htlcHasModification(htlcIndex) {
-		return fmt.Errorf("HTLC with ID %d has already been failed",
-			htlcIndex)
+		return ErrHtlcIndexAlreadyFailed(htlcIndex)
 	}
 
 	pd := &PaymentDescriptor{
@@ -4784,15 +4790,13 @@ func (lc *LightningChannel) ReceiveFailHTLC(htlcIndex uint64, reason []byte,
 
 	htlc := lc.localUpdateLog.lookupHtlc(htlcIndex)
 	if htlc == nil {
-		return fmt.Errorf("No HTLC with ID %d in channel %v", htlcIndex,
-			lc.ShortChanID())
+		return ErrUnknownHtlcIndex{lc.ShortChanID(), htlcIndex}
 	}
 
 	// Now that we know the HTLC exists, we'll ensure that they haven't
 	// already attempted to fail the HTLC.
 	if lc.localUpdateLog.htlcHasModification(htlcIndex) {
-		return fmt.Errorf("HTLC with ID %d has already been failed",
-			htlcIndex)
+		return ErrHtlcIndexAlreadyFailed(htlcIndex)
 	}
 
 	pd := &PaymentDescriptor{
@@ -5093,15 +5097,18 @@ func NewUnilateralCloseSummary(chanState *channeldb.OpenChannel, signer Signer,
 	}
 
 	closeSummary := channeldb.ChannelCloseSummary{
-		ChanPoint:      chanState.FundingOutpoint,
-		ChainHash:      chanState.ChainHash,
-		ClosingTXID:    *commitSpend.SpenderTxHash,
-		CloseHeight:    uint32(commitSpend.SpendingHeight),
-		RemotePub:      chanState.IdentityPub,
-		Capacity:       chanState.Capacity,
-		SettledBalance: btcutil.Amount(localBalance),
-		CloseType:      channeldb.RemoteForceClose,
-		IsPending:      true,
+		ChanPoint:               chanState.FundingOutpoint,
+		ChainHash:               chanState.ChainHash,
+		ClosingTXID:             *commitSpend.SpenderTxHash,
+		CloseHeight:             uint32(commitSpend.SpendingHeight),
+		RemotePub:               chanState.IdentityPub,
+		Capacity:                chanState.Capacity,
+		SettledBalance:          btcutil.Amount(localBalance),
+		CloseType:               channeldb.RemoteForceClose,
+		IsPending:               true,
+		RemoteCurrentRevocation: chanState.RemoteCurrentRevocation,
+		RemoteNextRevocation:    chanState.RemoteNextRevocation,
+		LocalChanConfig:         chanState.LocalChanCfg,
 	}
 
 	return &UnilateralCloseSummary{
@@ -6245,4 +6252,10 @@ func (lc *LightningChannel) RemoteCommitHeight() uint64 {
 	defer lc.RUnlock()
 
 	return lc.channelState.RemoteCommitment.CommitHeight
+}
+
+// FwdMinHtlc returns the minimum HTLC value required by the remote node, i.e.
+// the minimum value HTLC we can forward on this channel.
+func (lc *LightningChannel) FwdMinHtlc() lnwire.MilliSatoshi {
+	return lc.localChanCfg.MinHTLC
 }

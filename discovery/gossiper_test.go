@@ -280,7 +280,8 @@ func (m *mockNotifier) notifyBlock(hash chainhash.Hash, height uint32) {
 	}
 }
 
-func (m *mockNotifier) RegisterBlockEpochNtfn() (*chainntnfs.BlockEpochEvent, error) {
+func (m *mockNotifier) RegisterBlockEpochNtfn(
+	bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	m.RLock()
 	defer m.RUnlock()
 
@@ -2004,10 +2005,8 @@ func TestReceiveRemoteChannelUpdateFirst(t *testing.T) {
 	// Recreate the case where the remote node is sending us its ChannelUpdate
 	// before we have been able to process our own ChannelAnnouncement and
 	// ChannelUpdate.
-	err = <-ctx.gossiper.ProcessRemoteAnnouncement(batch.chanUpdAnn2, remotePeer)
-	if err != nil {
-		t.Fatalf("unable to process :%v", err)
-	}
+	errRemoteAnn := ctx.gossiper.ProcessRemoteAnnouncement(batch.chanUpdAnn2, remotePeer)
+
 	select {
 	case <-ctx.broadcastedMessage:
 		t.Fatal("channel update announcement was broadcast")
@@ -2068,6 +2067,15 @@ func TestReceiveRemoteChannelUpdateFirst(t *testing.T) {
 
 	// At this point the remote ChannelUpdate we received earlier should
 	// be reprocessed, as we now have the necessary edge entry in the graph.
+	select {
+	case err := <-errRemoteAnn:
+		if err != nil {
+			t.Fatalf("error re-processing remote update: %v", err)
+		}
+	case <-time.After(2 * trickleDelay):
+		t.Fatalf("remote update was not processed")
+	}
+
 	// Check that the ChannelEdgePolicy was added to the graph.
 	chanInfo, e1, e2, err = ctx.router.GetChannelByID(batch.chanUpdAnn1.ShortChannelID)
 	if err != nil {
@@ -2173,3 +2181,6 @@ func (p *mockPeer) PubKey() [33]byte {
 	return pubkey
 }
 func (p *mockPeer) Address() net.Addr { return nil }
+func (p *mockPeer) QuitSignal() <-chan struct{} {
+	return p.quit
+}

@@ -1,8 +1,4 @@
 [[constraint]]
-  name = "github.com/awalterschulze/gographviz"
-  revision = "761fd5fbb34e4c2c138c280395b65b48e4ff5a53"
-
-[[constraint]]
   name = "github.com/btcsuite/btclog"
   revision = "84c8d2346e9fc8c7b947e243b9c24e6df9fd206a"
 
@@ -44,7 +40,7 @@
 
 [[constraint]]
   name = "github.com/lightninglabs/neutrino"
-  revision = "b451667d69910cd20995452c56e02441896a3349"
+  revision = "166fe699d5964581d24e6bfff0aa329cfb6a8bc9"
 
 [[constraint]]
   name = "github.com/lightningnetwork/lightning-onion"
@@ -52,7 +48,7 @@
 
 [[constraint]]
   name = "github.com/ltcsuite/ltcd"
-  revision = "5f654d5faab99ee2b3488fabba98e5f7a5257ee3"
+  revision = "cdab10132e8c6e4a3ffd112dba54791946d28906"
 
 [[constraint]]
   name = "github.com/miekg/dns"
@@ -68,11 +64,11 @@
 
 [[constraint]]
   name = "github.com/btcsuite/btcd"
-  revision = "f899737d7f2764dc13e4d01ff00108ec58f766a9"
+  revision = "79e00513b1011888b1e675157ab89f527f901cae"
 
 [[constraint]]
   name = "github.com/btcsuite/btcwallet"
-  revision = "1ede0a1a66bad8f7db796615e496a0a0faba5182"
+  revision = "7b84dc25a61634c450d21ec7f47d5e916eb88fdb"
 
 [[constraint]]
   name = "github.com/tv42/zbase32"
@@ -88,7 +84,7 @@
 
 [[constraint]]
   name = "golang.org/x/crypto"
-  revision = "49796115aa4b964c318aad4f3084fdb41e9aa067"
+  revision = "614d502a4dac94afa3a6ce146bd1736da82514c6"
 
 [[constraint]]
   name = "golang.org/x/net"

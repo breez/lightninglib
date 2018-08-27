@@ -14,12 +14,16 @@ github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e h1:24jix
 github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e/go.mod h1:GEV5wmg4YquNw7v1kkyoX9etIk8yVmXj+AkDHuuETHs=
 github.com/btcsuite/btcd v0.0.0-20180810000619-f899737d7f27 h1:WU7sAs3XGB9kUkEum8TfmtKl8seYpgyNplGgifi6ZgE=
 github.com/btcsuite/btcd v0.0.0-20180810000619-f899737d7f27/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
+github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101 h1:/xe0TaCPKYG1hw3IffeXdmiJfw8x6SFBDKnr83vtVbw=
+github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f h1:bAs4lUbRJpnnkd9VhRV3jjAVU7DJVjMaK+IsvSeZvFo=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=
 github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a h1:RQMUrEILyYJEoAT34XS/kLu40vC0+po/UfxrBBA4qZE=
 github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
 github.com/btcsuite/btcwallet v0.0.0-20180801025337-1ede0a1a66ba h1:q2cqJzbSjmAt/35mXuZ05rbePcNMHen7DCxUSkfUStI=
 github.com/btcsuite/btcwallet v0.0.0-20180801025337-1ede0a1a66ba/go.mod h1:+q7/nPeXqu8jJ0ah0fcMOlWGZ2GeL2QoL6c7nCFUEVA=
+github.com/btcsuite/btcwallet v0.0.0-20180823034257-7b84dc25a616 h1:n4aEUCc/luIpjxUk0A07coO6fiJ5bP4RrwX/kyMM2vY=
+github.com/btcsuite/btcwallet v0.0.0-20180823034257-7b84dc25a616/go.mod h1:+q7/nPeXqu8jJ0ah0fcMOlWGZ2GeL2QoL6c7nCFUEVA=
 github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941 h1:kij1x2aL7VE6gtx8KMIt8PGPgI5GV9LgtHFG5KaEMPY=
 github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941/go.mod h1:QcFA8DZHtuIAdYKCq/BzELOaznRsCvwf4zTPmaYwaig=
 github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd h1:R/opQEbFEy9JGkIguV40SvRY1uliPX8ifOvi6ICsFCw=
@@ -77,6 +81,8 @@ github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 h1:fTLuPUkaKII
 github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885/go.mod h1:KUh15naRlx/TmUMFS/p4JJrCrE6F7RGF7rsnvuu45E4=
 github.com/lightninglabs/neutrino v0.0.0-20180809021943-b451667d6991 h1:0flGC5qsl+NfXTWIvoKh5HfgqMdhHv+kzLeN1mNz+rI=
 github.com/lightninglabs/neutrino v0.0.0-20180809021943-b451667d6991/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
+github.com/lightninglabs/neutrino v0.0.0-20180824103028-166fe699d596 h1:ABJRj2Xh5R7YLpe0D9vKAQUHxxZajhZ3setWe9Oq60E=
+github.com/lightninglabs/neutrino v0.0.0-20180824103028-166fe699d596/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6 h1:ONLGrYJVQdbtP6CE/ff1KNWZtygRGEh12RzonTiCzPs=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6/go.mod h1:8EgEt4a/NUOVQd+3kk6n9aZCJ1Ssj96Pb6lCrci+6oc=
 github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9 h1:aLgtHOvaE6DjIKS5IpQU6ZLjdcQzjxHTMPOpq4pAY+M=

@@ -28,27 +28,28 @@ import (
 )
 
 const (
-	defaultConfigFilename     = "lnd.conf"
-	defaultDataDirname        = "data"
-	defaultChainSubDirname    = "chain"
-	defaultGraphSubDirname    = "graph"
-	defaultTLSCertFilename    = "tls.cert"
-	defaultTLSKeyFilename     = "tls.key"
-	defaultAdminMacFilename   = "admin.macaroon"
-	defaultReadMacFilename    = "readonly.macaroon"
-	defaultInvoiceMacFilename = "invoice.macaroon"
-	defaultLogLevel           = "info"
-	defaultLogDirname         = "logs"
-	defaultLogFilename        = "lnd.log"
-	defaultRPCPort            = 10009
-	defaultRESTPort           = 8080
-	defaultPeerPort           = 9735
-	defaultRPCHost            = "localhost"
-	defaultMaxPendingChannels = 1
-	defaultNoEncryptWallet    = false
-	defaultTrickleDelay       = 30 * 1000
-	defaultMaxLogFiles        = 3
-	defaultMaxLogFileSize     = 10
+	defaultConfigFilename      = "lnd.conf"
+	defaultDataDirname         = "data"
+	defaultChainSubDirname     = "chain"
+	defaultGraphSubDirname     = "graph"
+	defaultTLSCertFilename     = "tls.cert"
+	defaultTLSKeyFilename      = "tls.key"
+	defaultAdminMacFilename    = "admin.macaroon"
+	defaultReadMacFilename     = "readonly.macaroon"
+	defaultInvoiceMacFilename  = "invoice.macaroon"
+	defaultLogLevel            = "info"
+	defaultLogDirname          = "logs"
+	defaultLogFilename         = "lnd.log"
+	defaultRPCPort             = 10009
+	defaultRESTPort            = 8080
+	defaultPeerPort            = 9735
+	defaultRPCHost             = "localhost"
+	defaultMaxPendingChannels  = 1
+	defaultNoEncryptWallet     = false
+	defaultTrickleDelay        = 30 * 1000
+	defaultInactiveChanTimeout = 20 * time.Minute
+	defaultMaxLogFiles         = 3
+	defaultMaxLogFileSize      = 10
 
 	defaultTorSOCKSPort            = 9050
 	defaultTorDNSHost              = "soa.nodes.lightning.directory"
@@ -74,10 +75,6 @@ var (
 
 	defaultTLSCertPath = filepath.Join(defaultLndDir, defaultTLSCertFilename)
 	defaultTLSKeyPath  = filepath.Join(defaultLndDir, defaultTLSKeyFilename)
-
-	defaultAdminMacPath   = filepath.Join(defaultLndDir, defaultAdminMacFilename)
-	defaultReadMacPath    = filepath.Join(defaultLndDir, defaultReadMacFilename)
-	defaultInvoiceMacPath = filepath.Join(defaultLndDir, defaultInvoiceMacFilename)
 
 	defaultBtcdDir         = btcutil.AppDataDir("btcd", false)
 	defaultBtcdRPCCertFile = filepath.Join(defaultBtcdDir, "rpc.cert")
@@ -145,6 +142,8 @@ type autoPilotConfig struct {
 	Allocation     float64 `long:"allocation" description:"The percentage of total funds that should be committed to automatic channel establishment"`
 	MinChannelSize int64   `long:"minchansize" description:"The smallest channel that the autopilot agent should create"`
 	MaxChannelSize int64   `long:"maxchansize" description:"The largest channel that the autopilot agent should create"`
+	Private        bool    `long:"private" description:"Whether the channels created by the autopilot agent should be private or not. Private channels won't be announced to the network."`
+	MinConfs       int32   `long:"minconfs" description:"The minimum number of confirmations each of your inputs in funding transactions created by the autopilot agent must have."`
 }
 
 type torConfig struct {
@@ -226,7 +225,8 @@ type config struct {
 
 	NoEncryptWallet bool `long:"noencryptwallet" description:"If set, wallet will be encrypted using the default passphrase."`
 
-	TrickleDelay int `long:"trickledelay" description:"Time in milliseconds between each release of announcements to the network"`
+	TrickleDelay        int           `long:"trickledelay" description:"Time in milliseconds between each release of announcements to the network"`
+	InactiveChanTimeout time.Duration `long:"inactivechantimeout" description:"If a channel has been inactive for the set time, send a ChannelUpdate disabling it."`
 
 	Alias       string `long:"alias" description:"The node alias. Used as a moniker by peers and intelligence services"`
 	Color       string `long:"color" description:"The color of the node in hex format (i.e. '#3399FF'). Used to customize node appearance in intelligence services"`
@@ -253,9 +253,6 @@ func loadConfig(args []string) (*config, error) {
 		DebugLevel:     defaultLogLevel,
 		TLSCertPath:    defaultTLSCertPath,
 		TLSKeyPath:     defaultTLSKeyPath,
-		AdminMacPath:   defaultAdminMacPath,
-		InvoiceMacPath: defaultInvoiceMacPath,
-		ReadMacPath:    defaultReadMacPath,
 		LogDir:         defaultLogDir,
 		MaxLogFiles:    defaultMaxLogFiles,
 		MaxLogFileSize: defaultMaxLogFileSize,
@@ -299,10 +296,11 @@ func loadConfig(args []string) (*config, error) {
 			MinChannelSize: int64(minChanFundingSize),
 			MaxChannelSize: int64(maxFundingAmount),
 		},
-		TrickleDelay: defaultTrickleDelay,
-		Alias:        defaultAlias,
-		Color:        defaultColor,
-		MinChanSize:  int64(minChanFundingSize),
+		TrickleDelay:        defaultTrickleDelay,
+		InactiveChanTimeout: defaultInactiveChanTimeout,
+		Alias:               defaultAlias,
+		Color:               defaultColor,
+		MinChanSize:         int64(minChanFundingSize),
 		Tor: &torConfig{
 			SOCKS:            defaultTorSOCKS,
 			DNS:              defaultTorDNS,
@@ -343,9 +341,6 @@ func loadConfig(args []string) (*config, error) {
 		preCfg.DataDir = filepath.Join(lndDir, defaultDataDirname)
 		preCfg.TLSCertPath = filepath.Join(lndDir, defaultTLSCertFilename)
 		preCfg.TLSKeyPath = filepath.Join(lndDir, defaultTLSKeyFilename)
-		preCfg.AdminMacPath = filepath.Join(lndDir, defaultAdminMacFilename)
-		preCfg.InvoiceMacPath = filepath.Join(lndDir, defaultInvoiceMacFilename)
-		preCfg.ReadMacPath = filepath.Join(lndDir, defaultReadMacFilename)
 		preCfg.LogDir = filepath.Join(lndDir, defaultLogDirname)
 		preCfg.Tor.V2PrivateKeyPath = filepath.Join(lndDir, defaultTorV2PrivateKeyFilename)
 	}
@@ -420,6 +415,12 @@ func loadConfig(args []string) (*config, error) {
 	}
 	if cfg.Autopilot.MaxChannelSize < 0 {
 		str := "%s: autopilot.maxchansize must be non-negative"
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		return nil, err
+	}
+	if cfg.Autopilot.MinConfs < 0 {
+		str := "%s: autopilot.minconfs must be non-negative"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		return nil, err
@@ -755,27 +756,30 @@ func loadConfig(args []string) (*config, error) {
 		}
 	}
 
-	// At this point, we'll save the base data directory in order to ensure
-	// we don't store the macaroon database within any of the chain
-	// namespaced directories.
-	macaroonDatabaseDir = cfg.DataDir
+	// We'll now construct the network directory which will be where we
+	// store all the data specifc to this chain/network.
+	networkDir = filepath.Join(
+		cfg.DataDir, defaultChainSubDirname,
+		registeredChains.PrimaryChain().String(),
+		normalizeNetwork(activeNetParams.Name),
+	)
 
 	// If a custom macaroon directory wasn't specified and the data
 	// directory has changed from the default path, then we'll also update
 	// the path for the macaroons to be generated.
-	if cfg.DataDir != defaultDataDir && cfg.AdminMacPath == defaultAdminMacPath {
+	if cfg.AdminMacPath == "" {
 		cfg.AdminMacPath = filepath.Join(
-			cfg.DataDir, defaultAdminMacFilename,
+			networkDir, defaultAdminMacFilename,
 		)
 	}
-	if cfg.DataDir != defaultDataDir && cfg.ReadMacPath == defaultReadMacPath {
+	if cfg.ReadMacPath == "" {
 		cfg.ReadMacPath = filepath.Join(
-			cfg.DataDir, defaultReadMacFilename,
+			networkDir, defaultReadMacFilename,
 		)
 	}
-	if cfg.DataDir != defaultDataDir && cfg.InvoiceMacPath == defaultInvoiceMacPath {
+	if cfg.InvoiceMacPath == "" {
 		cfg.InvoiceMacPath = filepath.Join(
-			cfg.DataDir, defaultInvoiceMacFilename,
+			networkDir, defaultInvoiceMacFilename,
 		)
 	}
 
@@ -784,6 +788,12 @@ func loadConfig(args []string) (*config, error) {
 	cfg.LogDir = filepath.Join(cfg.LogDir,
 		registeredChains.PrimaryChain().String(),
 		normalizeNetwork(activeNetParams.Name))
+
+	// Special show command to list supported subsystems and exit.
+	if cfg.DebugLevel == "show" {
+		fmt.Println("Supported subsystems", supportedSubsystems())
+		os.Exit(0)
+	}
 
 	// Initialize logging at the default logging level.
 	initLogRotator(
@@ -924,10 +934,13 @@ func loadConfig(args []string) (*config, error) {
 // passed path, cleans the result, and returns it.
 // This function is taken from https://github.com/btcsuite/btcd
 func cleanAndExpandPath(path string) string {
+	if path == "" {
+		return ""
+	}
+
 	// Expand initial ~ to OS specific home directory.
 	if strings.HasPrefix(path, "~") {
 		var homeDir string
-
 		user, err := user.Current()
 		if err == nil {
 			homeDir = user.HomeDir

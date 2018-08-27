@@ -3,6 +3,7 @@ package htlcswitch
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -20,7 +21,6 @@ import (
 	"github.com/btcsuite/btcutil"
 	"github.com/coreos/bbolt"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/go-errors/errors"
 )
 
 const (
@@ -44,7 +44,16 @@ var (
 	// ErrIncompleteForward is used when an htlc was already forwarded
 	// through the switch, but did not get locked into another commitment
 	// txn.
-	ErrIncompleteForward = errors.Errorf("incomplete forward detected")
+	ErrIncompleteForward = errors.New("incomplete forward detected")
+
+	// ErrUnknownErrorDecryptor signals that we were unable to locate the
+	// error decryptor for this payment. This is likely due to restarting
+	// the daemon.
+	ErrUnknownErrorDecryptor = errors.New("unknown error decryptor")
+
+	// ErrSwitchExiting signaled when the switch has received a shutdown
+	// request.
+	ErrSwitchExiting = errors.New("htlcswitch shutting down")
 
 	// zeroPreimage is the empty preimage which is returned when we have
 	// some errors.
@@ -59,7 +68,6 @@ type pendingPayment struct {
 	amount      lnwire.MilliSatoshi
 
 	preimage chan [sha256.Size]byte
-	response chan *htlcPacket
 	err      chan error
 
 	// deobfuscator is a serializable entity which is used if we received
@@ -199,6 +207,9 @@ type Switch struct {
 
 	paymentSequencer Sequencer
 
+	// control provides verification of sending htlc mesages
+	control ControlTower
+
 	// circuits is storage for payment circuits which are used to
 	// forward the settle/fail htlc updates back to the add htlc initiator.
 	circuits CircuitMap
@@ -284,6 +295,7 @@ func New(cfg Config, currentHeight uint32) (*Switch, error) {
 		cfg:               &cfg,
 		circuits:          circuitMap,
 		paymentSequencer:  sequencer,
+		control:           NewPaymentControl(false, cfg.DB),
 		linkIndex:         make(map[lnwire.ChannelID]ChannelLink),
 		mailOrchestrator:  newMailOrchestrator(),
 		forwardingIndex:   make(map[lnwire.ShortChannelID]ChannelLink),
@@ -321,13 +333,13 @@ func (s *Switch) ProcessContractResolution(msg contractcourt.ResolutionMsg) erro
 		doneChan:      done,
 	}:
 	case <-s.quit:
-		return fmt.Errorf("switch shutting down")
+		return ErrSwitchExiting
 	}
 
 	select {
 	case <-done:
 	case <-s.quit:
-		return fmt.Errorf("switch shutting down")
+		return ErrSwitchExiting
 	}
 
 	return nil
@@ -335,14 +347,21 @@ func (s *Switch) ProcessContractResolution(msg contractcourt.ResolutionMsg) erro
 
 // SendHTLC is used by other subsystems which aren't belong to htlc switch
 // package in order to send the htlc update.
-func (s *Switch) SendHTLC(nextNode [33]byte, htlc *lnwire.UpdateAddHTLC,
+func (s *Switch) SendHTLC(firstHop lnwire.ShortChannelID,
+	htlc *lnwire.UpdateAddHTLC,
 	deobfuscator ErrorDecrypter) ([sha256.Size]byte, error) {
+
+	// Before sending, double check that we don't already have 1) an
+	// in-flight payment to this payment hash, or 2) a complete payment for
+	// the same hash.
+	if err := s.control.ClearForTakeoff(htlc); err != nil {
+		return zeroPreimage, err
+	}
 
 	// Create payment and add to the map of payment in order later to be
 	// able to retrieve it and return response to the user.
 	payment := &pendingPayment{
 		err:          make(chan error, 1),
-		response:     make(chan *htlcPacket, 1),
 		preimage:     make(chan [sha256.Size]byte, 1),
 		paymentHash:  htlc.PaymentHash,
 		amount:       htlc.Amount,
@@ -364,60 +383,35 @@ func (s *Switch) SendHTLC(nextNode [33]byte, htlc *lnwire.UpdateAddHTLC,
 	packet := &htlcPacket{
 		incomingChanID: sourceHop,
 		incomingHTLCID: paymentID,
-		destNode:       nextNode,
+		outgoingChanID: firstHop,
 		htlc:           htlc,
 	}
 
 	if err := s.forward(packet); err != nil {
 		s.removePendingPayment(paymentID)
+		if err := s.control.Fail(htlc.PaymentHash); err != nil {
+			return zeroPreimage, err
+		}
+
 		return zeroPreimage, err
 	}
 
 	// Returns channels so that other subsystem might wait/skip the
 	// waiting of handling of payment.
 	var preimage [sha256.Size]byte
-	var response *htlcPacket
 
 	select {
 	case e := <-payment.err:
 		err = e
 	case <-s.quit:
-		return zeroPreimage, errors.New("htlc switch have been stopped " +
-			"while waiting for payment result")
-	}
-
-	select {
-	case pkt := <-payment.response:
-		response = pkt
-	case <-s.quit:
-		return zeroPreimage, errors.New("htlc switch have been stopped " +
-			"while waiting for payment result")
+		return zeroPreimage, ErrSwitchExiting
 	}
 
 	select {
 	case p := <-payment.preimage:
 		preimage = p
 	case <-s.quit:
-		return zeroPreimage, errors.New("htlc switch have been stopped " +
-			"while waiting for payment result")
-	}
-
-	// Remove circuit since we are about to complete an add/fail of this
-	// HTLC.
-	if teardownErr := s.teardownCircuit(response); teardownErr != nil {
-		log.Warnf("unable to teardown circuit %s: %v",
-			response.inKey(), teardownErr)
-		return preimage, err
-	}
-
-	// Finally, if this response is contained in a forwarding package, ack
-	// the settle/fail so that we don't continue to retransmit the HTLC
-	// internally.
-	if response.destRef != nil {
-		if ackErr := s.ackSettleFail(*response.destRef); ackErr != nil {
-			log.Warnf("unable to ack settle/fail reference: %s: %v",
-				*response.destRef, ackErr)
-		}
+		return zeroPreimage, ErrSwitchExiting
 	}
 
 	return preimage, err
@@ -526,12 +520,15 @@ func (s *Switch) forward(packet *htlcPacket) error {
 // ForwardPackets adds a list of packets to the switch for processing. Fails
 // and settles are added on a first past, simultaneously constructing circuits
 // for any adds. After persisting the circuits, another pass of the adds is
-// given to forward them through the router.
+// given to forward them through the router. The sending link's quit channel is
+// used to prevent deadlocks when the switch stops a link in the midst of
+// forwarding.
 //
 // NOTE: This method guarantees that the returned err chan will eventually be
 // closed. The receiver should read on the channel until receiving such a
 // signal.
-func (s *Switch) ForwardPackets(packets ...*htlcPacket) chan error {
+func (s *Switch) ForwardPackets(linkQuit chan struct{},
+	packets ...*htlcPacket) chan error {
 
 	var (
 		// fwdChan is a buffered channel used to receive err msgs from
@@ -567,6 +564,9 @@ func (s *Switch) ForwardPackets(packets ...*htlcPacket) chan error {
 	// so, we exit early to avoid incrementing the switch's waitgroup while
 	// it is already in the process of shutting down.
 	select {
+	case <-linkQuit:
+		close(errChan)
+		return errChan
 	case <-s.quit:
 		close(errChan)
 		return errChan
@@ -592,7 +592,10 @@ func (s *Switch) ForwardPackets(packets ...*htlcPacket) chan error {
 			circuits = append(circuits, circuit)
 			addBatch = append(addBatch, packet)
 		default:
-			s.routeAsync(packet, fwdChan)
+			err := s.routeAsync(packet, fwdChan, linkQuit)
+			if err != nil {
+				return errChan
+			}
 			numSent++
 		}
 	}
@@ -634,7 +637,10 @@ func (s *Switch) ForwardPackets(packets ...*htlcPacket) chan error {
 	// Now, forward any packets for circuits that were successfully added to
 	// the switch's circuit map.
 	for _, packet := range addedPackets {
-		s.routeAsync(packet, fwdChan)
+		err := s.routeAsync(packet, fwdChan, linkQuit)
+		if err != nil {
+			return errChan
+		}
 		numSent++
 	}
 
@@ -653,7 +659,7 @@ func (s *Switch) ForwardPackets(packets ...*htlcPacket) chan error {
 		}
 
 		for _, packet := range failedPackets {
-			addErr := errors.Errorf("failing packet after " +
+			addErr := errors.New("failing packet after " +
 				"detecting incomplete forward")
 
 			// We don't handle the error here since this method
@@ -676,9 +682,7 @@ func (s *Switch) ForwardPackets(packets ...*htlcPacket) chan error {
 func (s *Switch) proxyFwdErrs(num *int, wg *sync.WaitGroup,
 	fwdChan, errChan chan error) {
 	defer s.wg.Done()
-	defer func() {
-		close(errChan)
-	}()
+	defer close(errChan)
 
 	// Wait here until the outer function has finished persisting
 	// and routing the packets. This guarantees we don't read from num until
@@ -709,21 +713,25 @@ func (s *Switch) route(packet *htlcPacket) error {
 	select {
 	case s.htlcPlex <- command:
 	case <-s.quit:
-		return errors.New("Htlc Switch was stopped")
+		return ErrSwitchExiting
 	}
 
 	select {
 	case err := <-command.err:
 		return err
 	case <-s.quit:
-		return errors.New("Htlc Switch was stopped")
+		return ErrSwitchExiting
 	}
 }
 
 // routeAsync sends a packet through the htlc switch, using the provided err
-// chan to propagate errors back to the caller. This method does not wait for
-// a response before returning.
-func (s *Switch) routeAsync(packet *htlcPacket, errChan chan error) error {
+// chan to propagate errors back to the caller. The link's quit channel is
+// provided so that the send can be canceled if either the link or the switch
+// receive a shutdown requuest. This method does not wait for a response from
+// the htlcForwarder before returning.
+func (s *Switch) routeAsync(packet *htlcPacket, errChan chan error,
+	linkQuit chan struct{}) error {
+
 	command := &plexPacket{
 		pkt: packet,
 		err: errChan,
@@ -732,6 +740,8 @@ func (s *Switch) routeAsync(packet *htlcPacket, errChan chan error) error {
 	select {
 	case s.htlcPlex <- command:
 		return nil
+	case <-linkQuit:
+		return ErrLinkShuttingDown
 	case <-s.quit:
 		return errors.New("Htlc Switch was stopped")
 	}
@@ -751,70 +761,28 @@ func (s *Switch) routeAsync(packet *htlcPacket, errChan chan error) error {
 //   Alice         Bob         Carol
 //
 func (s *Switch) handleLocalDispatch(pkt *htlcPacket) error {
-	// Pending payments use a special interpretation of the incomingChanID and
-	// incomingHTLCID fields on packet where the channel ID is blank and the
-	// HTLC ID is the payment ID. The switch basically views the users of the
-	// node as a special channel that also offers a sequence of HTLCs.
-	payment, err := s.findPayment(pkt.incomingHTLCID)
-	if err != nil {
-		return err
-	}
-
-	switch htlc := pkt.htlc.(type) {
-
 	// User have created the htlc update therefore we should find the
 	// appropriate channel link and send the payment over this link.
-	case *lnwire.UpdateAddHTLC:
+	if htlc, ok := pkt.htlc.(*lnwire.UpdateAddHTLC); ok {
 		// Try to find links by node destination.
 		s.indexMtx.RLock()
-		links, err := s.getLinks(pkt.destNode)
+		link, err := s.getLinkByShortID(pkt.outgoingChanID)
+		s.indexMtx.RUnlock()
 		if err != nil {
-			s.indexMtx.RUnlock()
-
-			log.Errorf("unable to find links by destination %v", err)
+			log.Errorf("Link %v not found", pkt.outgoingChanID)
 			return &ForwardingError{
 				ErrorSource:    s.cfg.SelfKey,
 				FailureMessage: &lnwire.FailUnknownNextPeer{},
 			}
 		}
-		s.indexMtx.RUnlock()
 
-		// Try to find destination channel link with appropriate
-		// bandwidth.
-		var (
-			destination      ChannelLink
-			largestBandwidth lnwire.MilliSatoshi
-		)
-		for _, link := range links {
-			// We'll skip any links that aren't yet eligible for
-			// forwarding.
-			if !link.EligibleToForward() {
-				continue
-			}
-
-			bandwidth := link.Bandwidth()
-			if bandwidth > largestBandwidth {
-
-				largestBandwidth = bandwidth
-			}
-
-			if bandwidth >= htlc.Amount {
-				destination = link
-				break
-			}
-		}
-
-		// If the channel link we're attempting to forward the update
-		// over has insufficient capacity, then we'll cancel the HTLC
-		// as the payment cannot succeed.
-		if destination == nil {
-			err := fmt.Errorf("insufficient capacity in available "+
-				"outgoing links: need %v, max available is %v",
-				htlc.Amount, largestBandwidth)
+		if !link.EligibleToForward() {
+			err := fmt.Errorf("Link %v is not available to forward",
+				pkt.outgoingChanID)
 			log.Error(err)
 
-			// Note that we don't need to populate an update here,
-			// as this will go directly back to the router.
+			// The update does not need to be populated as the error
+			// will be returned back to the router.
 			htlcErr := lnwire.NewTemporaryChannelFailure(nil)
 			return &ForwardingError{
 				ErrorSource:    s.cfg.SelfKey,
@@ -823,35 +791,128 @@ func (s *Switch) handleLocalDispatch(pkt *htlcPacket) error {
 			}
 		}
 
-		// Send the packet to the destination channel link which
-		// manages then channel.
-		//
-		// TODO(roasbeef): should return with an error
-		pkt.outgoingChanID = destination.ShortChanID()
-		return destination.HandleSwitchPacket(pkt)
+		if link.Bandwidth() < htlc.Amount {
+			err := fmt.Errorf("Link %v has insufficient capacity: "+
+				"need %v, has %v", pkt.outgoingChanID,
+				htlc.Amount, link.Bandwidth())
+			log.Error(err)
 
-	// We've just received a settle update which means we can finalize the
-	// user payment and return successful response.
-	case *lnwire.UpdateFulfillHTLC:
-		// Notify the user that his payment was successfully proceed.
-		payment.err <- nil
-		payment.response <- pkt
-		payment.preimage <- htlc.PaymentPreimage
-		s.removePendingPayment(pkt.incomingHTLCID)
+			// The update does not need to be populated as the error
+			// will be returned back to the router.
+			htlcErr := lnwire.NewTemporaryChannelFailure(nil)
+			return &ForwardingError{
+				ErrorSource:    s.cfg.SelfKey,
+				ExtraMsg:       err.Error(),
+				FailureMessage: htlcErr,
+			}
+		}
 
-	// We've just received a fail update which means we can finalize the
-	// user payment and return fail response.
-	case *lnwire.UpdateFailHTLC:
-		payment.err <- s.parseFailedPayment(payment, pkt, htlc)
-		payment.response <- pkt
-		payment.preimage <- zeroPreimage
-		s.removePendingPayment(pkt.incomingHTLCID)
-
-	default:
-		return errors.New("wrong update type")
+		return link.HandleSwitchPacket(pkt)
 	}
 
+	s.wg.Add(1)
+	go s.handleLocalResponse(pkt)
+
 	return nil
+}
+
+// handleLocalResponse processes a Settle or Fail responding to a
+// locally-initiated payment. This is handled asynchronously to avoid blocking
+// the main event loop within the switch, as these operations can require
+// multiple db transactions. The guarantees of the circuit map are stringent
+// enough such that we are able to tolerate reordering of these operations
+// without side effects. The primary operations handled are:
+//  1. Ack settle/fail references, to avoid resending this response internally
+//  2. Teardown the closing circuit in the circuit map
+//  3. Transition the payment status to grounded or completed.
+//  4. Respond to an in-mem pending payment, if it is found.
+//
+// NOTE: This method MUST be spawned as a goroutine.
+func (s *Switch) handleLocalResponse(pkt *htlcPacket) {
+	defer s.wg.Done()
+
+	// First, we'll clean up any fwdpkg references, circuit entries, and
+	// mark in our db that the payment for this payment hash has either
+	// succeeded or failed.
+	//
+	// If this response is contained in a forwarding package, we'll start by
+	// acking the settle/fail so that we don't continue to retransmit the
+	// HTLC internally.
+	if pkt.destRef != nil {
+		if err := s.ackSettleFail(*pkt.destRef); err != nil {
+			log.Warnf("Unable to ack settle/fail reference: %s: %v",
+				*pkt.destRef, err)
+			return
+		}
+	}
+
+	// Next, we'll remove the circuit since we are about to complete an
+	// fulfill/fail of this HTLC. Since we've already removed the
+	// settle/fail fwdpkg reference, the response from the peer cannot be
+	// replayed internally if this step fails. If this happens, this logic
+	// will be executed when a provided resolution message comes through.
+	// This can only happen if the circuit is still open, which is why this
+	// ordering is chosen.
+	if err := s.teardownCircuit(pkt); err != nil {
+		log.Warnf("Unable to teardown circuit %s: %v",
+			pkt.inKey(), err)
+		return
+	}
+
+	// Locate the pending payment to notify the application that this
+	// payment has failed. If one is not found, it likely means the daemon
+	// has been restarted since sending the payment.
+	payment := s.findPayment(pkt.incomingHTLCID)
+
+	var (
+		preimage   [32]byte
+		paymentErr error
+	)
+
+	switch htlc := pkt.htlc.(type) {
+
+	// We've received a settle update which means we can finalize the user
+	// payment and return successful response.
+	case *lnwire.UpdateFulfillHTLC:
+		// Persistently mark that a payment to this payment hash
+		// succeeded. This will prevent us from ever making another
+		// payment to this hash.
+		err := s.control.Success(pkt.circuit.PaymentHash)
+		if err != nil && err != ErrPaymentAlreadyCompleted {
+			log.Warnf("Unable to mark completed payment %x: %v",
+				pkt.circuit.PaymentHash, err)
+			return
+		}
+
+		preimage = htlc.PaymentPreimage
+
+	// We've received a fail update which means we can finalize the user
+	// payment and return fail response.
+	case *lnwire.UpdateFailHTLC:
+		// Persistently mark that a payment to this payment hash failed.
+		// This will permit us to make another attempt at a successful
+		// payment.
+		err := s.control.Fail(pkt.circuit.PaymentHash)
+		if err != nil && err != ErrPaymentAlreadyCompleted {
+			log.Warnf("Unable to ground payment %x: %v",
+				pkt.circuit.PaymentHash, err)
+			return
+		}
+
+		paymentErr = s.parseFailedPayment(payment, pkt, htlc)
+
+	default:
+		log.Warnf("Received unknown response type: %T", pkt.htlc)
+		return
+	}
+
+	// Deliver the payment error and preimage to the application, if it is
+	// waiting for a response.
+	if payment != nil {
+		payment.err <- paymentErr
+		payment.preimage <- preimage
+		s.removePendingPayment(pkt.incomingHTLCID)
+	}
 }
 
 // parseFailedPayment determines the appropriate failure message to return to
@@ -876,7 +937,8 @@ func (s *Switch) parseFailedPayment(payment *pendingPayment, pkt *htlcPacket,
 		failureMsg, err := lnwire.DecodeFailure(r, 0)
 		if err != nil {
 			userErr = fmt.Sprintf("unable to decode onion failure, "+
-				"htlc with hash(%x): %v", payment.paymentHash[:], err)
+				"htlc with hash(%x): %v",
+				pkt.circuit.PaymentHash[:], err)
 			log.Error(userErr)
 
 			// As this didn't even clear the link, we don't need to
@@ -903,6 +965,18 @@ func (s *Switch) parseFailedPayment(payment *pendingPayment, pkt *htlcPacket,
 			FailureMessage: lnwire.FailPermanentChannelFailure{},
 		}
 
+	// If the provided payment is nil, we have discarded the error decryptor
+	// due to a restart. We'll return a fixed error and signal a temporary
+	// channel failure to the router.
+	case payment == nil:
+		userErr := fmt.Sprintf("error decryptor for payment " +
+			"could not be located, likely due to restart")
+		failure = &ForwardingError{
+			ErrorSource:    s.cfg.SelfKey,
+			ExtraMsg:       userErr,
+			FailureMessage: lnwire.NewTemporaryChannelFailure(nil),
+		}
+
 	// A regular multi-hop payment error that we'll need to
 	// decrypt.
 	default:
@@ -911,8 +985,9 @@ func (s *Switch) parseFailedPayment(payment *pendingPayment, pkt *htlcPacket,
 		// error. If we're unable to then we'll bail early.
 		failure, err = payment.deobfuscator.DecryptError(htlc.Reason)
 		if err != nil {
-			userErr := fmt.Sprintf("unable to de-obfuscate onion failure, "+
-				"htlc with hash(%x): %v", payment.paymentHash[:], err)
+			userErr := fmt.Sprintf("unable to de-obfuscate onion "+
+				"failure, htlc with hash(%x): %v",
+				pkt.circuit.PaymentHash[:], err)
 			log.Error(userErr)
 			failure = &ForwardingError{
 				ErrorSource:    s.cfg.SelfKey,
@@ -950,7 +1025,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 			// than we should notify this link that some error
 			// occurred.
 			failure := &lnwire.FailUnknownNextPeer{}
-			addErr := errors.Errorf("unable to find link with "+
+			addErr := fmt.Errorf("unable to find link with "+
 				"destination %v", packet.outgoingChanID)
 
 			return s.failAddPacket(packet, failure, addErr)
@@ -1020,7 +1095,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 				failure = lnwire.NewTemporaryChannelFailure(update)
 			}
 
-			addErr := errors.Errorf("unable to find appropriate "+
+			addErr := fmt.Errorf("unable to find appropriate "+
 				"channel link insufficient capacity, need "+
 				"%v", htlc.Amount)
 
@@ -1085,7 +1160,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 					failure,
 				)
 				if err != nil {
-					err = errors.Errorf("unable to obfuscate "+
+					err = fmt.Errorf("unable to obfuscate "+
 						"error: %v", err)
 					log.Error(err)
 				}
@@ -1147,7 +1222,7 @@ func (s *Switch) failAddPacket(packet *htlcPacket,
 	// obfuscate the failure for their eyes only.
 	reason, err := packet.obfuscator.EncryptFirstHop(failure)
 	if err != nil {
-		err := errors.Errorf("unable to obfuscate "+
+		err := fmt.Errorf("unable to obfuscate "+
 			"error: %v", err)
 		log.Error(err)
 		return err
@@ -1156,6 +1231,7 @@ func (s *Switch) failAddPacket(packet *htlcPacket,
 	log.Error(failErr)
 
 	failPkt := &htlcPacket{
+		sourceRef:      packet.sourceRef,
 		incomingChanID: packet.incomingChanID,
 		incomingHTLCID: packet.incomingHTLCID,
 		circuit:        packet.circuit,
@@ -1167,7 +1243,7 @@ func (s *Switch) failAddPacket(packet *htlcPacket,
 	// Route a fail packet back to the source link.
 	err = s.mailOrchestrator.Deliver(failPkt.incomingChanID, failPkt)
 	if err != nil {
-		err = errors.Errorf("source chanid=%v unable to "+
+		err = fmt.Errorf("source chanid=%v unable to "+
 			"handle switch packet: %v",
 			packet.incomingChanID, err)
 		log.Error(err)
@@ -1244,7 +1320,7 @@ func (s *Switch) closeCircuit(pkt *htlcPacket) (*PaymentCircuit, error) {
 	// Failed to close circuit because it does not exist. This is likely
 	// because the circuit was already successfully closed.
 	case ErrUnknownCircuit:
-		err := errors.Errorf("Unable to find target channel "+
+		err := fmt.Errorf("Unable to find target channel "+
 			"for HTLC settle/fail: channel ID = %s, "+
 			"HTLC ID = %d", pkt.outgoingChanID,
 			pkt.outgoingHTLCID)
@@ -1355,8 +1431,7 @@ func (s *Switch) CloseLink(chanPoint *wire.OutPoint, closeType ChannelCloseType,
 		return updateChan, errChan
 
 	case <-s.quit:
-		errChan <- errors.New("unable close channel link, htlc " +
-			"switch already stopped")
+		errChan <- ErrSwitchExiting
 		close(updateChan)
 		return updateChan, errChan
 	}
@@ -1379,20 +1454,41 @@ func (s *Switch) htlcForwarder() {
 		s.blockEpochStream.Cancel()
 
 		// Remove all links once we've been signalled for shutdown.
+		var linksToStop []ChannelLink
 		s.indexMtx.Lock()
 		for _, link := range s.linkIndex {
-			if err := s.removeLink(link.ChanID()); err != nil {
-				log.Errorf("unable to remove "+
-					"channel link on stop: %v", err)
+			activeLink := s.removeLink(link.ChanID())
+			if activeLink == nil {
+				log.Errorf("unable to remove ChannelLink(%v) "+
+					"on stop", link.ChanID())
+				continue
 			}
+			linksToStop = append(linksToStop, activeLink)
 		}
 		for _, link := range s.pendingLinkIndex {
-			if err := s.removeLink(link.ChanID()); err != nil {
-				log.Errorf("unable to remove pending "+
-					"channel link on stop: %v", err)
+			pendingLink := s.removeLink(link.ChanID())
+			if pendingLink == nil {
+				log.Errorf("unable to remove ChannelLink(%v) "+
+					"on stop", link.ChanID())
+				continue
 			}
+			linksToStop = append(linksToStop, pendingLink)
 		}
 		s.indexMtx.Unlock()
+
+		// Now that all pending and live links have been removed from
+		// the forwarding indexes, stop each one before shutting down.
+		// We'll shut them down in parallel to make exiting as fast as
+		// possible.
+		var wg sync.WaitGroup
+		for _, link := range linksToStop {
+			wg.Add(1)
+			go func(l ChannelLink) {
+				defer wg.Done()
+				l.Stop()
+			}(link)
+		}
+		wg.Wait()
 
 		// Before we exit fully, we'll attempt to flush out any
 		// forwarding events that may still be lingering since the last
@@ -1437,7 +1533,7 @@ out:
 			if !ok {
 				s.indexMtx.RUnlock()
 
-				req.Err <- errors.Errorf("no peer for channel with "+
+				req.Err <- fmt.Errorf("no peer for channel with "+
 					"chan_id=%x", chanID[:])
 				continue
 			}
@@ -1595,7 +1691,7 @@ func (s *Switch) Start() error {
 
 	log.Infof("Starting HTLC Switch")
 
-	blockEpochStream, err := s.cfg.Notifier.RegisterBlockEpochNtfn()
+	blockEpochStream, err := s.cfg.Notifier.RegisterBlockEpochNtfn(nil)
 	if err != nil {
 		return err
 	}
@@ -1617,15 +1713,35 @@ func (s *Switch) Start() error {
 // forwarding packages and reforwards any Settle or Fail HTLCs found. This is
 // used to resurrect the switch's mailboxes after a restart.
 func (s *Switch) reforwardResponses() error {
-	activeChannels, err := s.cfg.DB.FetchAllOpenChannels()
+	openChannels, err := s.cfg.DB.FetchAllOpenChannels()
 	if err != nil {
 		return err
 	}
 
-	for _, activeChannel := range activeChannels {
-		shortChanID := activeChannel.ShortChanID()
+	for _, openChannel := range openChannels {
+		shortChanID := openChannel.ShortChanID()
+
+		// Locally-initiated payments never need reforwarding.
+		if shortChanID == sourceHop {
+			continue
+		}
+
+		// If the channel is pending, it should have no forwarding
+		// packages, and nothing to reforward.
+		if openChannel.IsPending {
+			continue
+		}
+
+		// Channels in open or waiting-close may still have responses in
+		// their forwarding packages. We will continue to reattempt
+		// forwarding on startup until the channel is fully-closed.
+		//
+		// Load this channel's forwarding packages, and deliver them to
+		// the switch.
 		fwdPkgs, err := s.loadChannelFwdPkgs(shortChanID)
 		if err != nil {
+			log.Errorf("unable to load forwarding "+
+				"packages for %v: %v", shortChanID, err)
 			return err
 		}
 
@@ -1720,7 +1836,10 @@ func (s *Switch) reforwardSettleFails(fwdPkgs []*channeldb.FwdPkg) {
 			}
 		}
 
-		errChan := s.ForwardPackets(switchPackets...)
+		// Since this send isn't tied to a specific link, we pass a nil
+		// link quit channel, meaning the send will fail only if the
+		// switch receives a shutdown request.
+		errChan := s.ForwardPackets(nil, switchPackets...)
 		go handleBatchFwdErrs(errChan)
 	}
 }
@@ -1775,11 +1894,11 @@ func (s *Switch) AddLink(link ChannelLink) error {
 
 	chanID := link.ChanID()
 
-	// If a link already exists, then remove the prior one so we can
-	// replace it with this fresh instance.
+	// First, ensure that this link is not already active in the switch.
 	_, err := s.getLink(chanID)
 	if err == nil {
-		s.removeLink(chanID)
+		return fmt.Errorf("unable to add ChannelLink(%v), already "+
+			"active", chanID)
 	}
 
 	// Get and attach the mailbox for this link, which buffers packets in
@@ -1867,24 +1986,38 @@ func (s *Switch) getLinkByShortID(chanID lnwire.ShortChannelID) (ChannelLink, er
 	return link, nil
 }
 
-// RemoveLink is used to initiate the handling of the remove link command. The
-// request will be propagated/handled to/in the main goroutine.
-func (s *Switch) RemoveLink(chanID lnwire.ChannelID) error {
-	s.indexMtx.Lock()
-	defer s.indexMtx.Unlock()
+// HasActiveLink returns true if the given channel ID has a link in the link
+// index.
+func (s *Switch) HasActiveLink(chanID lnwire.ChannelID) bool {
+	s.indexMtx.RLock()
+	defer s.indexMtx.RUnlock()
 
-	return s.removeLink(chanID)
+	_, ok := s.linkIndex[chanID]
+	return ok
+}
+
+// RemoveLink purges the switch of any link associated with chanID. If a pending
+// or active link is not found, this method does nothing. Otherwise, the method
+// returns after the link has been completely shutdown.
+func (s *Switch) RemoveLink(chanID lnwire.ChannelID) {
+	s.indexMtx.Lock()
+	link := s.removeLink(chanID)
+	s.indexMtx.Unlock()
+
+	if link != nil {
+		link.Stop()
+	}
 }
 
 // removeLink is used to remove and stop the channel link.
 //
 // NOTE: This MUST be called with the indexMtx held.
-func (s *Switch) removeLink(chanID lnwire.ChannelID) error {
+func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
 	log.Infof("Removing channel link with ChannelID(%v)", chanID)
 
 	link, err := s.getLink(chanID)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	// Remove the channel from live link indexes.
@@ -1905,9 +2038,7 @@ func (s *Switch) removeLink(chanID lnwire.ChannelID) error {
 		}
 	}
 
-	go link.Stop()
-
-	return nil
+	return link
 }
 
 // UpdateShortChanID updates the short chan ID for an existing channel. This is
@@ -1974,7 +2105,7 @@ func (s *Switch) GetLinksByInterface(hop [33]byte) ([]ChannelLink, error) {
 func (s *Switch) getLinks(destination [33]byte) ([]ChannelLink, error) {
 	links, ok := s.interfaceIndex[destination]
 	if !ok {
-		return nil, errors.Errorf("unable to locate channel link by "+
+		return nil, fmt.Errorf("unable to locate channel link by "+
 			"destination hop id %x", destination)
 	}
 
@@ -1988,30 +2119,26 @@ func (s *Switch) getLinks(destination [33]byte) ([]ChannelLink, error) {
 
 // removePendingPayment is the helper function which removes the pending user
 // payment.
-func (s *Switch) removePendingPayment(paymentID uint64) error {
+func (s *Switch) removePendingPayment(paymentID uint64) {
 	s.pendingMutex.Lock()
 	defer s.pendingMutex.Unlock()
 
-	if _, ok := s.pendingPayments[paymentID]; !ok {
-		return errors.Errorf("Cannot find pending payment with ID %d",
-			paymentID)
-	}
-
 	delete(s.pendingPayments, paymentID)
-	return nil
 }
 
 // findPayment is the helper function which find the payment.
-func (s *Switch) findPayment(paymentID uint64) (*pendingPayment, error) {
+func (s *Switch) findPayment(paymentID uint64) *pendingPayment {
 	s.pendingMutex.RLock()
 	defer s.pendingMutex.RUnlock()
 
 	payment, ok := s.pendingPayments[paymentID]
 	if !ok {
-		return nil, errors.Errorf("Cannot find pending payment with ID %d",
+		log.Errorf("Cannot find pending payment with ID %d",
 			paymentID)
+		return nil
 	}
-	return payment, nil
+
+	return payment
 }
 
 // CircuitModifier returns a reference to subset of the interfaces provided by
@@ -2023,6 +2150,9 @@ func (s *Switch) CircuitModifier() CircuitModifier {
 // numPendingPayments is helper function which returns the overall number of
 // pending user payments.
 func (s *Switch) numPendingPayments() int {
+	s.pendingMutex.RLock()
+	defer s.pendingMutex.RUnlock()
+
 	return len(s.pendingPayments)
 }
 

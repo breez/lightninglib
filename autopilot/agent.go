@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"net"
 	"sync"
 	"sync/atomic"
 
@@ -31,6 +32,15 @@ type Config struct {
 	// ChanController is an interface that is able to directly manage the
 	// creation, closing and update of channels within the network.
 	ChanController ChannelController
+
+	// ConnectToPeer attempts to connect to the peer using one of its
+	// advertised addresses. The boolean returned signals whether the peer
+	// was already connected.
+	ConnectToPeer func(*btcec.PublicKey, []net.Addr) (bool, error)
+
+	// DisconnectPeer attempts to disconnect the peer with the given public
+	// key.
+	DisconnectPeer func(*btcec.PublicKey) error
 
 	// WalletBalance is a function closure that should return the current
 	// available balance o the backing wallet.
@@ -176,12 +186,21 @@ type balanceUpdate struct {
 	balanceDelta btcutil.Amount
 }
 
-// chanOpenUpdate is a type of external state update the indicates a new
+// nodeUpdates is a type of external state update that reflects an addition or
+// modification in channel graph node membership.
+type nodeUpdates struct{}
+
+// chanOpenUpdate is a type of external state update that indicates a new
 // channel has been opened, either by the Agent itself (within the main
 // controller loop), or by an external user to the system.
 type chanOpenUpdate struct {
 	newChan Channel
 }
+
+// chanPendingOpenUpdate is a type of external state update that indicates a new
+// channel has been opened, either by the agent itself or an external subsystem,
+// but is still pending.
+type chanPendingOpenUpdate struct{}
 
 // chanOpenFailureUpdate is a type of external state update that indicates
 // a previous channel open failed, and that it might be possible to try again.
@@ -196,9 +215,27 @@ type chanCloseUpdate struct {
 // OnBalanceChange is a callback that should be executed each time the balance of
 // the backing wallet changes.
 func (a *Agent) OnBalanceChange(delta btcutil.Amount) {
+	a.wg.Add(1)
 	go func() {
-		a.stateUpdates <- &balanceUpdate{
-			balanceDelta: delta,
+		defer a.wg.Done()
+
+		select {
+		case a.stateUpdates <- &balanceUpdate{balanceDelta: delta}:
+		case <-a.quit:
+		}
+	}()
+}
+
+// OnNodeUpdates is a callback that should be executed each time our channel
+// graph has new nodes or their node announcements are updated.
+func (a *Agent) OnNodeUpdates() {
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+
+		select {
+		case a.stateUpdates <- &nodeUpdates{}:
+		case <-a.quit:
 		}
 	}()
 }
@@ -206,9 +243,25 @@ func (a *Agent) OnBalanceChange(delta btcutil.Amount) {
 // OnChannelOpen is a callback that should be executed each time a new channel
 // is manually opened by the user or any system outside the autopilot agent.
 func (a *Agent) OnChannelOpen(c Channel) {
+	a.wg.Add(1)
 	go func() {
-		a.stateUpdates <- &chanOpenUpdate{
-			newChan: c,
+		defer a.wg.Done()
+
+		select {
+		case a.stateUpdates <- &chanOpenUpdate{newChan: c}:
+		case <-a.quit:
+		}
+	}()
+}
+
+// OnChannelPendingOpen is a callback that should be executed each time a new
+// channel is opened, either by the agent or an external subsystems, but is
+// still pending.
+func (a *Agent) OnChannelPendingOpen() {
+	go func() {
+		select {
+		case a.stateUpdates <- &chanPendingOpenUpdate{}:
+		case <-a.quit:
 		}
 	}()
 }
@@ -217,8 +270,14 @@ func (a *Agent) OnChannelOpen(c Channel) {
 // autopilot has attempted to open a channel, but failed. In this case we can
 // retry channel creation with a different node.
 func (a *Agent) OnChannelOpenFailure() {
+	a.wg.Add(1)
 	go func() {
-		a.stateUpdates <- &chanOpenFailureUpdate{}
+		defer a.wg.Done()
+
+		select {
+		case a.stateUpdates <- &chanOpenFailureUpdate{}:
+		case <-a.quit:
+		}
 	}()
 }
 
@@ -226,9 +285,13 @@ func (a *Agent) OnChannelOpenFailure() {
 // channel has been closed for any reason. This includes regular
 // closes, force closes, and channel breaches.
 func (a *Agent) OnChannelClose(closedChans ...lnwire.ShortChannelID) {
+	a.wg.Add(1)
 	go func() {
-		a.stateUpdates <- &chanCloseUpdate{
-			closedChans: closedChans,
+		defer a.wg.Done()
+
+		select {
+		case a.stateUpdates <- &chanCloseUpdate{closedChans: closedChans}:
+		case <-a.quit:
 		}
 	}()
 }
@@ -354,6 +417,12 @@ func (a *Agent) controller(startingBalance btcutil.Amount) {
 
 				updateBalance()
 
+			// A new channel has been opened by the agent or an
+			// external subsystem, but is still pending
+			// confirmation.
+			case *chanPendingOpenUpdate:
+				updateBalance()
+
 			// A channel has been closed, this may free up an
 			// available slot, triggering a new channel update.
 			case *chanCloseUpdate:
@@ -366,6 +435,14 @@ func (a *Agent) controller(startingBalance btcutil.Amount) {
 				}
 
 				updateBalance()
+
+			// New nodes have been added to the graph or their node
+			// announcements have been updated. We will consider
+			// opening channels to these nodes if we haven't
+			// stabilized.
+			case *nodeUpdates:
+				log.Infof("Node updates received, assessing " +
+					"need for more channels")
 			}
 
 			pendingMtx.Lock()
@@ -448,20 +525,86 @@ func (a *Agent) controller(startingBalance btcutil.Amount) {
 					continue
 				}
 
-				nID := NewNodeID(chanCandidate.PeerKey)
-				pendingOpens[nID] = Channel{
-					Capacity: chanCandidate.ChanAmt,
-					Node:     nID,
-				}
-
 				go func(directive AttachmentDirective) {
-
+					// We'll start out by attempting to
+					// connect to the peer in order to begin
+					// the funding workflow.
 					pub := directive.PeerKey
-					err := a.cfg.ChanController.OpenChannel(
+					alreadyConnected, err := a.cfg.ConnectToPeer(
+						pub, directive.Addrs,
+					)
+					if err != nil {
+						log.Warnf("Unable to connect "+
+							"to %x: %v",
+							pub.SerializeCompressed(),
+							err)
 
-						directive.PeerKey,
-						directive.ChanAmt,
-						directive.Addrs,
+						// Since we failed to connect to
+						// them, we'll mark them as
+						// failed so that we don't
+						// attempt to connect to them
+						// again.
+						nodeID := NewNodeID(pub)
+						pendingMtx.Lock()
+						failedNodes[nodeID] = struct{}{}
+						pendingMtx.Unlock()
+
+						// Finally, we'll trigger the
+						// agent to select new peers to
+						// connect to.
+						a.OnChannelOpenFailure()
+
+						return
+					}
+
+					// If we were succesful, we'll track
+					// this peer in our set of pending
+					// opens. We do this here to ensure we
+					// don't stall on selecting new peers if
+					// the connection attempt happens to
+					// take too long.
+					pendingMtx.Lock()
+					if uint16(len(pendingOpens))+1 >
+						a.cfg.MaxPendingOpens {
+
+						pendingMtx.Unlock()
+
+						// Since we've reached our max
+						// number of pending opens,
+						// we'll disconnect this peer
+						// and exit. However, if we were
+						// previously connected to them,
+						// then we'll make sure to
+						// maintain the connection
+						// alive.
+						if alreadyConnected {
+							return
+						}
+
+						err = a.cfg.DisconnectPeer(
+							pub,
+						)
+						if err != nil {
+							log.Warnf("Unable to "+
+								"disconnect peer "+
+								"%x: %v",
+								pub.SerializeCompressed(),
+								err)
+						}
+						return
+					}
+
+					nodeID := NewNodeID(directive.PeerKey)
+					pendingOpens[nodeID] = Channel{
+						Capacity: directive.ChanAmt,
+						Node:     nodeID,
+					}
+					pendingMtx.Unlock()
+
+					// We can then begin the funding
+					// workflow with this peer.
+					err = a.cfg.ChanController.OpenChannel(
+						pub, directive.ChanAmt,
 					)
 					if err != nil {
 						log.Warnf("Unable to open "+
@@ -470,23 +613,46 @@ func (a *Agent) controller(startingBalance btcutil.Amount) {
 							directive.ChanAmt, err)
 
 						// As the attempt failed, we'll
-						// clear it from the set of
-						// pending channels.
+						// clear the peer from the set of
+						// pending opens and mark them
+						// as failed so we don't attempt
+						// to open a channel to them
+						// again.
 						pendingMtx.Lock()
-						nID := NewNodeID(directive.PeerKey)
-						delete(pendingOpens, nID)
-
-						// Mark this node as failed so we don't
-						// attempt it again.
-						failedNodes[nID] = struct{}{}
+						delete(pendingOpens, nodeID)
+						failedNodes[nodeID] = struct{}{}
 						pendingMtx.Unlock()
 
-						// Trigger the autopilot controller to
-						// re-evaluate everything and possibly
-						// retry with a different node.
+						// Trigger the agent to
+						// re-evaluate everything and
+						// possibly retry with a
+						// different node.
 						a.OnChannelOpenFailure()
+
+						// Finally, we should also
+						// disconnect the peer if we
+						// weren't already connected to
+						// them beforehand by an
+						// external subsystem.
+						if alreadyConnected {
+							return
+						}
+
+						err = a.cfg.DisconnectPeer(pub)
+						if err != nil {
+							log.Warnf("Unable to "+
+								"disconnect peer "+
+								"%x: %v",
+								pub.SerializeCompressed(),
+								err)
+						}
 					}
 
+					// Since the channel open was successful
+					// and is currently pending, we'll
+					// trigger the autopilot agent to query
+					// for more peers.
+					a.OnChannelPendingOpen()
 				}(chanCandidate)
 			}
 			pendingMtx.Unlock()

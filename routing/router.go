@@ -156,7 +156,8 @@ type Config struct {
 	// forward a fully encoded payment to the first hop in the route
 	// denoted by its public key. A non-nil error is to be returned if the
 	// payment was unsuccessful.
-	SendToSwitch func(firstHop [33]byte, htlcAdd *lnwire.UpdateAddHTLC,
+	SendToSwitch func(firstHop lnwire.ShortChannelID,
+		htlcAdd *lnwire.UpdateAddHTLC,
 		circuit *sphinx.Circuit) ([sha256.Size]byte, error)
 
 	// ChannelPruneExpiry is the duration used to determine if a channel
@@ -945,7 +946,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		r.rejectMtx.RLock()
 		if _, ok := r.rejectCache[msg.ChannelID]; ok {
 			r.rejectMtx.RUnlock()
-			return newErrf(ErrIgnored, "recently rejected "+
+			return newErrf(ErrRejected, "recently rejected "+
 				"chan_id=%v", msg.ChannelID)
 		}
 		r.rejectMtx.RUnlock()
@@ -1054,7 +1055,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		r.rejectMtx.RLock()
 		if _, ok := r.rejectCache[msg.ChannelID]; ok {
 			r.rejectMtx.RUnlock()
-			return newErrf(ErrIgnored, "recently rejected "+
+			return newErrf(ErrRejected, "recently rejected "+
 				"chan_id=%v", msg.ChannelID)
 		}
 		r.rejectMtx.RUnlock()
@@ -1079,30 +1080,31 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		// As edges are directional edge node has a unique policy for
 		// the direction of the edge they control. Therefore we first
 		// check if we already have the most up to date information for
-		// that edge. If so, then we can exit early.
+		// that edge. If this message has a timestamp not strictly
+		// newer than what we already know of we can exit early.
 		switch {
 
 		// A flag set of 0 indicates this is an announcement for the
 		// "first" node in the channel.
 		case msg.Flags&lnwire.ChanUpdateDirection == 0:
-			if edge1Timestamp.After(msg.LastUpdate) ||
-				edge1Timestamp.Equal(msg.LastUpdate) {
 
-				return newErrf(ErrIgnored, "Ignoring update "+
-					"(flags=%v) for known chan_id=%v", msg.Flags,
-					msg.ChannelID)
+			// Ignore outdated message.
+			if !edge1Timestamp.Before(msg.LastUpdate) {
+				return newErrf(ErrOutdated, "Ignoring "+
+					"outdated update (flags=%v) for known "+
+					"chan_id=%v", msg.Flags, msg.ChannelID)
 
 			}
 
 		// Similarly, a flag set of 1 indicates this is an announcement
 		// for the "second" node in the channel.
 		case msg.Flags&lnwire.ChanUpdateDirection == 1:
-			if edge2Timestamp.After(msg.LastUpdate) ||
-				edge2Timestamp.Equal(msg.LastUpdate) {
 
-				return newErrf(ErrIgnored, "Ignoring update "+
-					"(flags=%v) for known chan_id=%v", msg.Flags,
-					msg.ChannelID)
+			// Ignore outdated message.
+			if !edge2Timestamp.Before(msg.LastUpdate) {
+				return newErrf(ErrOutdated, "Ignoring "+
+					"outdated update (flags=%v) for known "+
+					"chan_id=%v", msg.Flags, msg.ChannelID)
 			}
 		}
 
@@ -1713,7 +1715,9 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 		// Attempt to send this payment through the network to complete
 		// the payment. If this attempt fails, then we'll continue on
 		// to the next available route.
-		firstHop := route.Hops[0].Channel.Node.PubKeyBytes
+		firstHop := lnwire.NewShortChanIDFromInt(
+			route.Hops[0].Channel.ChannelID,
+		)
 		preImage, sendError = r.cfg.SendToSwitch(
 			firstHop, htlcAdd, circuit,
 		)
@@ -2018,7 +2022,7 @@ func (r *ChannelRouter) applyChannelUpdate(msg *lnwire.ChannelUpdate) error {
 		FeeBaseMSat:               lnwire.MilliSatoshi(msg.BaseFee),
 		FeeProportionalMillionths: lnwire.MilliSatoshi(msg.FeeRate),
 	})
-	if err != nil && !IsError(err, ErrIgnored) {
+	if err != nil && !IsError(err, ErrIgnored, ErrOutdated) {
 		return fmt.Errorf("Unable to apply channel update: %v", err)
 	}
 
