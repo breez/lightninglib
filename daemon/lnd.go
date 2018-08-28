@@ -882,7 +882,3 @@ func waitForWalletPassword(grpcEndpoints, restEndpoints []net.Addr,
 		return nil, fmt.Errorf("shutting down")
 	}
 }
-
-func GetCfg() (*config) {
-	return cfg
-}
