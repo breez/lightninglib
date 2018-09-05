@@ -1176,6 +1176,10 @@ type ChannelEdge struct {
 // ChanUpdatesInHorizon returns all the known channel edges which have at least
 // one edge that has an update timestamp within the specified horizon.
 func (c *ChannelGraph) ChanUpdatesInHorizon(startTime, endTime time.Time) ([]ChannelEdge, error) {
+	// To ensure we don't return duplicate ChannelEdges, we'll use an
+	// additional map to keep track of the edges already seen to prevent
+	// re-adding it.
+	edgesSeen := make(map[uint64]struct{})
 	var edgesInHorizon []ChannelEdge
 
 	err := c.db.View(func(tx *bolt.Tx) error {
@@ -1219,10 +1223,20 @@ func (c *ChannelGraph) ChanUpdatesInHorizon(startTime, endTime time.Time) ([]Cha
 			// chan ID so we can query it in the DB.
 			chanID := indexKey[8:]
 
+			// If we've already retrieved the info and policies for
+			// this edge, then we can skip it as we don't need to do
+			// so again.
+			chanIDInt := byteOrder.Uint64(chanID)
+			if _, ok := edgesSeen[chanIDInt]; ok {
+				continue
+			}
+
 			// First, we'll fetch the static edge information.
 			edgeInfo, err := fetchChanEdgeInfo(edgeIndex, chanID)
 			if err != nil {
-				return err
+				chanID := byteOrder.Uint64(chanID)
+				return fmt.Errorf("unable to fetch info for "+
+					"edge with chan_id=%v: %v", chanID, err)
 			}
 			edgeInfo.db = c.db
 
@@ -1232,11 +1246,15 @@ func (c *ChannelGraph) ChanUpdatesInHorizon(startTime, endTime time.Time) ([]Cha
 				edgeIndex, edges, nodes, chanID, c.db,
 			)
 			if err != nil {
-				return err
+				chanID := byteOrder.Uint64(chanID)
+				return fmt.Errorf("unable to fetch policies "+
+					"for edge with chan_id=%v: %v", chanID,
+					err)
 			}
 
 			// Finally, we'll collate this edge with the rest of
 			// edges to be returned.
+			edgesSeen[chanIDInt] = struct{}{}
 			edgesInHorizon = append(edgesInHorizon, ChannelEdge{
 				Info:    &edgeInfo,
 				Policy1: edge1,
@@ -1612,34 +1630,46 @@ func (c *ChannelGraph) UpdateEdgePolicy(edge *ChannelEdgePolicy) error {
 		if err != nil {
 			return err
 		}
-
-		// Create the channelID key be converting the channel ID
-		// integer into a byte slice.
-		var chanID [8]byte
-		byteOrder.PutUint64(chanID[:], edge.ChannelID)
-
-		// With the channel ID, we then fetch the value storing the two
-		// nodes which connect this channel edge.
-		nodeInfo := edgeIndex.Get(chanID[:])
-		if nodeInfo == nil {
-			return ErrEdgeNotFound
+		nodes, err := tx.CreateBucketIfNotExists(nodeBucket)
+		if err != nil {
+			return err
 		}
 
-		// Depending on the flags value passed above, either the first
-		// or second edge policy is being updated.
-		var fromNode, toNode []byte
-		if edge.Flags&lnwire.ChanUpdateDirection == 0 {
-			fromNode = nodeInfo[:33]
-			toNode = nodeInfo[33:67]
-		} else {
-			fromNode = nodeInfo[33:67]
-			toNode = nodeInfo[:33]
-		}
-
-		// Finally, with the direction of the edge being updated
-		// identified, we update the on-disk edge representation.
-		return putChanEdgePolicy(edges, edge, fromNode, toNode)
+		return updateEdgePolicy(edges, edgeIndex, nodes, edge)
 	})
+}
+
+// updateEdgePolicy attempts to update an edge's policy within the relevant
+// buckets using an existing database transaction.
+func updateEdgePolicy(edges, edgeIndex, nodes *bolt.Bucket,
+	edge *ChannelEdgePolicy) error {
+
+	// Create the channelID key be converting the channel ID
+	// integer into a byte slice.
+	var chanID [8]byte
+	byteOrder.PutUint64(chanID[:], edge.ChannelID)
+
+	// With the channel ID, we then fetch the value storing the two
+	// nodes which connect this channel edge.
+	nodeInfo := edgeIndex.Get(chanID[:])
+	if nodeInfo == nil {
+		return ErrEdgeNotFound
+	}
+
+	// Depending on the flags value passed above, either the first
+	// or second edge policy is being updated.
+	var fromNode, toNode []byte
+	if edge.Flags&lnwire.ChanUpdateDirection == 0 {
+		fromNode = nodeInfo[:33]
+		toNode = nodeInfo[33:66]
+	} else {
+		fromNode = nodeInfo[33:66]
+		toNode = nodeInfo[:33]
+	}
+
+	// Finally, with the direction of the edge being updated
+	// identified, we update the on-disk edge representation.
+	return putChanEdgePolicy(edges, nodes, edge, fromNode, toNode)
 }
 
 // LightningNode represents an individual vertex/node within the channel graph.
@@ -2936,7 +2966,9 @@ func deserializeChanEdgeInfo(r io.Reader) (ChannelEdgeInfo, error) {
 	return edgeInfo, nil
 }
 
-func putChanEdgePolicy(edges *bolt.Bucket, edge *ChannelEdgePolicy, from, to []byte) error {
+func putChanEdgePolicy(edges, nodes *bolt.Bucket, edge *ChannelEdgePolicy,
+	from, to []byte) error {
+
 	var edgeKey [33 + 8]byte
 	copy(edgeKey[:], from)
 	byteOrder.PutUint64(edgeKey[33:], edge.ChannelID)
@@ -2999,17 +3031,20 @@ func putChanEdgePolicy(edges *bolt.Bucket, edge *ChannelEdgePolicy, from, to []b
 
 		// In order to delete the old entry, we'll need to obtain the
 		// *prior* update time in order to delete it. To do this, we'll
-		// create an offset to slice in. Starting backwards, we'll
-		// create an offset than puts us right after the flags
-		// variable:
-		//
-		//  * pubkeySize + fee+policySize + timelockSize + flagSize
-		updateEnd := 33 + (8 * 3) + 2 + 1
-		updateStart := updateEnd - 8
-		oldUpdateTime := edgeBytes[updateStart:updateEnd]
+		// need to deserialize the existing policy within the database
+		// (now outdated by the new one), and delete its corresponding
+		// entry within the update index.
+		oldEdgePolicy, err := deserializeChanEdgePolicy(
+			bytes.NewReader(edgeBytes), nodes,
+		)
+		if err != nil {
+			return err
+		}
+
+		oldUpdateTime := uint64(oldEdgePolicy.LastUpdate.Unix())
 
 		var oldIndexKey [8 + 8]byte
-		copy(oldIndexKey[:], oldUpdateTime)
+		byteOrder.PutUint64(oldIndexKey[:8], oldUpdateTime)
 		byteOrder.PutUint64(oldIndexKey[8:], edge.ChannelID)
 
 		if err := updateIndex.Delete(oldIndexKey[:]); err != nil {
@@ -3090,7 +3125,7 @@ func fetchChanEdgePolicies(edgeIndex *bolt.Bucket, edges *bolt.Bucket,
 
 	// Similarly, the second node is contained within the latter
 	// half of the edge information.
-	node2Pub := edgeInfo[33:67]
+	node2Pub := edgeInfo[33:66]
 	edge2, err := fetchChanEdgePolicy(edges, chanID, node2Pub, nodes)
 	if err != nil {
 		return nil, nil, err

@@ -8,10 +8,10 @@ require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/aead/siphash v0.0.0-20170329201724-e404fcfc8885 // indirect
 	github.com/awalterschulze/gographviz v0.0.0-20160912181450-761fd5fbb34e
-	github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101
+	github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
-	github.com/btcsuite/btcwallet v0.0.0-20180823034257-7b84dc25a616
+	github.com/btcsuite/btcwallet v0.0.0-20180904010540-8ae4afc70174
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8 // indirect
@@ -37,7 +37,7 @@ require (
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 // indirect
-	github.com/lightninglabs/neutrino v0.0.0-20180824103028-166fe699d596
+	github.com/lightninglabs/neutrino v0.0.0-20180904012119-e7780d39ef56
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
 	github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8

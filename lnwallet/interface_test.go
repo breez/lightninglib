@@ -2,6 +2,7 @@ package lnwallet_test
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -2105,6 +2106,7 @@ func runTests(t *testing.T, walletDriver *lnwallet.WalletDriver,
 	backEnd string, miningNode *rpctest.Harness,
 	rpcConfig rpcclient.ConnConfig,
 	chainNotifier *btcdnotify.BtcdNotifier) {
+
 	var (
 		bio lnwallet.BlockChainIO
 
@@ -2283,9 +2285,14 @@ func runTests(t *testing.T, walletDriver *lnwallet.WalletDriver,
 			t.Fatalf("unknown chain driver: %v", backEnd)
 		}
 
+		aliceSeed := sha256.New()
+		aliceSeed.Write([]byte(backEnd))
+		aliceSeed.Write(aliceHDSeed[:])
+		aliceSeedBytes := aliceSeed.Sum(nil)
+
 		aliceWalletConfig := &btcwallet.Config{
 			PrivatePass:  []byte("alice-pass"),
-			HdSeed:       aliceHDSeed[:],
+			HdSeed:       aliceSeedBytes,
 			DataDir:      tempTestDirAlice,
 			NetParams:    netParams,
 			ChainSource:  aliceClient,
@@ -2302,9 +2309,14 @@ func runTests(t *testing.T, walletDriver *lnwallet.WalletDriver,
 			keychain.CoinTypeTestnet,
 		)
 
+		bobSeed := sha256.New()
+		bobSeed.Write([]byte(backEnd))
+		bobSeed.Write(bobHDSeed[:])
+		bobSeedBytes := bobSeed.Sum(nil)
+
 		bobWalletConfig := &btcwallet.Config{
 			PrivatePass:  []byte("bob-pass"),
-			HdSeed:       bobHDSeed[:],
+			HdSeed:       bobSeedBytes,
 			DataDir:      tempTestDirBob,
 			NetParams:    netParams,
 			ChainSource:  bobClient,
