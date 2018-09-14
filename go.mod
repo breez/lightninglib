@@ -11,7 +11,7 @@ require (
 	github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
-	github.com/btcsuite/btcwallet v0.0.0-20180904010540-8ae4afc70174
+	github.com/btcsuite/btcwallet v0.0.0-20180913034130-421298df2260
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8 // indirect
@@ -37,7 +37,7 @@ require (
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 // indirect
-	github.com/lightninglabs/neutrino v0.0.0-20180904012119-e7780d39ef56
+	github.com/lightninglabs/neutrino v0.0.0-20180913224338-bee0ed11601a
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
 	github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
@@ -48,6 +48,7 @@ require (
 	golang.org/x/net v0.0.0-20180719180050-a680a1efc54d
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
 	golang.org/x/sys v0.0.0-20180808154034-904bdc257025 // indirect
+	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 	google.golang.org/genproto v0.0.0-20180306020942-df60624c1e9b
 	google.golang.org/grpc v1.5.2
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect

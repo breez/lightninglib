@@ -211,15 +211,15 @@ func LndMain(args []string, readyChan chan interface{}) error {
 	var (
 		privateWalletPw = lnwallet.DefaultPrivatePassphrase
 		publicWalletPw  = lnwallet.DefaultPublicPassphrase
-		birthday        time.Time
+		birthday        = time.Now()
 		recoveryWindow  uint32
 		unlockedWallet  *wallet.Wallet
 	)
 
 	// We wait until the user provides a password over RPC. In case lnd is
-	// started with the --noencryptwallet flag, we use the default password
+	// started with the --noseedbackup flag, we use the default password
 	// for wallet encryption.
-	if !cfg.NoEncryptWallet {
+	if !cfg.NoSeedBackup {
 		walletInitParams, err := waitForWalletPassword(
 			cfg.RPCListeners, cfg.RESTListeners, serverOpts,
 			proxyOpts, tlsConf,

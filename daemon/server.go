@@ -432,10 +432,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 	// If we were requested to route connections through Tor and to
 	// automatically create an onion service, we'll initiate our Tor
 	// controller and establish a connection to the Tor server.
-	//
-	// NOTE: v3 onion services cannot be created automatically yet. In the
-	// future, this will be expanded to do so.
-	if cfg.Tor.Active && cfg.Tor.V2 {
+	if cfg.Tor.Active {
 		s.torController = tor.NewController(cfg.Tor.Control)
 	}
 
@@ -1479,34 +1476,36 @@ func (s *server) initTorController() error {
 	// Determine the different ports the server is listening on. The onion
 	// service's virtual port will map to these ports and one will be picked
 	// at random when the onion service is being accessed.
-	listenPorts := make(map[int]struct{})
+	listenPorts := make([]int, 0, len(s.listenAddrs))
 	for _, listenAddr := range s.listenAddrs {
-		// At this point, the listen addresses should have already been
-		// normalized, so it's safe to ignore the errors.
-		_, portStr, _ := net.SplitHostPort(listenAddr.String())
-		port, _ := strconv.Atoi(portStr)
-		listenPorts[port] = struct{}{}
+		port := listenAddr.(*net.TCPAddr).Port
+		listenPorts = append(listenPorts, port)
 	}
 
 	// Once the port mapping has been set, we can go ahead and automatically
 	// create our onion service. The service's private key will be saved to
 	// disk in order to regain access to this service when restarting `lnd`.
-	virtToTargPorts := tor.VirtToTargPorts{defaultPeerPort: listenPorts}
-	onionServiceAddrs, err := s.torController.AddOnionV2(
-		cfg.Tor.V2PrivateKeyPath, virtToTargPorts,
-	)
+	onionCfg := tor.AddOnionConfig{
+		VirtualPort:    defaultPeerPort,
+		TargetPorts:    listenPorts,
+		PrivateKeyPath: cfg.Tor.PrivateKeyPath,
+	}
+
+	switch {
+	case cfg.Tor.V2:
+		onionCfg.Type = tor.V2
+	case cfg.Tor.V3:
+		onionCfg.Type = tor.V3
+	}
+
+	addr, err := s.torController.AddOnion(onionCfg)
 	if err != nil {
 		return err
 	}
 
-	// Now that the onion service has been created, we'll add the different
-	// onion addresses it can be reached at to our list of advertised
-	// addresses.
-	for _, addr := range onionServiceAddrs {
-		s.currentNodeAnn.Addresses = append(
-			s.currentNodeAnn.Addresses, addr,
-		)
-	}
+	// Now that the onion service has been created, we'll add the onion
+	// address it can be reached at to our list of advertised addresses.
+	s.currentNodeAnn.Addresses = append(s.currentNodeAnn.Addresses, addr)
 
 	return nil
 }
@@ -1555,14 +1554,13 @@ type nodeAddresses struct {
 }
 
 // establishPersistentConnections attempts to establish persistent connections
-// to all our direct channel collaborators.  In order to promote liveness of
-// our active channels, we instruct the connection manager to attempt to
-// establish and maintain persistent connections to all our direct channel
-// counterparties.
+// to all our direct channel collaborators. In order to promote liveness of our
+// active channels, we instruct the connection manager to attempt to establish
+// and maintain persistent connections to all our direct channel counterparties.
 func (s *server) establishPersistentConnections() error {
-	// nodeAddrsMap stores the combination of node public keys and
-	// addresses that we'll attempt to reconnect to. PubKey strings are
-	// used as keys since other PubKey forms can't be compared.
+	// nodeAddrsMap stores the combination of node public keys and addresses
+	// that we'll attempt to reconnect to. PubKey strings are used as keys
+	// since other PubKey forms can't be compared.
 	nodeAddrsMap := map[string]*nodeAddresses{}
 
 	// Iterate through the list of LinkNodes to find addresses we should
@@ -1600,11 +1598,18 @@ func (s *server) establishPersistentConnections() error {
 
 		// Add all unique addresses from channel graph/NodeAnnouncements
 		// to the list of addresses we'll connect to for this peer.
-		var addrSet = make(map[string]net.Addr)
+		addrSet := make(map[string]net.Addr)
 		for _, addr := range policy.Node.Addresses {
 			switch addr.(type) {
-			case *net.TCPAddr, *tor.OnionAddr:
+			case *net.TCPAddr:
 				addrSet[addr.String()] = addr
+
+			// We'll only attempt to connect to Tor addresses if Tor
+			// outbound support is enabled.
+			case *tor.OnionAddr:
+				if cfg.Tor.Active {
+					addrSet[addr.String()] = addr
+				}
 			}
 		}
 
@@ -1614,8 +1619,15 @@ func (s *server) establishPersistentConnections() error {
 		if ok {
 			for _, lnAddress := range linkNodeAddrs.addresses {
 				switch lnAddress.(type) {
-				case *net.TCPAddr, *tor.OnionAddr:
+				case *net.TCPAddr:
 					addrSet[lnAddress.String()] = lnAddress
+
+				// We'll only attempt to connect to Tor
+				// addresses if Tor outbound support is enabled.
+				case *tor.OnionAddr:
+					if cfg.Tor.Active {
+						addrSet[lnAddress.String()] = lnAddress
+					}
 				}
 			}
 		}
@@ -1959,17 +1971,6 @@ func (s *server) nextPeerBackoff(pubStr string,
 	return defaultBackoff
 }
 
-// shouldRequestGraphSync returns true if the servers deems it necessary that
-// we sync channel graph state with the remote peer. This method is used to
-// avoid _always_ syncing channel graph state with each peer that connects.
-//
-// NOTE: This MUST be called with the server's mutex held.
-func (s *server) shouldRequestGraphSync() bool {
-	// Initially, we'll only request a graph sync iff we have less than two
-	// peers.
-	return len(s.peersByPub) <= 2
-}
-
 // shouldDropConnection determines if our local connection to a remote peer
 // should be dropped in the case of concurrent connection establishment. In
 // order to deterministically decide which connection should be dropped, we'll
@@ -2257,14 +2258,6 @@ func (s *server) peerConnected(conn net.Conn, connReq *connmgr.ConnReq,
 	localFeatures.Set(lnwire.DataLossProtectOptional)
 	localFeatures.Set(lnwire.GossipQueriesOptional)
 
-	// We'll only request a full channel graph sync if we detect that that
-	// we aren't fully synced yet.
-	if s.shouldRequestGraphSync() {
-		// TODO(roasbeef): only do so if gossiper doesn't have active
-		// peers?
-		localFeatures.Set(lnwire.InitialRoutingSync)
-	}
-
 	// Now that we've established a connection, create a peer, and it to
 	// the set of currently active peers.
 	p, err := newPeer(conn, connReq, s, peerAddr, inbound, localFeatures)
@@ -2355,33 +2348,6 @@ func (s *server) peerInitializer(p *peer) {
 	// Otherwise, signal to the peerTerminationWatcher that the peer startup
 	// was successful, and to begin watching the peer's wait group.
 	close(ready)
-
-	switch {
-	// If the remote peer knows of the new gossip queries feature, then
-	// we'll create a new gossipSyncer in the AuthenticatedGossiper for it.
-	case p.remoteLocalFeatures.HasFeature(lnwire.GossipQueriesOptional):
-		srvrLog.Infof("Negotiated chan series queries with %x",
-			p.pubKeyBytes[:])
-
-		// We'll only request channel updates from the remote peer if
-		// its enabled in the config, or we're already getting updates
-		// from enough peers.
-		//
-		// TODO(roasbeef): craft s.t. we only get updates from a few
-		// peers
-		recvUpdates := !cfg.NoChanUpdates
-		go s.authGossiper.InitSyncState(p, recvUpdates)
-
-	// If the remote peer has the initial sync feature bit set, then we'll
-	// being the synchronization protocol to exchange authenticated channel
-	// graph edges/vertexes, but only if they don't know of the new gossip
-	// queries.
-	case p.remoteLocalFeatures.HasFeature(lnwire.InitialRoutingSync):
-		srvrLog.Infof("Requesting full table sync with %x",
-			p.pubKeyBytes[:])
-
-		go s.authGossiper.SynchronizeNode(p)
-	}
 
 	pubStr := string(p.addr.IdentityKey.SerializeCompressed())
 
@@ -3015,6 +2981,7 @@ func createChannelUpdate(info *channeldb.ChannelEdgeInfo,
 		HtlcMinimumMsat: policy.MinHTLC,
 		BaseFee:         uint32(policy.FeeBaseMSat),
 		FeeRate:         uint32(policy.FeeProportionalMillionths),
+		ExtraOpaqueData: policy.ExtraOpaqueData,
 	}
 
 	var err error

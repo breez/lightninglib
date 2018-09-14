@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"container/list"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -25,14 +26,13 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/go-errors/errors"
 )
 
 var (
 	numNodes int32
 
 	// ErrPeerExiting signals that the peer received a disconnect request.
-	ErrPeerExiting = errors.Errorf("peer exiting")
+	ErrPeerExiting = fmt.Errorf("peer exiting")
 )
 
 const (
@@ -113,7 +113,7 @@ type peer struct {
 	pubKeyBytes [33]byte
 
 	// startTime is the time this peer connection was successfully
-	// established. It will be zero for peers that did not successfuly
+	// established. It will be zero for peers that did not successfully
 	// Start().
 	startTime time.Time
 
@@ -239,7 +239,7 @@ func (p *peer) Start() error {
 		return nil
 	}
 
-	peerLog.Tracef("peer %v starting", p)
+	peerLog.Tracef("Peer %v starting", p)
 
 	// Exchange local and global features, the init message should be very
 	// first between two nodes.
@@ -299,11 +299,16 @@ func (p *peer) Start() error {
 		return err
 	}
 
+	if len(activeChans) == 0 {
+		p.server.prunePersistentPeerConnection(p.pubKeyBytes)
+	}
+
 	// Next, load all the active channels we have with this peer,
 	// registering them with the switch and launching the necessary
 	// goroutines required to operate them.
 	peerLog.Debugf("Loaded %v active channels from database with "+
 		"NodeKey(%x)", len(activeChans), p.PubKey())
+
 	if err := p.loadActiveChannels(activeChans); err != nil {
 		return fmt.Errorf("unable to load channels: %v", err)
 	}
@@ -318,6 +323,43 @@ func (p *peer) Start() error {
 	go p.pingHandler()
 
 	return nil
+}
+
+// initGossipSync initializes either a gossip syncer or an initial routing
+// dump, depending on the negotiated synchronization method.
+func (p *peer) initGossipSync() {
+	switch {
+
+	// If the remote peer knows of the new gossip queries feature, then
+	// we'll create a new gossipSyncer in the AuthenticatedGossiper for it.
+	case p.remoteLocalFeatures.HasFeature(lnwire.GossipQueriesOptional):
+		srvrLog.Infof("Negotiated chan series queries with %x",
+			p.pubKeyBytes[:])
+
+		// We'll only request channel updates from the remote peer if
+		// its enabled in the config, or we're already getting updates
+		// from enough peers.
+		//
+		// TODO(roasbeef): craft s.t. we only get updates from a few
+		// peers
+		recvUpdates := !cfg.NoChanUpdates
+
+		// Register the this peer's for gossip syncer with the gossiper.
+		// This is blocks synchronously to ensure the gossip syncer is
+		// registered with the gossiper before attempting to read
+		// messages from the remote peer.
+		p.server.authGossiper.InitSyncState(p, recvUpdates)
+
+	// If the remote peer has the initial sync feature bit set, then we'll
+	// being the synchronization protocol to exchange authenticated channel
+	// graph edges/vertexes, but only if they don't know of the new gossip
+	// queries.
+	case p.remoteLocalFeatures.HasFeature(lnwire.InitialRoutingSync):
+		srvrLog.Infof("Requesting full table sync with %x",
+			p.pubKeyBytes[:])
+
+		go p.server.authGossiper.SynchronizeNode(p)
+	}
 }
 
 // QuitSignal is a method that should return a channel which will be sent upon
@@ -569,7 +611,7 @@ func (p *peer) Disconnect(reason error) {
 		return
 	}
 
-	peerLog.Debugf("Disconnecting %s, reason: %v", p, reason)
+	peerLog.Infof("Disconnecting %s, reason: %v", p, reason)
 
 	// Ensure that the TCP connection is properly closed before continuing.
 	p.conn.Close()
@@ -876,6 +918,14 @@ func (p *peer) readHandler() {
 			p, idleTimeout)
 		p.Disconnect(err)
 	})
+
+	// Initialize our negotiated gossip sync method before reading
+	// messages off the wire. When using gossip queries, this ensures
+	// a gossip syncer is active by the time query messages arrive.
+	//
+	// TODO(conner): have peer store gossip syncer directly and bypass
+	// gossiper?
+	p.initGossipSync()
 
 	discStream := newDiscMsgStream(p)
 	discStream.Start()
@@ -1317,7 +1367,8 @@ out:
 			}
 
 			if err != nil {
-				exitErr = errors.Errorf("unable to write message: %v", err)
+				exitErr = fmt.Errorf("unable to write "+
+					"message: %v", err)
 				break out
 			}
 
@@ -1948,6 +1999,7 @@ func (p *peer) finalizeChanClosure(chanCloser *channelCloser) {
 
 	go waitForChanToClose(chanCloser.negotiationHeight, notifier, errChan,
 		chanPoint, &closingTxid, closingTx.TxOut[0].PkScript, func() {
+
 			// Respond to the local subsystem which requested the
 			// channel closure.
 			if closeReq != nil {
@@ -1959,18 +2011,6 @@ func (p *peer) finalizeChanClosure(chanCloser *channelCloser) {
 						},
 					},
 				}
-			}
-
-			// Remove the persistent connection to this peer if we
-			// no longer have open channels with them.
-			p.activeChanMtx.Lock()
-			numActiveChans := len(p.activeChannels)
-			p.activeChanMtx.Unlock()
-
-			if numActiveChans == 0 {
-				p.server.prunePersistentPeerConnection(
-					p.pubKeyBytes,
-				)
 			}
 		})
 }
@@ -2016,19 +2056,15 @@ func waitForChanToClose(bestHeight uint32, notifier chainntnfs.ChainNotifier,
 	cb()
 }
 
-// WipeChannel removes the passed channel point from all indexes associated
-// with the peer, and the switch.
+// WipeChannel removes the passed channel point from all indexes associated with
+// the peer, and the switch.
 func (p *peer) WipeChannel(chanPoint *wire.OutPoint) error {
-
 	chanID := lnwire.NewChanIDFromOutPoint(chanPoint)
 
 	p.activeChanMtx.Lock()
 	if channel, ok := p.activeChannels[chanID]; ok {
 		channel.Stop()
 		delete(p.activeChannels, chanID)
-		if len(p.activeChannels) == 0 {
-			p.server.prunePersistentPeerConnection(p.pubKeyBytes)
-		}
 	}
 	p.activeChanMtx.Unlock()
 
@@ -2049,17 +2085,15 @@ func (p *peer) handleInitMsg(msg *lnwire.Init) error {
 
 	unknownLocalFeatures := p.remoteLocalFeatures.UnknownRequiredFeatures()
 	if len(unknownLocalFeatures) > 0 {
-		err := errors.Errorf("Peer set unknown local feature bits: %v",
+		err := fmt.Errorf("Peer set unknown local feature bits: %v",
 			unknownLocalFeatures)
-		peerLog.Error(err)
 		return err
 	}
 
 	unknownGlobalFeatures := p.remoteGlobalFeatures.UnknownRequiredFeatures()
 	if len(unknownGlobalFeatures) > 0 {
-		err := errors.Errorf("Peer set unknown global feature bits: %v",
+		err := fmt.Errorf("Peer set unknown global feature bits: %v",
 			unknownGlobalFeatures)
-		peerLog.Error(err)
 		return err
 	}
 

@@ -5663,6 +5663,12 @@ func testGarbageCollectLinkNodes(net *lntest.NetworkHarness, t *harnessTest) {
 	if err != nil {
 		t.Fatalf("alice did not reconnect to carol")
 	}
+	err = lntest.WaitPredicate(func() bool {
+		return isConnected(dave.PubKeyStr)
+	}, 15*time.Second)
+	if err != nil {
+		t.Fatalf("alice did not reconnect to dave")
+	}
 
 	// testReconnection is a helper closure that restarts the nodes at both
 	// ends of a channel to ensure they do not reconnect after restarting.
@@ -5670,13 +5676,24 @@ func testGarbageCollectLinkNodes(net *lntest.NetworkHarness, t *harnessTest) {
 	// reestablished her connection with Dave, as they still have an open
 	// channel together.
 	testReconnection := func(node *lntest.HarnessNode) {
+		// Restart both nodes, to trigger the pruning logic.
+		if err := net.RestartNode(node, nil); err != nil {
+			t.Fatalf("unable to restart %v's node: %v",
+				node.Name(), err)
+		}
+
+		if err := net.RestartNode(net.Alice, nil); err != nil {
+			t.Fatalf("unable to restart alice's node: %v", err)
+		}
+
+		// Now restart both nodes and make sure they don't reconnect.
 		if err := net.RestartNode(node, nil); err != nil {
 			t.Fatalf("unable to restart %v's node: %v", node.Name(),
 				err)
 		}
-		err = lntest.WaitPredicate(func() bool {
+		err = lntest.WaitInvariant(func() bool {
 			return !isConnected(node.PubKeyStr)
-		}, 20*time.Second)
+		}, 5*time.Second)
 		if err != nil {
 			t.Fatalf("alice reconnected to %v", node.Name())
 		}
@@ -5685,11 +5702,15 @@ func testGarbageCollectLinkNodes(net *lntest.NetworkHarness, t *harnessTest) {
 			t.Fatalf("unable to restart alice's node: %v", err)
 		}
 		err = lntest.WaitPredicate(func() bool {
-			if !isConnected(dave.PubKeyStr) {
-				return false
-			}
-			return !isConnected(node.PubKeyStr)
+			return isConnected(dave.PubKeyStr)
 		}, 20*time.Second)
+		if err != nil {
+			t.Fatalf("alice didn't reconnect to Dave")
+		}
+
+		err = lntest.WaitInvariant(func() bool {
+			return !isConnected(node.PubKeyStr)
+		}, 5*time.Second)
 		if err != nil {
 			t.Fatalf("alice reconnected to %v", node.Name())
 		}
@@ -5713,6 +5734,47 @@ func testGarbageCollectLinkNodes(net *lntest.NetworkHarness, t *harnessTest) {
 	_, err = net.Miner.Node.Generate(defaultBitcoinTimeLockDelta)
 	if err != nil {
 		t.Fatalf("unable to generate blocks: %v", err)
+	}
+
+	// Before we test reconnection, we'll ensure that the channel has been
+	// fully cleaned up for both Carol and Alice.
+	var predErr error
+	pendingChansRequest := &lnrpc.PendingChannelsRequest{}
+	err = lntest.WaitPredicate(func() bool {
+		ctxt, _ = context.WithTimeout(ctxb, timeout)
+		pendingChanResp, err := net.Alice.PendingChannels(
+			ctxt, pendingChansRequest,
+		)
+		if err != nil {
+			predErr = fmt.Errorf("unable to query for pending "+
+				"channels: %v", err)
+			return false
+		}
+
+		predErr = checkNumForceClosedChannels(pendingChanResp, 0)
+		if predErr != nil {
+			return false
+		}
+
+		ctxt, _ = context.WithTimeout(ctxb, timeout)
+		pendingChanResp, err = carol.PendingChannels(
+			ctxt, pendingChansRequest,
+		)
+		if err != nil {
+			predErr = fmt.Errorf("unable to query for pending "+
+				"channels: %v", err)
+			return false
+		}
+
+		predErr = checkNumForceClosedChannels(pendingChanResp, 0)
+		if predErr != nil {
+			return false
+		}
+
+		return true
+	}, time.Second*15)
+	if err != nil {
+		t.Fatalf("channels not marked as fully resolved: %v", predErr)
 	}
 
 	testReconnection(carol)

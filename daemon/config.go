@@ -46,7 +46,7 @@ const (
 	defaultPeerPort            = 9735
 	defaultRPCHost             = "localhost"
 	defaultMaxPendingChannels  = 1
-	defaultNoEncryptWallet     = false
+	defaultNoSeedBackup        = false
 	defaultTrickleDelay        = 30 * 1000
 	defaultInactiveChanTimeout = 20 * time.Minute
 	defaultMaxLogFiles         = 3
@@ -57,6 +57,7 @@ const (
 	defaultTorDNSPort              = 53
 	defaultTorControlPort          = 9051
 	defaultTorV2PrivateKeyFilename = "v2_onion_private_key"
+	defaultTorV3PrivateKeyFilename = "v3_onion_private_key"
 
 	defaultBroadcastDelta = 10
 
@@ -86,10 +87,9 @@ var (
 	defaultBitcoindDir  = btcutil.AppDataDir("bitcoin", false)
 	defaultLitecoindDir = btcutil.AppDataDir("litecoin", false)
 
-	defaultTorSOCKS            = net.JoinHostPort("localhost", strconv.Itoa(defaultTorSOCKSPort))
-	defaultTorDNS              = net.JoinHostPort(defaultTorDNSHost, strconv.Itoa(defaultTorDNSPort))
-	defaultTorControl          = net.JoinHostPort("localhost", strconv.Itoa(defaultTorControlPort))
-	defaultTorV2PrivateKeyPath = filepath.Join(defaultLndDir, defaultTorV2PrivateKeyFilename)
+	defaultTorSOCKS   = net.JoinHostPort("localhost", strconv.Itoa(defaultTorSOCKSPort))
+	defaultTorDNS     = net.JoinHostPort(defaultTorDNSHost, strconv.Itoa(defaultTorDNSPort))
+	defaultTorControl = net.JoinHostPort("localhost", strconv.Itoa(defaultTorControlPort))
 )
 
 type chainConfig struct {
@@ -148,14 +148,14 @@ type autoPilotConfig struct {
 }
 
 type torConfig struct {
-	Active           bool   `long:"active" description:"Allow outbound and inbound connections to be routed through Tor"`
-	SOCKS            string `long:"socks" description:"The host:port that Tor's exposed SOCKS5 proxy is listening on"`
-	DNS              string `long:"dns" description:"The DNS server as host:port that Tor will use for SRV queries - NOTE must have TCP resolution enabled"`
-	StreamIsolation  bool   `long:"streamisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
-	Control          string `long:"control" description:"The host:port that Tor is listening on for Tor control connections"`
-	V2               bool   `long:"v2" description:"Automatically set up a v2 onion service to listen for inbound connections"`
-	V2PrivateKeyPath string `long:"v2privatekeypath" description:"The path to the private key of the onion service being created"`
-	V3               bool   `long:"v3" description:"Use a v3 onion service to listen for inbound connections"`
+	Active          bool   `long:"active" description:"Allow outbound and inbound connections to be routed through Tor"`
+	SOCKS           string `long:"socks" description:"The host:port that Tor's exposed SOCKS5 proxy is listening on"`
+	DNS             string `long:"dns" description:"The DNS server as host:port that Tor will use for SRV queries - NOTE must have TCP resolution enabled"`
+	StreamIsolation bool   `long:"streamisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
+	Control         string `long:"control" description:"The host:port that Tor is listening on for Tor control connections"`
+	V2              bool   `long:"v2" description:"Automatically set up a v2 onion service to listen for inbound connections"`
+	V3              bool   `long:"v3" description:"Automatically set up a v3 onion service to listen for inbound connections"`
+	PrivateKeyPath  string `long:"privatekeypath" description:"The path to the private key of the onion service being created"`
 }
 
 // config defines the configuration options for lnd.
@@ -224,7 +224,7 @@ type config struct {
 
 	NoNetBootstrap bool `long:"nobootstrap" description:"If true, then automatic network bootstrapping will not be attempted."`
 
-	NoEncryptWallet bool `long:"noencryptwallet" description:"If set, wallet will be encrypted using the default passphrase."`
+	NoSeedBackup bool `long:"noseedbackup" description:"If true, NO SEED WILL BE EXPOSED AND THE WALLET WILL BE ENCRYPTED USING THE DEFAULT PASSPHRASE -- EVER. THIS FLAG IS ONLY FOR TESTING AND IS BEING DEPRECATED."`
 
 	TrickleDelay        int           `long:"trickledelay" description:"Time in milliseconds between each release of announcements to the network"`
 	InactiveChanTimeout time.Duration `long:"inactivechantimeout" description:"If a channel has been inactive for the set time, send a ChannelUpdate disabling it."`
@@ -292,7 +292,7 @@ func loadConfig(args []string) (*config, error) {
 			RPCHost: defaultRPCHost,
 		},
 		MaxPendingChannels: defaultMaxPendingChannels,
-		NoEncryptWallet:    defaultNoEncryptWallet,
+		NoSeedBackup:       defaultNoSeedBackup,
 		Autopilot: &autoPilotConfig{
 			MaxChannels:    5,
 			Allocation:     0.6,
@@ -305,10 +305,9 @@ func loadConfig(args []string) (*config, error) {
 		Color:               defaultColor,
 		MinChanSize:         int64(minChanFundingSize),
 		Tor: &torConfig{
-			SOCKS:            defaultTorSOCKS,
-			DNS:              defaultTorDNS,
-			Control:          defaultTorControl,
-			V2PrivateKeyPath: defaultTorV2PrivateKeyPath,
+			SOCKS:   defaultTorSOCKS,
+			DNS:     defaultTorDNS,
+			Control: defaultTorControl,
 		},
 		net: &tor.ClearNet{},
 	}
@@ -329,23 +328,48 @@ func loadConfig(args []string) (*config, error) {
 		os.Exit(0)
 	}
 
+	// If the config file path has not been modified by the user, then we'll
+	// use the default config file path. However, if the user has modified
+	// their lnddir, then we should assume they intend to use the config
+	// file within it.
+	configFileDir := cleanAndExpandPath(preCfg.LndDir)
+	configFilePath := cleanAndExpandPath(preCfg.ConfigFile)
+	if configFileDir != defaultLndDir {
+		if configFilePath == defaultConfigFile {
+			configFilePath = filepath.Join(
+				configFileDir, defaultConfigFilename,
+			)
+		}
+	}
+
+	// Next, load any additional configuration options from the file.
+	var configFileError error
+	cfg := preCfg
+	if err := flags.IniParse(configFilePath, &cfg); err != nil {
+		// If it's a parsing related error, then we'll return
+		// immediately, otherwise we can proceed as possibly the config
+		// file doesn't exist which is OK.
+		if _, ok := err.(*flags.IniError); ok {
+			return nil, err
+		}
+
+		configFileError = err
+	}
+
+	// Finally, parse the remaining command line options again to ensure
+	// they take precedence.
+	if _, err := flags.ParseArgs(&cfg, args[1:]); err != nil {
+		return nil, err
+	}
+
 	// If the provided lnd directory is not the default, we'll modify the
 	// path to all of the files and directories that will live within it.
-	lndDir := cleanAndExpandPath(preCfg.LndDir)
-	configFilePath := cleanAndExpandPath(preCfg.ConfigFile)
+	lndDir := cleanAndExpandPath(cfg.LndDir)
 	if lndDir != defaultLndDir {
-		// If the config file path has not been modified by the user,
-		// then we'll use the default config file path. However, if the
-		// user has modified their lnddir, then we should assume they
-		// intend to use the config file within it.
-		if configFilePath == defaultConfigFile {
-			preCfg.ConfigFile = filepath.Join(lndDir, defaultConfigFilename)
-		}
-		preCfg.DataDir = filepath.Join(lndDir, defaultDataDirname)
-		preCfg.TLSCertPath = filepath.Join(lndDir, defaultTLSCertFilename)
-		preCfg.TLSKeyPath = filepath.Join(lndDir, defaultTLSKeyFilename)
-		preCfg.LogDir = filepath.Join(lndDir, defaultLogDirname)
-		preCfg.Tor.V2PrivateKeyPath = filepath.Join(lndDir, defaultTorV2PrivateKeyFilename)
+		cfg.DataDir = filepath.Join(lndDir, defaultDataDirname)
+		cfg.TLSCertPath = filepath.Join(lndDir, defaultTLSCertFilename)
+		cfg.TLSKeyPath = filepath.Join(lndDir, defaultTLSKeyFilename)
+		cfg.LogDir = filepath.Join(lndDir, defaultLogDirname)
 	}
 
 	// Create the lnd directory if it doesn't already exist.
@@ -367,19 +391,6 @@ func loadConfig(args []string) (*config, error) {
 		return nil, err
 	}
 
-	// Next, load any additional configuration options from the file.
-	var configFileError error
-	cfg := preCfg
-	if err := flags.IniParse(cfg.ConfigFile, &cfg); err != nil {
-		configFileError = err
-	}
-
-	// Finally, parse the remaining command line options again to ensure
-	// they take precedence.
-	if _, err := flags.ParseArgs(&cfg, args[1:]); err != nil {
-		return nil, err
-	}
-
 	// As soon as we're done parsing configuration options, ensure all paths
 	// to directories and files are cleaned and expanded before attempting
 	// to use them later on.
@@ -394,7 +405,7 @@ func loadConfig(args []string) (*config, error) {
 	cfg.LtcdMode.Dir = cleanAndExpandPath(cfg.LtcdMode.Dir)
 	cfg.BitcoindMode.Dir = cleanAndExpandPath(cfg.BitcoindMode.Dir)
 	cfg.LitecoindMode.Dir = cleanAndExpandPath(cfg.LitecoindMode.Dir)
-	cfg.Tor.V2PrivateKeyPath = cleanAndExpandPath(cfg.Tor.V2PrivateKeyPath)
+	cfg.Tor.PrivateKeyPath = cleanAndExpandPath(cfg.Tor.PrivateKeyPath)
 
 	// Ensure that the user didn't attempt to specify negative values for
 	// any of the autopilot params.
@@ -483,6 +494,19 @@ func loadConfig(args []string) (*config, error) {
 		// Therefore, we'll disable listening in order to avoid
 		// inadvertent leaks.
 		cfg.DisableListen = true
+	}
+
+	if cfg.Tor.PrivateKeyPath == "" {
+		switch {
+		case cfg.Tor.V2:
+			cfg.Tor.PrivateKeyPath = filepath.Join(
+				lndDir, defaultTorV2PrivateKeyFilename,
+			)
+		case cfg.Tor.V3:
+			cfg.Tor.PrivateKeyPath = filepath.Join(
+				lndDir, defaultTorV3PrivateKeyFilename,
+			)
+		}
 	}
 
 	// Set up the network-related functions that will be used throughout
@@ -1081,6 +1105,17 @@ func parseRPCParams(cConfig *chainConfig, nodeConfig interface{}, net chainCode,
 		}
 
 	case *bitcoindConfig:
+		// Ensure that if the ZMQ options are set, that they are not
+		// equal.
+		if conf.ZMQPubRawBlock != "" && conf.ZMQPubRawTx != "" {
+			err := checkZMQOptions(
+				conf.ZMQPubRawBlock, conf.ZMQPubRawTx,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
 		// If all of RPCUser, RPCPass, ZMQBlockHost, and ZMQTxHost are
 		// set, we assume those parameters are good to use.
 		if conf.RPCUser != "" && conf.RPCPass != "" &&
@@ -1100,8 +1135,8 @@ func parseRPCParams(cConfig *chainConfig, nodeConfig interface{}, net chainCode,
 			confFile = "litecoin"
 		}
 
-		// If only one or two of the parameters are set, we assume the
-		// user did that unintentionally.
+		// If not all of the parameters are set, we'll assume the user
+		// did this unintentionally.
 		if conf.RPCUser != "" || conf.RPCPass != "" ||
 			conf.ZMQPubRawBlock != "" || conf.ZMQPubRawTx != "" {
 
@@ -1242,9 +1277,8 @@ func extractBitcoindRPCParams(bitcoindConfigPath string) (string, string, string
 	}
 	zmqBlockHost := string(zmqBlockHostSubmatches[1])
 	zmqTxHost := string(zmqTxHostSubmatches[1])
-	if zmqBlockHost == zmqTxHost {
-		return "", "", "", "", errors.New("zmqpubrawblock and " +
-			"zmqpubrawtx must be different")
+	if err := checkZMQOptions(zmqBlockHost, zmqTxHost); err != nil {
+		return "", "", "", "", err
 	}
 
 	// Next, we'll try to find an auth cookie. We need to detect the chain
@@ -1306,6 +1340,17 @@ func extractBitcoindRPCParams(bitcoindConfigPath string) (string, string, string
 
 	return string(userSubmatches[1]), string(passSubmatches[1]),
 		zmqBlockHost, zmqTxHost, nil
+}
+
+// checkZMQOptions ensures that the provided addresses to use as the hosts for
+// ZMQ rawblock and rawtx notifications are different.
+func checkZMQOptions(zmqBlockHost, zmqTxHost string) error {
+	if zmqBlockHost == zmqTxHost {
+		return errors.New("zmqpubrawblock and zmqpubrawtx must be set" +
+			"to different addresses")
+	}
+
+	return nil
 }
 
 // normalizeNetwork returns the common name of a network type used to create

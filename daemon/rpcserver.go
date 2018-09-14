@@ -2766,7 +2766,7 @@ func createRPCInvoice(invoice *channeldb.Invoice) (*lnrpc.Invoice, error) {
 
 	preimage := invoice.Terms.PaymentPreimage
 	satAmt := invoice.Terms.Value.ToSatoshis()
-	amtPaid := invoice.AmtPaid.ToSatoshis()
+	satAmtPaid := invoice.AmtPaid.ToSatoshis()
 
 	return &lnrpc.Invoice{
 		Memo:            string(invoice.Memo[:]),
@@ -2785,7 +2785,9 @@ func createRPCInvoice(invoice *channeldb.Invoice) (*lnrpc.Invoice, error) {
 		RouteHints:      routeHints,
 		AddIndex:        invoice.AddIndex,
 		SettleIndex:     invoice.SettleIndex,
-		AmtPaid:         int64(amtPaid),
+		AmtPaidSat:      int64(satAmtPaid),
+		AmtPaidMsat:     int64(invoice.AmtPaid),
+		AmtPaid:         int64(invoice.AmtPaid),
 	}, nil
 }
 
@@ -2886,6 +2888,7 @@ func (r *rpcServer) ListInvoices(ctx context.Context,
 		IndexOffset:    req.IndexOffset,
 		NumMaxInvoices: req.NumMaxInvoices,
 		PendingOnly:    req.PendingOnly,
+		Reversed:       req.Reversed,
 	}
 	invoiceSlice, err := r.server.chanDB.QueryInvoices(q)
 	if err != nil {
@@ -2895,11 +2898,12 @@ func (r *rpcServer) ListInvoices(ctx context.Context,
 	// Before returning the response, we'll need to convert each invoice
 	// into it's proto representation.
 	resp := &lnrpc.ListInvoiceResponse{
-		Invoices:        make([]*lnrpc.Invoice, len(invoiceSlice.Invoices)),
-		LastIndexOffset: invoiceSlice.LastIndexOffset,
+		Invoices:         make([]*lnrpc.Invoice, len(invoiceSlice.Invoices)),
+		FirstIndexOffset: invoiceSlice.FirstIndexOffset,
+		LastIndexOffset:  invoiceSlice.LastIndexOffset,
 	}
 	for i, invoice := range invoiceSlice.Invoices {
-		resp.Invoices[i], err = createRPCInvoice(invoice)
+		resp.Invoices[i], err = createRPCInvoice(&invoice)
 		if err != nil {
 			return nil, err
 		}

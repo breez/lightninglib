@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/coreos/bbolt"
@@ -481,13 +480,14 @@ func migratePruneEdgeUpdateIndex(tx *bolt.Tx) error {
 
 	// Retrieve some buckets that will be needed later on. These should
 	// already exist given the assumption that the buckets above do as well.
-	edgeIndex := edges.Bucket(edgeIndexBucket)
+	edgeIndex, err := edges.CreateBucketIfNotExists(edgeIndexBucket)
 	if edgeIndex == nil {
-		return errors.New("edge index should exist but does not")
+		return fmt.Errorf("unable to create/fetch edge index " +
+			"bucket")
 	}
-	nodes := tx.Bucket(nodeBucket)
-	if nodes == nil {
-		return errors.New("node bucket should exist but does not")
+	nodes, err := tx.CreateBucketIfNotExists(nodeBucket)
+	if err != nil {
+		return fmt.Errorf("unable to make node bucket")
 	}
 
 	log.Info("Migrating database to properly prune edge update index")
@@ -496,7 +496,7 @@ func migratePruneEdgeUpdateIndex(tx *bolt.Tx) error {
 	// update index. To do so, we'll gather all of the existing policies
 	// within the graph to re-populate them later on.
 	var edgeKeys [][]byte
-	err := edges.ForEach(func(edgeKey, edgePolicyBytes []byte) error {
+	err = edges.ForEach(func(edgeKey, edgePolicyBytes []byte) error {
 		// All valid entries are indexed by a public key (33 bytes)
 		// followed by a channel ID (8 bytes), so we'll skip any entries
 		// with keys that do not match this.
@@ -515,7 +515,6 @@ func migratePruneEdgeUpdateIndex(tx *bolt.Tx) error {
 
 	// With the existing edge policies gathered, we'll recreate the index
 	// and populate it with the correct entries.
-	oldNumEntries := edgeUpdateIndex.Stats().KeyN
 	if err := edges.DeleteBucket(edgeUpdateIndexBucket); err != nil {
 		return fmt.Errorf("unable to remove existing edge update "+
 			"index: %v", err)
@@ -554,10 +553,6 @@ func migratePruneEdgeUpdateIndex(tx *bolt.Tx) error {
 			return err
 		}
 	}
-
-	newNumEntries := edgeUpdateIndex.Stats().KeyN
-	log.Infof("Pruned %d stale entries from the edge update index",
-		oldNumEntries-newNumEntries)
 
 	log.Info("Migration to properly prune edge update index complete!")
 

@@ -52,10 +52,10 @@ COVER = for dir in $(GOLISTCOVER); do \
 			-covermode=count \
 			-coverprofile=$$dir/profile.tmp $$dir; \
 		\
-		if [ $$? != 0 ] ;\
+		if [ $$? != 0 ] ; \
 		then \
 			exit 1; \
-		fi ;\
+		fi ; \
 		\
 		if [ -f $$dir/profile.tmp ]; then \
 			cat $$dir/profile.tmp | \
@@ -219,12 +219,12 @@ rpc:
 
 clean:
 	@$(call print, "Cleaning source.$(NC)")
-	$(RM) ./lnd ./lncli
-	$(RM) -r ./vendor
+	$(RM) ./lnd-debug ./lncli-debug
+	$(RM) -r ./vendor .vendor-new
 
 
 .PHONY: all \
-	btcd\
+	btcd \
 	default \
 	dep \
 	build \
