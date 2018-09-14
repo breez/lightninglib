@@ -124,14 +124,25 @@ type mockServer struct {
 
 var _ lnpeer.Peer = (*mockServer)(nil)
 
-func initSwitchWithDB(startingHeight uint32, db *channeldb.DB) (*Switch, error) {
-	if db == nil {
-		tempPath, err := ioutil.TempDir("", "switchdb")
-		if err != nil {
-			return nil, err
-		}
+func initDB() (*channeldb.DB, error) {
+	tempPath, err := ioutil.TempDir("", "switchdb")
+	if err != nil {
+		return nil, err
+	}
 
-		db, err = channeldb.Open(tempPath)
+	db, err := channeldb.Open(tempPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, err
+}
+
+func initSwitchWithDB(startingHeight uint32, db *channeldb.DB) (*Switch, error) {
+	var err error
+
+	if db == nil {
+		db, err = initDB()
 		if err != nil {
 			return nil, err
 		}
@@ -225,6 +236,10 @@ func (s *mockServer) Start() error {
 	}()
 
 	return nil
+}
+
+func (s *mockServer) QuitSignal() <-chan struct{} {
+	return s.quit
 }
 
 // mockHopIterator represents the test version of hop iterator which instead
@@ -500,11 +515,12 @@ func (s *mockServer) readHandler(message lnwire.Message) error {
 		return fmt.Errorf("unknown message type: %T", msg)
 	}
 
-	// Dispatch the commitment update message to the proper
-	// channel link dedicated to this channel.
+	// Dispatch the commitment update message to the proper channel link
+	// dedicated to this channel. If the link is not found, we will discard
+	// the message.
 	link, err := s.htlcSwitch.GetLink(targetChan)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	// Create goroutine for this, in order to be able to properly stop
@@ -790,7 +806,8 @@ func (m *mockNotifier) RegisterConfirmationsNtfn(txid *chainhash.Hash, _ []byte,
 	numConfs uint32, heightHint uint32) (*chainntnfs.ConfirmationEvent, error) {
 	return nil, nil
 }
-func (m *mockNotifier) RegisterBlockEpochNtfn() (*chainntnfs.BlockEpochEvent, error) {
+func (m *mockNotifier) RegisterBlockEpochNtfn(
+	bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	return &chainntnfs.BlockEpochEvent{
 		Epochs: m.epochChan,
 		Cancel: func() {},

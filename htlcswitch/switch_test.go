@@ -25,6 +25,63 @@ func genPreimage() ([32]byte, error) {
 	return preimage, nil
 }
 
+// TestSwitchAddDuplicateLink tests that the switch will reject duplicate links
+// for both pending and live links. It also tests that we can successfully
+// add a link after having removed it.
+func TestSwitchAddDuplicateLink(t *testing.T) {
+	t.Parallel()
+
+	alicePeer, err := newMockServer(t, "alice", testStartingHeight, nil, 6)
+	if err != nil {
+		t.Fatalf("unable to create alice server: %v", err)
+	}
+
+	s, err := initSwitchWithDB(testStartingHeight, nil)
+	if err != nil {
+		t.Fatalf("unable to init switch: %v", err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatalf("unable to start switch: %v", err)
+	}
+	defer s.Stop()
+
+	chanID1, _, aliceChanID, _ := genIDs()
+
+	pendingChanID := lnwire.ShortChannelID{}
+
+	aliceChannelLink := newMockChannelLink(
+		s, chanID1, pendingChanID, alicePeer, false,
+	)
+	if err := s.AddLink(aliceChannelLink); err != nil {
+		t.Fatalf("unable to add alice link: %v", err)
+	}
+
+	// Alice should have a pending link, adding again should fail.
+	if err := s.AddLink(aliceChannelLink); err == nil {
+		t.Fatalf("adding duplicate link should have failed")
+	}
+
+	// Update the short chan id of the channel, so that the link goes live.
+	aliceChannelLink.setLiveShortChanID(aliceChanID)
+	err = s.UpdateShortChanID(chanID1)
+	if err != nil {
+		t.Fatalf("unable to update alice short_chan_id: %v", err)
+	}
+
+	// Alice should have a live link, adding again should fail.
+	if err := s.AddLink(aliceChannelLink); err == nil {
+		t.Fatalf("adding duplicate link should have failed")
+	}
+
+	// Remove the live link to ensure the indexes are cleared.
+	s.RemoveLink(chanID1)
+
+	// Alice has no links, adding should succeed.
+	if err := s.AddLink(aliceChannelLink); err != nil {
+		t.Fatalf("unable to add alice link: %v", err)
+	}
+}
+
 // TestSwitchSendPending checks the inability of htlc switch to forward adds
 // over pending links, and the UpdateShortChanID makes a pending link live.
 func TestSwitchSendPending(t *testing.T) {
@@ -1273,8 +1330,7 @@ func TestSkipIneligibleLinksLocalForward(t *testing.T) {
 	// We'll attempt to send out a new HTLC that has Alice as the first
 	// outgoing link. This should fail as Alice isn't yet able to forward
 	// any active HTLC's.
-	alicePub := aliceChannelLink.Peer().PubKey()
-	_, err = s.SendHTLC(alicePub, addMsg, nil)
+	_, err = s.SendHTLC(aliceChannelLink.ShortChanID(), addMsg, nil)
 	if err == nil {
 		t.Fatalf("local forward should fail due to inactive link")
 	}
@@ -1599,7 +1655,8 @@ func TestSwitchSendPayment(t *testing.T) {
 	// Handle the request and checks that bob channel link received it.
 	errChan := make(chan error)
 	go func() {
-		_, err := s.SendHTLC(aliceChannelLink.Peer().PubKey(), update,
+		_, err := s.SendHTLC(
+			aliceChannelLink.ShortChanID(), update,
 			newMockDeobfuscator())
 		errChan <- err
 	}()
@@ -1607,8 +1664,10 @@ func TestSwitchSendPayment(t *testing.T) {
 	go func() {
 		// Send the payment with the same payment hash and same
 		// amount and check that it will be propagated successfully
-		_, err := s.SendHTLC(aliceChannelLink.Peer().PubKey(), update,
-			newMockDeobfuscator())
+		_, err := s.SendHTLC(
+			aliceChannelLink.ShortChanID(), update,
+			newMockDeobfuscator(),
+		)
 		errChan <- err
 	}()
 
@@ -1619,7 +1678,9 @@ func TestSwitchSendPayment(t *testing.T) {
 		}
 
 	case err := <-errChan:
-		t.Fatalf("unable to send payment: %v", err)
+		if err != ErrPaymentInFlight {
+			t.Fatalf("unable to send payment: %v", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("request was not propagated to destination")
 	}
@@ -1636,11 +1697,11 @@ func TestSwitchSendPayment(t *testing.T) {
 		t.Fatal("request was not propagated to destination")
 	}
 
-	if s.numPendingPayments() != 2 {
+	if s.numPendingPayments() != 1 {
 		t.Fatal("wrong amount of pending payments")
 	}
 
-	if s.circuits.NumOpen() != 2 {
+	if s.circuits.NumOpen() != 1 {
 		t.Fatal("wrong amount of circuits")
 	}
 
@@ -1663,29 +1724,6 @@ func TestSwitchSendPayment(t *testing.T) {
 		},
 	}
 
-	if err := s.forward(packet); err != nil {
-		t.Fatalf("can't forward htlc packet: %v", err)
-	}
-
-	select {
-	case err := <-errChan:
-		if err.Error() != errors.New(lnwire.CodeIncorrectPaymentAmount).Error() {
-			t.Fatal("err wasn't received")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("err wasn't received")
-	}
-
-	packet = &htlcPacket{
-		outgoingChanID: aliceChannelLink.ShortChanID(),
-		outgoingHTLCID: 1,
-		htlc: &lnwire.UpdateFailHTLC{
-			Reason: reason,
-		},
-	}
-
-	// Send second failure response and check that user were able to
-	// receive the error.
 	if err := s.forward(packet); err != nil {
 		t.Fatalf("can't forward htlc packet: %v", err)
 	}
@@ -1736,9 +1774,10 @@ func TestLocalPaymentNoForwardingEvents(t *testing.T) {
 	// wait for Alice to receive the preimage for the payment before
 	// proceeding.
 	receiver := n.bobServer
+	firstHop := n.firstBobChannelLink.ShortChanID()
 	_, err = n.makePayment(
-		n.aliceServer, receiver, n.bobServer.PubKey(), hops, amount,
-		htlcAmt, totalTimelock,
+		n.aliceServer, receiver, firstHop, hops, amount, htlcAmt,
+		totalTimelock,
 	).Wait(30 * time.Second)
 	if err != nil {
 		t.Fatalf("unable to make the payment: %v", err)
@@ -1795,10 +1834,11 @@ func TestMultiHopPaymentForwardingEvents(t *testing.T) {
 		finalAmt, testStartingHeight, n.firstBobChannelLink,
 		n.carolChannelLink,
 	)
+	firstHop := n.firstBobChannelLink.ShortChanID()
 	for i := 0; i < numPayments; i++ {
 		_, err := n.makePayment(
-			n.aliceServer, n.carolServer, n.bobServer.PubKey(),
-			hops, finalAmt, htlcAmt, totalTimelock,
+			n.aliceServer, n.carolServer, firstHop, hops, finalAmt,
+			htlcAmt, totalTimelock,
 		).Wait(30 * time.Second)
 		if err != nil {
 			t.Fatalf("unable to send payment: %v", err)

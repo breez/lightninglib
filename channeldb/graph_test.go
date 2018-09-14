@@ -87,6 +87,7 @@ func TestNodeInsertionAndDeletion(t *testing.T) {
 		Alias:                "kek",
 		Features:             testFeatures,
 		Addresses:            testAddrs,
+		ExtraOpaqueData:      []byte("extra new data"),
 		db:                   db,
 	}
 	copy(node.PubKeyBytes[:], testPub.SerializeCompressed())
@@ -614,6 +615,11 @@ func assertEdgeInfoEqual(t *testing.T, e1 *ChannelEdgeInfo,
 		t.Fatalf("capacity doesn't match: %v vs %v", e1.Capacity,
 			e2.Capacity)
 	}
+
+	if !bytes.Equal(e1.ExtraOpaqueData, e2.ExtraOpaqueData) {
+		t.Fatalf("extra data doesn't match: %v vs %v",
+			e2.ExtraOpaqueData, e2.ExtraOpaqueData)
+	}
 }
 
 func TestEdgeInfoUpdates(t *testing.T) {
@@ -675,8 +681,9 @@ func TestEdgeInfoUpdates(t *testing.T) {
 			BitcoinSig1Bytes: testSig.Serialize(),
 			BitcoinSig2Bytes: testSig.Serialize(),
 		},
-		ChannelPoint: outpoint,
-		Capacity:     1000,
+		ChannelPoint:    outpoint,
+		Capacity:        1000,
+		ExtraOpaqueData: []byte("new unknown feature"),
 	}
 	copy(edgeInfo.NodeKey1Bytes[:], firstNode.PubKeyBytes[:])
 	copy(edgeInfo.NodeKey2Bytes[:], secondNode.PubKeyBytes[:])
@@ -697,8 +704,9 @@ func TestEdgeInfoUpdates(t *testing.T) {
 		MinHTLC:                   2342135,
 		FeeBaseMSat:               4352345,
 		FeeProportionalMillionths: 3452352,
-		Node: secondNode,
-		db:   db,
+		Node:            secondNode,
+		ExtraOpaqueData: []byte("new unknown feature2"),
+		db:              db,
 	}
 	edge2 := &ChannelEdgePolicy{
 		SigBytes:                  testSig.Serialize(),
@@ -709,8 +717,9 @@ func TestEdgeInfoUpdates(t *testing.T) {
 		MinHTLC:                   2342135,
 		FeeBaseMSat:               4352345,
 		FeeProportionalMillionths: 90392423,
-		Node: firstNode,
-		db:   db,
+		Node:            firstNode,
+		ExtraOpaqueData: []byte("new unknown feature1"),
+		db:              db,
 	}
 
 	// Next, insert both nodes into the database, they should both be
@@ -1398,11 +1407,12 @@ func TestChanUpdatesInHorizon(t *testing.T) {
 			t.Fatalf("unable to create channel edge: %v", err)
 		}
 
-		updateTime := endTime
-		endTime = updateTime.Add(time.Second * 10)
+		edge1UpdateTime := endTime
+		edge2UpdateTime := edge1UpdateTime.Add(time.Second)
+		endTime = endTime.Add(time.Second * 10)
 
 		edge1 := newEdgePolicy(
-			chanID.ToUint64(), op, db, updateTime.Unix(),
+			chanID.ToUint64(), op, db, edge1UpdateTime.Unix(),
 		)
 		edge1.Flags = 0
 		edge1.Node = node2
@@ -1412,7 +1422,7 @@ func TestChanUpdatesInHorizon(t *testing.T) {
 		}
 
 		edge2 := newEdgePolicy(
-			chanID.ToUint64(), op, db, updateTime.Unix(),
+			chanID.ToUint64(), op, db, edge2UpdateTime.Unix(),
 		)
 		edge2.Flags = 1
 		edge2.Node = node1
@@ -2130,43 +2140,73 @@ func TestChannelEdgePruningUpdateIndexDeletion(t *testing.T) {
 		t.Fatalf("unable to update edge: %v", err)
 	}
 
-	// Now that both edges have been updated, if we manually check the
-	// update index, we should have an entry for both edges.
-	if err := db.View(func(tx *bolt.Tx) error {
-		edges := tx.Bucket(edgeBucket)
-		if edges == nil {
-			return ErrGraphNoEdgesFound
-		}
-		edgeIndex := edges.Bucket(edgeIndexBucket)
-		if edgeIndex == nil {
-			return ErrGraphNoEdgesFound
-		}
-		edgeUpdateIndex := edges.Bucket(edgeUpdateIndexBucket)
-		if edgeUpdateIndex == nil {
-			return ErrGraphNoEdgesFound
+	// checkIndexTimestamps is a helper function that checks the edge update
+	// index only includes the given timestamps.
+	checkIndexTimestamps := func(timestamps ...uint64) {
+		timestampSet := make(map[uint64]struct{})
+		for _, t := range timestamps {
+			timestampSet[t] = struct{}{}
 		}
 
-		var edgeKey [8 + 8]byte
+		err := db.View(func(tx *bolt.Tx) error {
+			edges := tx.Bucket(edgeBucket)
+			if edges == nil {
+				return ErrGraphNoEdgesFound
+			}
+			edgeUpdateIndex := edges.Bucket(edgeUpdateIndexBucket)
+			if edgeUpdateIndex == nil {
+				return ErrGraphNoEdgesFound
+			}
 
-		byteOrder.PutUint64(edgeKey[:8], uint64(edge1.LastUpdate.Unix()))
-		byteOrder.PutUint64(edgeKey[8:], edge1.ChannelID)
+			numEntries := edgeUpdateIndex.Stats().KeyN
+			expectedEntries := len(timestampSet)
+			if numEntries != expectedEntries {
+				return fmt.Errorf("expected %v entries in the "+
+					"update index, got %v", expectedEntries,
+					numEntries)
+			}
 
-		if edgeUpdateIndex.Get(edgeKey[:]) == nil {
-			return fmt.Errorf("first edge not found in update " +
-				"index")
+			return edgeUpdateIndex.ForEach(func(k, _ []byte) error {
+				t := byteOrder.Uint64(k[:8])
+				if _, ok := timestampSet[t]; !ok {
+					return fmt.Errorf("found unexpected "+
+						"timestamp "+"%d", t)
+				}
+
+				return nil
+			})
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-
-		byteOrder.PutUint64(edgeKey[:8], uint64(edge2.LastUpdate.Unix()))
-		byteOrder.PutUint64(edgeKey[8:], edge2.ChannelID)
-		if edgeUpdateIndex.Get(edgeKey[:]) == nil {
-			return fmt.Errorf("second edge not found in update " +
-				"index")
-		}
-
-		return nil
-	}); err != nil {
-		t.Fatalf("unable to read update index: %v", err)
 	}
+
+	// With both edges policies added, we'll make sure to check they exist
+	// within the edge update index.
+	checkIndexTimestamps(
+		uint64(edge1.LastUpdate.Unix()),
+		uint64(edge2.LastUpdate.Unix()),
+	)
+
+	// Now, we'll update the edge policies to ensure the old timestamps are
+	// removed from the update index.
+	edge1.Flags = 2
+	edge1.LastUpdate = time.Now()
+	if err := graph.UpdateEdgePolicy(edge1); err != nil {
+		t.Fatalf("unable to update edge: %v", err)
+	}
+	edge2.Flags = 3
+	edge2.LastUpdate = edge1.LastUpdate.Add(time.Hour)
+	if err := graph.UpdateEdgePolicy(edge2); err != nil {
+		t.Fatalf("unable to update edge: %v", err)
+	}
+
+	// With the policies updated, we should now be able to find their
+	// updated entries within the update index.
+	checkIndexTimestamps(
+		uint64(edge1.LastUpdate.Unix()),
+		uint64(edge2.LastUpdate.Unix()),
+	)
 
 	// Now we'll prune the graph, removing the edges, and also the update
 	// index entries from the database all together.
@@ -2179,43 +2219,10 @@ func TestChannelEdgePruningUpdateIndexDeletion(t *testing.T) {
 		t.Fatalf("unable to prune graph: %v", err)
 	}
 
-	// We'll now check the database state again, at this point, we should
-	// no longer be able to locate the entries within the edge update
-	// index.
-	if err := db.View(func(tx *bolt.Tx) error {
-		edges := tx.Bucket(edgeBucket)
-		if edges == nil {
-			return ErrGraphNoEdgesFound
-		}
-		edgeIndex := edges.Bucket(edgeIndexBucket)
-		if edgeIndex == nil {
-			return ErrGraphNoEdgesFound
-		}
-		edgeUpdateIndex := edges.Bucket(edgeUpdateIndexBucket)
-		if edgeUpdateIndex == nil {
-			return ErrGraphNoEdgesFound
-		}
-
-		var edgeKey [8 + 8]byte
-
-		byteOrder.PutUint64(edgeKey[:8], uint64(edge1.LastUpdate.Unix()))
-		byteOrder.PutUint64(edgeKey[8:], edge1.ChannelID)
-		if edgeUpdateIndex.Get(edgeKey[:]) != nil {
-			return fmt.Errorf("first edge still found in update " +
-				"index")
-		}
-
-		byteOrder.PutUint64(edgeKey[:8], uint64(edge2.LastUpdate.Unix()))
-		byteOrder.PutUint64(edgeKey[8:], edge2.ChannelID)
-		if edgeUpdateIndex.Get(edgeKey[:]) != nil {
-			return fmt.Errorf("second edge still found in update " +
-				"index")
-		}
-
-		return nil
-	}); err != nil {
-		t.Fatalf("unable to read update index: %v", err)
-	}
+	// Finally, we'll check the database state one last time to conclude
+	// that we should no longer be able to locate _any_ entries within the
+	// edge update index.
+	checkIndexTimestamps()
 }
 
 // TestPruneGraphNodes tests that unconnected vertexes are pruned via the
@@ -2367,6 +2374,70 @@ func TestAddChannelEdgeShellNodes(t *testing.T) {
 	}
 }
 
+// TestNodePruningUpdateIndexDeletion tests that once a node has been removed
+// from the channel graph, we also remove the entry from the update index as
+// well.
+func TestNodePruningUpdateIndexDeletion(t *testing.T) {
+	t.Parallel()
+
+	db, cleanUp, err := makeTestDB()
+	defer cleanUp()
+	if err != nil {
+		t.Fatalf("unable to make test database: %v", err)
+	}
+
+	graph := db.ChannelGraph()
+
+	// We'll first populate our graph with a single node that will be
+	// removed shortly.
+	node1, err := createTestVertex(db)
+	if err != nil {
+		t.Fatalf("unable to create test node: %v", err)
+	}
+	if err := graph.AddLightningNode(node1); err != nil {
+		t.Fatalf("unable to add node: %v", err)
+	}
+
+	// We'll confirm that we can retrieve the node using
+	// NodeUpdatesInHorizon, using a time that's slightly beyond the last
+	// update time of our test node.
+	startTime := time.Unix(9, 0)
+	endTime := node1.LastUpdate.Add(time.Minute)
+	nodesInHorizon, err := graph.NodeUpdatesInHorizon(startTime, endTime)
+	if err != nil {
+		t.Fatalf("unable to fetch nodes in horizon: %v", err)
+	}
+
+	// We should only have a single node, and that node should exactly
+	// match the node we just inserted.
+	if len(nodesInHorizon) != 1 {
+		t.Fatalf("should have 1 nodes instead have: %v",
+			len(nodesInHorizon))
+	}
+	if err := compareNodes(node1, &nodesInHorizon[0]); err != nil {
+		t.Fatalf("nodes don't match: %v", err)
+	}
+
+	// We'll now delete the node from the graph, this should result in it
+	// being removed from the update index as well.
+	nodePub, _ := node1.PubKey()
+	if err := graph.DeleteLightningNode(nodePub); err != nil {
+		t.Fatalf("unable to delete node: %v", err)
+	}
+
+	// Now that the node has been deleted, we'll again query the nodes in
+	// the horizon. This time we should have no nodes at all.
+	nodesInHorizon, err = graph.NodeUpdatesInHorizon(startTime, endTime)
+	if err != nil {
+		t.Fatalf("unable to fetch nodes in horizon: %v", err)
+	}
+
+	if len(nodesInHorizon) != 0 {
+		t.Fatalf("should have zero nodes instead have: %v",
+			len(nodesInHorizon))
+	}
+}
+
 // compareNodes is used to compare two LightningNodes while excluding the
 // Features struct, which cannot be compared as the semantics for reserializing
 // the featuresMap have not been defined.
@@ -2398,6 +2469,10 @@ func compareNodes(a, b *LightningNode) error {
 	if !reflect.DeepEqual(a.HaveNodeAnnouncement, b.HaveNodeAnnouncement) {
 		return fmt.Errorf("HaveNodeAnnouncement doesn't match: expected %#v, \n "+
 			"got %#v", a.HaveNodeAnnouncement, b.HaveNodeAnnouncement)
+	}
+	if !bytes.Equal(a.ExtraOpaqueData, b.ExtraOpaqueData) {
+		return fmt.Errorf("extra data doesn't match: %v vs %v",
+			a.ExtraOpaqueData, b.ExtraOpaqueData)
 	}
 
 	return nil
@@ -2434,6 +2509,10 @@ func compareEdgePolicies(a, b *ChannelEdgePolicy) error {
 		return fmt.Errorf("FeeProportionalMillionths doesn't match: "+
 			"expected %v, got %v", a.FeeProportionalMillionths,
 			b.FeeProportionalMillionths)
+	}
+	if !bytes.Equal(a.ExtraOpaqueData, b.ExtraOpaqueData) {
+		return fmt.Errorf("extra data doesn't match: %v vs %v",
+			a.ExtraOpaqueData, b.ExtraOpaqueData)
 	}
 	if err := compareNodes(a.Node, b.Node); err != nil {
 		return err
