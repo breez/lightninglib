@@ -113,6 +113,7 @@ type server struct {
 	outboundPeers map[string]*peer
 
 	peerConnectedListeners map[string][]chan<- lnpeer.Peer
+	peerSubscriptions      map[uint]*PeerSubscription
 
 	persistentPeers        map[string]struct{}
 	persistentPeersBackoff map[string]time.Duration
@@ -280,6 +281,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 		inboundPeers:           make(map[string]*peer),
 		outboundPeers:          make(map[string]*peer),
 		peerConnectedListeners: make(map[string][]chan<- lnpeer.Peer),
+		peerSubscriptions:      make(map[uint]*PeerSubscription),
 		sentDisabled:           make(map[wire.OutPoint]bool),
 
 		globalFeatures: lnwire.NewFeatureVector(globalFeatures,
@@ -2182,6 +2184,73 @@ func (s *server) OutboundPeerConnected(connReq *connmgr.ConnReq, conn net.Conn) 
 	}
 }
 
+// PeerSubscription is a subscription for peers connected events.
+// Its ConnectedPeers channel is used to get peer notification for each
+// peer that become connected with this node
+type PeerSubscription struct {
+	ConnectedPeers chan *peer
+	id             uint
+	server         *server
+}
+
+// Cancel cancels the current subscription by removing the subscription from
+// the list of subscribers. It also closes the channel that is used to send
+// notification events.
+func (s *PeerSubscription) Cancel() {
+	server := s.server
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	delete(server.peerSubscriptions, s.id)
+	close(s.ConnectedPeers)
+}
+
+//peerSuscriberNextID is the id that will be used for the next subscriber
+var peerSuscriberNextID uint
+
+// NewPeerSubscription creates a new subscription to get peers notifications.
+// After creation two things are executed:
+// 1. Sending event to the new subscriber for each current connected peer.
+// 2. Adding this subscription to the subscribers list so it will receive future events.
+func (s *server) NewPeerSubscription() *PeerSubscription {
+
+	//creating a new subscription with unique id
+	subscription := &PeerSubscription{
+		ConnectedPeers: make(chan *peer),
+		id:             peerSuscriberNextID,
+		server:         s,
+	}
+
+	//send notification for the new subscriber for each current online peer
+	for _, p := range s.Peers() {
+		go func(p *peer) {
+			select {
+			case subscription.ConnectedPeers <- p:
+			case <-s.quit:
+				return
+			}
+		}(p)
+	}
+
+	//add the new subscribe to the list of subscribers
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peerSubscriptions[subscription.id] = subscription
+	peerSuscriberNextID++
+	return subscription
+}
+
+func (s *server) notifyConnectedPeer(p *peer) {
+	for _, sub := range s.peerSubscriptions {
+		go func(connectedPeersChan chan<- *peer) {
+			select {
+			case connectedPeersChan <- p:
+			case <-s.quit:
+				return
+			}
+		}(sub.ConnectedPeers)
+	}
+}
+
 // UnassignedConnID is the default connection ID that a request can have before
 // it actually is submitted to the connmgr.
 // TODO(conner): move into connmgr package, or better, add connmgr method for
@@ -2365,6 +2434,9 @@ func (s *server) peerInitializer(p *peer) {
 		}
 	}
 	delete(s.peerConnectedListeners, pubStr)
+
+	// Notify online peers subscribers with the current new peer that is connected
+	s.notifyConnectedPeer(p)
 }
 
 // peerTerminationWatcher waits until a peer has been disconnected unexpectedly,
