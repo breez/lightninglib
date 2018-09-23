@@ -306,6 +306,12 @@ service Lightning {
             get: "/v1/peers"
         };
     }
+    
+    rpc SubscribePeers (PeerSubscription) returns (stream Peer) {
+        option (google.api.http) = {
+            get: "/v1/peers/subscribe"
+        };
+    }
 
     /** lncli: `getinfo`
     GetInfo returns general information concerning the lightning node including
@@ -1055,6 +1061,9 @@ message ListPeersRequest {
 message ListPeersResponse {
     /// The list of currently connected peers
     repeated Peer peers = 1 [json_name = "peers"];
+}
+
+message PeerSubscription {    
 }
 
 message GetInfoRequest {

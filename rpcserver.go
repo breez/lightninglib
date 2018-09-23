@@ -213,6 +213,10 @@ var (
 			Entity: "peers",
 			Action: "read",
 		}},
+		"/lnrpc.Lightning/SubscribedPeers": {{
+			Entity: "peers",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/WalletBalance": {{
 			Entity: "onchain",
 			Action: "read",
@@ -1378,40 +1382,60 @@ func (r *rpcServer) ListPeers(ctx context.Context,
 	}
 
 	for _, serverPeer := range serverPeers {
-		var (
-			satSent int64
-			satRecv int64
-		)
-
-		// In order to display the total number of satoshis of outbound
-		// (sent) and inbound (recv'd) satoshis that have been
-		// transported through this peer, we'll sum up the sent/recv'd
-		// values for each of the active channels we have with the
-		// peer.
-		chans := serverPeer.ChannelSnapshots()
-		for _, c := range chans {
-			satSent += int64(c.TotalMSatSent.ToSatoshis())
-			satRecv += int64(c.TotalMSatReceived.ToSatoshis())
-		}
-
-		nodePub := serverPeer.addr.IdentityKey.SerializeCompressed()
-		peer := &lnrpc.Peer{
-			PubKey:    hex.EncodeToString(nodePub),
-			Address:   serverPeer.conn.RemoteAddr().String(),
-			Inbound:   serverPeer.inbound,
-			BytesRecv: atomic.LoadUint64(&serverPeer.bytesReceived),
-			BytesSent: atomic.LoadUint64(&serverPeer.bytesSent),
-			SatSent:   satSent,
-			SatRecv:   satRecv,
-			PingTime:  serverPeer.PingTime(),
-		}
-
-		resp.Peers = append(resp.Peers, peer)
+		resp.Peers = append(resp.Peers, r.createRPCPeer(serverPeer))
 	}
 
 	rpcsLog.Debugf("[listpeers] yielded %v peers", serverPeers)
 
 	return resp, nil
+}
+
+func (r *rpcServer) SubscribePeers(in *lnrpc.PeerSubscription,
+	updateStream lnrpc.Lightning_SubscribePeersServer) error {
+	peersSubscription := r.server.NewPeerSubscription()
+	defer peersSubscription.Cancel()
+
+	for {
+		select {
+		case p := <-peersSubscription.ConnectedPeers:
+			resp := r.createRPCPeer(p)
+			if err := updateStream.Send(resp); err != nil {
+				return err
+			}
+		case <-r.quit:
+			return nil
+		}
+	}
+}
+
+func (r *rpcServer) createRPCPeer(serverPeer *peer) *lnrpc.Peer {
+	var (
+		satSent int64
+		satRecv int64
+	)
+
+	// In order to display the total number of satoshis of outbound
+	// (sent) and inbound (recv'd) satoshis that have been
+	// transported through this peer, we'll sum up the sent/recv'd
+	// values for each of the active channels we have with the
+	// peer.
+	chans := serverPeer.ChannelSnapshots()
+	for _, c := range chans {
+		satSent += int64(c.TotalMSatSent.ToSatoshis())
+		satRecv += int64(c.TotalMSatReceived.ToSatoshis())
+	}
+
+	nodePub := serverPeer.addr.IdentityKey.SerializeCompressed()
+	return &lnrpc.Peer{
+		PubKey:    hex.EncodeToString(nodePub),
+		Address:   serverPeer.conn.RemoteAddr().String(),
+		Inbound:   serverPeer.inbound,
+		BytesRecv: atomic.LoadUint64(&serverPeer.bytesReceived),
+		BytesSent: atomic.LoadUint64(&serverPeer.bytesSent),
+		SatSent:   satSent,
+		SatRecv:   satRecv,
+		PingTime:  serverPeer.PingTime(),
+	}
 }
 
 // WalletBalance returns total unspent outputs(confirmed and unconfirmed), all

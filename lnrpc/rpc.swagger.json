@@ -846,6 +846,22 @@
         ]
       }
     },
+    "/v1/peers/subscribe": {
+      "get": {
+        "operationId": "SubscribePeers",
+        "responses": {
+          "200": {
+            "description": "(streaming responses)",
+            "schema": {
+              "$ref": "#/definitions/lnrpcPeer"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/peers/{pub_key}": {
       "delete": {
         "summary": "* lncli: `disconnect`\nDisconnectPeer attempts to disconnect one peer from another identified by a\ngiven pubKey. In the case that we currently have a pending or active channel\nwith the target peer, then this action will be not be allowed.",
