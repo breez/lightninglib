@@ -307,6 +307,12 @@ service Lightning {
         };
     }
 
+    rpc SubscribePeers (PeerSubscription) returns (stream PeerNotification) {
+        option (google.api.http) = {
+            get: "/v1/peers/subscribe"
+        };
+    }
+
     /** lncli: `getinfo`
     GetInfo returns general information concerning the lightning node including
     it's identity pubkey, alias, the chains it is connected to, and information
@@ -1040,6 +1046,20 @@ message ListPeersRequest {
 message ListPeersResponse {
     /// The list of currently connected peers
     repeated Peer peers = 1 [json_name = "peers"];
+}
+
+message PeerSubscription {    
+}
+
+message PeerNotification {
+    /// The identity pubkey of the peer
+    string pub_key = 1 [json_name = "pub_key"];
+
+    /// Network address of the peer; eg `127.0.0.1:10011`
+    string address = 2 [json_name = "address"];
+
+    /// The flag reflects if this is a connected or disconnected notification
+    bool connected = 3 [json_name = "connected"];
 }
 
 message GetInfoRequest {
