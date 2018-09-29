@@ -839,6 +839,22 @@
         ]
       }
     },
+    "/v1/peers/subscribe": {
+      "get": {
+        "operationId": "SubscribePeers",
+        "responses": {
+          "200": {
+            "description": "(streaming responses)",
+            "schema": {
+              "$ref": "#/definitions/lnrpcPeerNotification"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/peers/{pub_key}": {
       "delete": {
         "summary": "* lncli: `disconnect`\nDisconnectPeer attempts to disconnect one peer from another identified by a\ngiven pubKey. In the case that we currently have a pending or active channel\nwith the target peer, then this action will be not be allowed.",
@@ -2348,6 +2364,24 @@
           "type": "string",
           "format": "int64",
           "title": "/ Ping time to this peer"
+        }
+      }
+    },
+    "lnrpcPeerNotification": {
+      "type": "object",
+      "properties": {
+        "pub_key": {
+          "type": "string",
+          "title": "/ The identity pubkey of the peer"
+        },
+        "address": {
+          "type": "string",
+          "title": "/ Network address of the peer; eg `127.0.0.1:10011`"
+        },
+        "connected": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "/ The flag reflects if this is a connected or disconnected notification"
         }
       }
     },

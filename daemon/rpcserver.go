@@ -325,6 +325,10 @@ var (
 			Entity: "offchain",
 			Action: "read",
 		}},
+		"/lnrpc.Lightning/SubscribePeers": {{
+			Entity: "peers",
+			Action: "read",
+		}},
 	}
 )
 
@@ -1346,6 +1350,41 @@ func (r *rpcServer) ListPeers(ctx context.Context,
 	rpcsLog.Debugf("[listpeers] yielded %v peers", serverPeers)
 
 	return resp, nil
+}
+
+// SubscribePeers creates a subscription for peers connected/disconnected
+// Notifications. A notification will be dispatched for every peer that
+// becomes connected to this node or disconnected from it.
+func (r *rpcServer) SubscribePeers(in *lnrpc.PeerSubscription,
+	updateStream lnrpc.Lightning_SubscribePeersServer) error {
+	peersSubscription := r.server.NewPeerSubscription()
+	defer peersSubscription.Cancel()
+
+	for {
+		select {
+		case p := <-peersSubscription.ConnectedPeers:
+			resp := r.createRPCPeerNotification(p, true)
+			if err := updateStream.Send(resp); err != nil {
+				return err
+			}
+		case p := <-peersSubscription.DisconnectedPeers:
+			resp := r.createRPCPeerNotification(p, false)
+			if err := updateStream.Send(resp); err != nil {
+				return err
+			}
+		case <-r.quit:
+			return nil
+		}
+	}
+}
+
+func (r *rpcServer) createRPCPeerNotification(serverPeer *peer, connected bool) *lnrpc.PeerNotification {
+	nodePub := serverPeer.addr.IdentityKey.SerializeCompressed()
+	return &lnrpc.PeerNotification{
+		PubKey:    hex.EncodeToString(nodePub),
+		Address:   serverPeer.conn.RemoteAddr().String(),
+		Connected: connected,
+	}
 }
 
 // WalletBalance returns total unspent outputs(confirmed and unconfirmed), all
