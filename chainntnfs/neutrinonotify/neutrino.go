@@ -756,6 +756,9 @@ type spendCancel struct {
 func (n *NeutrinoNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 	pkScript []byte, heightHint uint32) (*chainntnfs.SpendEvent, error) {
 
+	//wait 10 seconds as a work around to wait for filter headrs to catch the chain tip
+	time.Sleep(10 * time.Second)
+
 	n.heightMtx.RLock()
 	currentHeight := n.bestHeight
 	n.heightMtx.RUnlock()
