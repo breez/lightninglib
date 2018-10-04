@@ -49,10 +49,6 @@ const (
 	// reconnecting to persistent peers.
 	defaultBackoff = time.Second
 
-	// maximumBackoff is the largest backoff we will permit when
-	// reattempting connections to persistent peers.
-	maximumBackoff = time.Hour
-
 	// defaultStableConnDuration is a floor under which all reconnection
 	// attempts will apply exponential randomized backoff. Connections
 	// durations exceeding this value will be eligible to have their
@@ -68,6 +64,10 @@ var (
 	// ErrServerShuttingDown indicates that the server is in the process of
 	// gracefully exiting.
 	ErrServerShuttingDown = errors.New("server is shutting down")
+
+	// maximumBackoff is the largest backoff we will permit when
+	// reattempting connections to persistent peers.
+	maximumBackoff = cfg.MaxBackoff
 )
 
 // server is the main server of the Lightning Network Daemon. The server houses
