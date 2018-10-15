@@ -925,13 +925,13 @@
         ]
       },
       "post": {
-        "summary": "* lncli: `sendcoins`\nSendCoins executes a request to send coins to a particular address. Unlike\nSendMany, this RPC call only allows creating a single output at a time. If\nneither target_conf, or sat_per_byte are set, then the internal wallet will\nconsult its fee model to determine a fee for the default confirmation\ntarget.",
-        "operationId": "SendCoins",
+        "summary": "* lncli: `sendrawtx`\nSendRawTx executes a request to broadcast a raw transaction to the network.",
+        "operationId": "SendRawTx",
         "responses": {
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/lnrpcSendCoinsResponse"
+              "$ref": "#/definitions/lnrpcSendRawTxResponse"
             }
           }
         },
@@ -941,7 +941,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/lnrpcSendCoinsRequest"
+              "$ref": "#/definitions/lnrpcSendRawTxRequest"
             }
           }
         ],
@@ -2627,6 +2627,24 @@
         "txid": {
           "type": "string",
           "title": "/ The id of the transaction"
+        }
+      }
+    },
+    "lnrpcSendRawTxRequest": {
+      "type": "object",
+      "properties": {
+        "hextx": {
+          "type": "string",
+          "title": "/ The transaction in signed hex"
+        }
+      }
+    },
+    "lnrpcSendRawTxResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "title": "/ The transaction ID of the transaction"
         }
       }
     },

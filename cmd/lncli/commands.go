@@ -242,6 +242,60 @@ func sendCoins(ctx *cli.Context) error {
 	return nil
 }
 
+var sendRawTxCommand = cli.Command{
+	Name:      "sendrawtx",
+	Category:  "On-chain",
+	Usage:     "Broadcast a raw transaction.",
+	ArgsUsage: "hextx",
+	Description: `
+	Broadcast a hex encoded raw transaction to the network.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "hextx",
+			Usage: "a hex encoded raw transaction",
+		},
+	},
+	Action: actionDecorator(sendRawTx),
+}
+
+func sendRawTx(ctx *cli.Context) error {
+	var (
+		hextx string
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "sendrawtx")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("hextx"):
+		hextx = ctx.String("hextx")
+	case args.Present():
+		hextx = args.First()
+		args = args.Tail()
+	default:
+		return fmt.Errorf("hextx argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SendRawTxRequest{
+		Hextx: hextx,
+	}
+	txid, err := client.SendRawTx(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(txid)
+	return nil
+}
+
 var sendManyCommand = cli.Command{
 	Name:      "sendmany",
 	Category:  "On-chain",
