@@ -2043,7 +2043,7 @@ func (s *server) InboundPeerConnected(conn net.Conn) {
 		// we'll close out this connection s.t there's only a single
 		// connection between us.
 		localPub := s.identityPriv.PubKey()
-		if !shouldDropLocalConnection(localPub, nodePub) {
+		if !connectedPeer.inbound && !shouldDropLocalConnection(localPub, nodePub) {
 			srvrLog.Warnf("Received inbound connection from "+
 				"peer %x, but already connected, dropping conn",
 				nodePub.SerializeCompressed())
@@ -2150,7 +2150,7 @@ func (s *server) OutboundPeerConnected(connReq *connmgr.ConnReq, conn net.Conn) 
 		// so, in order to ensure we don't have any duplicate
 		// connections.
 		localPub := s.identityPriv.PubKey()
-		if shouldDropLocalConnection(localPub, nodePub) {
+		if connectedPeer.inbound && shouldDropLocalConnection(localPub, nodePub) {
 			srvrLog.Warnf("Established outbound connection to "+
 				"peer %x, but already connected, dropping conn",
 				nodePub.SerializeCompressed())
