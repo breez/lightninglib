@@ -45,6 +45,8 @@ type FilteredChainView interface {
 	// FilteredBlocks() channel.
 	UpdateFilter(ops []channeldb.EdgePoint, updateHeight uint32) error
 
+	WatchAddress(address string) (error)
+
 	// FilterBlock takes a block hash, and returns a FilteredBlocks which
 	// is the result of applying the current registered UTXO sub-set on the
 	// block corresponding to that block hash.

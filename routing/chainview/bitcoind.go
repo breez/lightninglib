@@ -11,6 +11,7 @@ import (
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/wtxmgr"
 )
@@ -74,6 +75,15 @@ func NewBitcoindFilteredChainView(
 	chainView.blockQueue = newBlockEventQueue()
 
 	return chainView
+}
+
+func (b *BitcoindFilteredChainView) WatchAddress(address string) (error) {
+	a, err := btcutil.DecodeAddress(address, nil)
+	if err != nil {
+		return err
+	}
+
+	return b.chainClient.LoadTxFilter(false, []btcutil.Address{a})
 }
 
 // Start starts all goroutines necessary for normal operation.

@@ -68,6 +68,11 @@ func NewCfFilteredChainView(node *neutrino.ChainService) (*CfFilteredChainView, 
 	}, nil
 }
 
+func (c *CfFilteredChainView) WatchAddress(address string) (error) {
+	return fmt.Errorf("neutrino WatchAddress not implemented")
+}
+
+
 // Start kicks off the FilteredChainView implementation. This function must be
 // called before any calls to UpdateFilter can be processed.
 //

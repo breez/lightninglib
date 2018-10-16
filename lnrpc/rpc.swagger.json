@@ -925,13 +925,13 @@
         ]
       },
       "post": {
-        "summary": "* lncli: `sendrawtx`\nSendRawTx executes a request to broadcast a raw transaction to the network.",
-        "operationId": "SendRawTx",
+        "summary": "* lncli: `watchaddress`\nWatchAddress adds an address to be monitored for transactions. These will be received\nthrough the SubscribeTransactions stream.",
+        "operationId": "WatchAddress",
         "responses": {
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/lnrpcSendRawTxResponse"
+              "$ref": "#/definitions/lnrpcWatchAddressResponse"
             }
           }
         },
@@ -941,7 +941,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/lnrpcSendRawTxRequest"
+              "$ref": "#/definitions/lnrpcWatchAddressRequest"
             }
           }
         ],
@@ -2843,6 +2843,24 @@
           "type": "string",
           "format": "int64",
           "title": "/ The unconfirmed balance of a wallet(with 0 confirmations)"
+        }
+      }
+    },
+    "lnrpcWatchAddressRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "title": "/ The address"
+        }
+      }
+    },
+    "lnrpcWatchAddressResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "title": "/ The address being watched"
         }
       }
     }

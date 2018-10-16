@@ -543,9 +543,24 @@ func (r *rpcServer) SendRawTx(ctx context.Context,
 		return nil, err
 	}
 
-	rpcsLog.Infof("[sendcoins] spend generated txid: %v", tx.TxHash().String())
+	rpcsLog.Infof("[sendrawtx] txid: %v", tx.TxHash().String())
 
 	return &lnrpc.SendRawTxResponse{Txid: tx.TxHash().String()}, nil
+}
+
+// WatchAddress adds an address to be monitored for on-chain transactions
+func (r *rpcServer) WatchAddress(ctx context.Context,
+	in *lnrpc.WatchAddressRequest) (*lnrpc.WatchAddressResponse, error) {
+
+	rpcsLog.Infof("[watchaddress] hextx=%v", in.Address)
+
+	err := r.server.cc.chainView.WatchAddress(in.Address)
+	if err != nil {
+		return nil, err
+	}
+
+	rpcsLog.Infof("[watchaddress] monitoring: %v", in.Address)
+	return &lnrpc.WatchAddressResponse{Address: in.Address}, nil
 }
 
 // NewAddress creates a new address under control of the local wallet.

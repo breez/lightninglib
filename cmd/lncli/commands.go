@@ -2812,6 +2812,61 @@ func decodePayReq(ctx *cli.Context) error {
 	return nil
 }
 
+var watchAddressCommand = cli.Command{
+	Name:      "watchaddress",
+	Category:  "On-chain",
+	Usage:     "Add an address to monitor for transactions.",
+	ArgsUsage: "address",
+	Description: `
+	Add an address to the list of watched addresses. Any transaction to this address
+	will be received via the SubscribeTransactions stream.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "address",
+			Usage: "address to monitor",
+		},
+	},
+	Action: actionDecorator(watchAddress),
+}
+
+func watchAddress(ctx *cli.Context) error {
+	var (
+		address string
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "watchaddress")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("address"):
+		address = ctx.String("address")
+	case args.Present():
+		address = args.First()
+		args = args.Tail()
+	default:
+		return fmt.Errorf("address argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.WatchAddressRequest{
+		Address: address,
+	}
+	addressResponse, err := client.WatchAddress(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(addressResponse)
+	return nil
+}
+
 var listChainTxnsCommand = cli.Command{
 	Name:        "listchaintxns",
 	Category:    "On-chain",

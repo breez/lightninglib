@@ -86,6 +86,15 @@ func NewBtcdFilteredChainView(config rpcclient.ConnConfig) (*BtcdFilteredChainVi
 	return chainView, nil
 }
 
+func (b *BtcdFilteredChainView) WatchAddress(address string) (error) {
+	a, err := btcutil.DecodeAddress(address, nil)
+	if err != nil {
+		return err
+	}
+
+	return b.btcdConn.LoadTxFilter(false, []btcutil.Address{a}, nil)
+}
+
 // Start starts all goroutines necessary for normal operation.
 //
 // NOTE: This is part of the FilteredChainView interface.
