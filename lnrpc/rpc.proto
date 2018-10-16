@@ -231,6 +231,16 @@ service Lightning {
         };
     }
 
+    /** lncli: `sendrawtx`
+    SendRawTx executes a request to broadcast a raw transaction to the network.
+    */
+    rpc SendRawTx (SendRawTxRequest) returns (SendRawTxResponse) {
+        option (google.api.http) = {
+            post: "/v1/transactions"
+            body: "*"
+        };
+    }
+
     /**
     SubscribeTransactions creates a uni-directional stream from the server to
     the client in which any newly discovered transactions relevant to the
@@ -791,6 +801,15 @@ message SendCoinsRequest {
     int64 sat_per_byte = 5;
 }
 message SendCoinsResponse {
+    /// The transaction ID of the transaction
+    string txid = 1 [json_name = "txid"];
+}
+
+message SendRawTxRequest {
+    /// The transaction in signed hex
+    string hextx = 1;
+}
+message SendRawTxResponse {
     /// The transaction ID of the transaction
     string txid = 1 [json_name = "txid"];
 }

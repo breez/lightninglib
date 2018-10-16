@@ -515,6 +515,39 @@ func (r *rpcServer) SendMany(ctx context.Context,
 	return &lnrpc.SendManyResponse{Txid: txid.String()}, nil
 }
 
+// SendRawTx executes a request to broacast a raw transaction over the network.
+func (r *rpcServer) SendRawTx(ctx context.Context,
+	in *lnrpc.SendRawTxRequest) (*lnrpc.SendRawTxResponse, error) {
+
+	rpcsLog.Infof("[sendrawtx] hextx=%v", in.Hextx)
+
+	// Deserialize the transaction.
+	hexStr := in.Hextx
+	if len(hexStr)%2 != 0 {
+		hexStr = "0" + hexStr
+	}
+
+	serializedTx, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil, err
+	}
+
+	var tx wire.MsgTx
+	err = tx.Deserialize(bytes.NewReader(serializedTx))
+	if err != nil {
+		return nil, err
+	}
+
+	err = r.server.cc.wallet.PublishTransaction(&tx)
+	if err != nil {
+		return nil, err
+	}
+
+	rpcsLog.Infof("[sendcoins] spend generated txid: %v", tx.TxHash().String())
+
+	return &lnrpc.SendRawTxResponse{Txid: tx.TxHash().String()}, nil
+}
+
 // NewAddress creates a new address under control of the local wallet.
 func (r *rpcServer) NewAddress(ctx context.Context,
 	in *lnrpc.NewAddressRequest) (*lnrpc.NewAddressResponse, error) {
