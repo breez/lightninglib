@@ -2691,6 +2691,8 @@ func (s *server) ConnectToPeer(addr *lnwire.NetAddress, perm bool) error {
 	if reqs, ok := s.persistentConnReqs[targetPub]; ok {
 		srvrLog.Warnf("Already have %d persistent connection "+
 			"requests for %v, connecting anyway.", len(reqs), addr)
+		s.mu.Unlock()
+		return fmt.Errorf("already have a connection request to peer: %x", targetPub)
 	}
 
 	// If there's not already a pending or active connection to this node,
