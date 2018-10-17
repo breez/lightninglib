@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"io"
 	"math"
 	"sort"
@@ -554,7 +555,12 @@ func (r *rpcServer) WatchAddress(ctx context.Context,
 
 	rpcsLog.Infof("[watchaddress] hextx=%v", in.Address)
 
-	err := r.server.cc.chainView.WatchAddress(in.Address)
+	a, err := btcutil.DecodeAddress(in.Address, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient().NotifyReceived([]btcutil.Address{a})
 	if err != nil {
 		return nil, err
 	}
