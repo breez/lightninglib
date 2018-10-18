@@ -293,6 +293,10 @@ var (
 			Entity: "info",
 			Action: "write",
 		}},
+		"/lnrpc.Lightning/SetConnectionBehavior": {{
+			Entity: "info",
+			Action: "write",
+		}},
 		"/lnrpc.Lightning/SubscribeChannelGraph": {{
 			Entity: "info",
 			Action: "read",
@@ -3592,6 +3596,12 @@ func (r *rpcServer) StopDaemon(ctx context.Context,
 
 	signal.RequestShutdown()
 	return &lnrpc.StopResponse{}, nil
+}
+
+func (r *rpcServer) SetConnectionBehavior(ctx context.Context,
+	newBehavior *lnrpc.SetConnectionBehaviorRequest) (*lnrpc.SetConnectionBehaviorResponse, error) {
+	r.server.SetAutoReconnectPersistentPeers(newBehavior.AutoReconnectPeersEnabled)
+	return &lnrpc.SetConnectionBehaviorResponse{}, nil
 }
 
 // SubscribeChannelGraph launches a streaming RPC that allows the caller to

@@ -1,5 +1,5 @@
 #!/bin/sh
-
+export PATH=~/protoc-3-4-0/protoc/bin:$PATH
 # Generate the protos.
 protoc -I/usr/local/include -I. \
        -I$GOPATH/src \

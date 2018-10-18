@@ -323,6 +323,12 @@ service Lightning {
         };
     }
 
+    rpc SetConnectionBehavior (SetConnectionBehaviorRequest) returns (SetConnectionBehaviorResponse) {
+        option (google.api.http) = {
+            get: "/v1/peers/subscribe"
+        };
+    }
+
     /** lncli: `getinfo`
     GetInfo returns general information concerning the lightning node including
     it's identity pubkey, alias, the chains it is connected to, and information
@@ -879,6 +885,19 @@ message DisconnectPeerRequest {
     string pub_key = 1 [json_name = "pub_key"];
 }
 message DisconnectPeerResponse {
+}
+
+message SetConnectionBehaviorRequest {
+    /** 
+    This flag is regarding peers that were connected using the Perm=true 
+    options and those that has a channel with this.
+    For these peers the deamon default behavior is to attempt reconnect when
+    they are disconnected. By setting this field to false this behavior is
+    changed and no further attempts are made.
+    */
+    bool autoReconnectPeersEnabled = 1 [json_name = "auto_reconnect_peers_enabled"];
+}
+message SetConnectionBehaviorResponse { 
 }
 
 message HTLC {

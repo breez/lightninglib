@@ -841,15 +841,25 @@
     },
     "/v1/peers/subscribe": {
       "get": {
-        "operationId": "SubscribePeers",
+        "operationId": "SetConnectionBehavior",
         "responses": {
           "200": {
-            "description": "(streaming responses)",
+            "description": "",
             "schema": {
-              "$ref": "#/definitions/lnrpcPeerNotification"
+              "$ref": "#/definitions/lnrpcSetConnectionBehaviorResponse"
             }
           }
         },
+        "parameters": [
+          {
+            "name": "autoReconnectPeersEnabled",
+            "description": "* \nThis flag is regarding peers that were connected using the Perm=true \noptions and those that has a channel with this.\nFor these peers the deamon default behavior is to attempt reconnect when\nthey are disconnected. By setting this field to false this behavior is\nchanged and no further attempts are made.",
+            "in": "query",
+            "required": false,
+            "type": "boolean",
+            "format": "boolean"
+          }
+        ],
         "tags": [
           "Lightning"
         ]
@@ -2724,6 +2734,9 @@
           "description": "/ The set of routes that should be used to attempt to complete the payment."
         }
       }
+    },
+    "lnrpcSetConnectionBehaviorResponse": {
+      "type": "object"
     },
     "lnrpcSignMessageResponse": {
       "type": "object",
