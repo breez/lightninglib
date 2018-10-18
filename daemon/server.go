@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"image/color"
+	"math"
 	"math/big"
 	"net"
 	"path/filepath"
@@ -54,6 +55,10 @@ const (
 	// durations exceeding this value will be eligible to have their
 	// backoffs reduced.
 	defaultStableConnDuration = 10 * time.Minute
+
+	// infiniteBackoffDuration is used when the reconnectPersistentPeers is false.
+	// in that case we don't want to automatically reconect so using this backoff as a value.
+	infiniteBackoffDuration = time.Second * math.MaxInt32
 )
 
 var (
@@ -111,10 +116,12 @@ type server struct {
 	peerConnectedListeners map[string][]chan<- lnpeer.Peer
 	peerSubscriptions      map[uint]*PeerSubscription
 
-	persistentPeers        map[string]struct{}
-	persistentPeersBackoff map[string]time.Duration
-	persistentConnReqs     map[string][]*connmgr.ConnReq
-	persistentRetryCancels map[string]chan struct{}
+	persistentPeers              map[string]struct{}
+	persistentPeersBackoff       map[string]time.Duration
+	persistentConnReqs           map[string][]*connmgr.ConnReq
+	persistentRetryCancels       map[string]chan struct{}
+	persistentRetryForceConnects map[string]chan struct{}
+	reconnectPersistentPeers     bool
 
 	// ignorePeerTermination tracks peers for which the server has initiated
 	// a disconnect. Adding a peer to this map causes the peer termination
@@ -266,12 +273,14 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 		// schedule
 		sphinx: htlcswitch.NewOnionProcessor(sphinxRouter),
 
-		persistentPeers:         make(map[string]struct{}),
-		persistentPeersBackoff:  make(map[string]time.Duration),
-		persistentConnReqs:      make(map[string][]*connmgr.ConnReq),
-		persistentRetryCancels:  make(map[string]chan struct{}),
-		ignorePeerTermination:   make(map[*peer]struct{}),
-		scheduledPeerConnection: make(map[string]func()),
+		persistentPeers:              make(map[string]struct{}),
+		persistentPeersBackoff:       make(map[string]time.Duration),
+		persistentConnReqs:           make(map[string][]*connmgr.ConnReq),
+		persistentRetryCancels:       make(map[string]chan struct{}),
+		ignorePeerTermination:        make(map[*peer]struct{}),
+		scheduledPeerConnection:      make(map[string]func()),
+		persistentRetryForceConnects: make(map[string]chan struct{}),
+		reconnectPersistentPeers:     true,
 
 		peersByPub:             make(map[string]*peer),
 		inboundPeers:           make(map[string]*peer),
@@ -2275,6 +2284,12 @@ func (s *server) cancelConnReqs(pubStr string, skip *uint64) {
 		delete(s.persistentRetryCancels, pubStr)
 	}
 
+	// Next, clean close and delete the force request chanel
+	if forceChan, ok := s.persistentRetryForceConnects[pubStr]; ok {
+		close(forceChan)
+		delete(s.persistentRetryForceConnects, pubStr)
+	}
+
 	// Next, check to see if we have any outstanding persistent connection
 	// requests to this peer. If so, then we'll remove all of these
 	// connection requests, and also delete the entry from the map.
@@ -2562,12 +2577,29 @@ func (s *server) peerTerminationWatcher(p *peer, ready chan struct{}) {
 		backoff := s.nextPeerBackoff(pubStr, p.StartTime())
 		s.persistentPeersBackoff[pubStr] = backoff
 
+		//In case we shouldn't reconnect persistent peers we
+		//set the backoff to a long value which will wait untill
+		//the value of reconnectPersistentPeers will be set to true
+		//since we don't want to interfer in the regular backoff mechanism
+		//so we don't put this value in the persistentPeersBackoff map
+		if !s.reconnectPersistentPeers {
+			backoff = infiniteBackoffDuration
+		}
+
 		// Initialize a retry canceller for this peer if one does not
 		// exist.
 		cancelChan, ok := s.persistentRetryCancels[pubStr]
 		if !ok {
 			cancelChan = make(chan struct{})
 			s.persistentRetryCancels[pubStr] = cancelChan
+		}
+
+		// Initialize a force retry channel for this peer if one does not
+		// exist.
+		forceRetryChan, ok := s.persistentRetryForceConnects[pubStr]
+		if !ok {
+			forceRetryChan = make(chan struct{})
+			s.persistentRetryForceConnects[pubStr] = forceRetryChan
 		}
 
 		// We choose not to wait group this go routine since the Connect
@@ -2579,6 +2611,7 @@ func (s *server) peerTerminationWatcher(p *peer, ready chan struct{}) {
 
 			select {
 			case <-time.After(backoff):
+			case <-forceRetryChan:
 			case <-cancelChan:
 				return
 			case <-s.quit:
@@ -2590,6 +2623,29 @@ func (s *server) peerTerminationWatcher(p *peer, ready chan struct{}) {
 
 			s.connMgr.Connect(connReq)
 		}()
+	}
+}
+
+func (s *server) SetAutoReconnectPersistentPeers(reconnect bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	//In case the new value equals to the existing value return early
+	if reconnect == s.reconnectPersistentPeers {
+		return
+	}
+	s.reconnectPersistentPeers = reconnect
+	//In case we are switching to automatically reconnect then for
+	//every persistent peer send a message via the corresponding
+	//persistentRetryForceConnects channel that signals the peerTerminationWatcher
+	//to stop waiting and try to connect immediately
+	if reconnect {
+		for pubStr := range s.persistentPeers {
+			if forceConnectChan, ok := s.persistentRetryForceConnects[pubStr]; ok {
+				close(forceConnectChan)
+				delete(s.persistentRetryForceConnects, pubStr)
+				delete(s.persistentPeersBackoff, pubStr)
+			}
+		}
 	}
 }
 
