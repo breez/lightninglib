@@ -157,6 +157,14 @@ var (
 			Entity: "onchain",
 			Action: "write",
 		}},
+		"/lnrpc.Lightning/SendRawTx": {{
+			Entity: "onchain",
+			Action: "write",
+		}},
+		"/lnrpc.Lightning/WatchAddress": {{
+			Entity: "onchain",
+			Action: "write",
+		}},
 		"/lnrpc.Lightning/NewAddress": {{
 			Entity: "address",
 			Action: "write",
