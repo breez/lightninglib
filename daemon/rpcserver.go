@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"io"
 	"math"
 	"sort"
@@ -543,9 +544,29 @@ func (r *rpcServer) SendRawTx(ctx context.Context,
 		return nil, err
 	}
 
-	rpcsLog.Infof("[sendcoins] spend generated txid: %v", tx.TxHash().String())
+	rpcsLog.Infof("[sendrawtx] txid: %v", tx.TxHash().String())
 
 	return &lnrpc.SendRawTxResponse{Txid: tx.TxHash().String()}, nil
+}
+
+// WatchAddress adds an address to be monitored for on-chain transactions
+func (r *rpcServer) WatchAddress(ctx context.Context,
+	in *lnrpc.WatchAddressRequest) (*lnrpc.WatchAddressResponse, error) {
+
+	rpcsLog.Infof("[watchaddress] hextx=%v", in.Address)
+
+	a, err := btcutil.DecodeAddress(in.Address, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient().NotifyReceived([]btcutil.Address{a})
+	if err != nil {
+		return nil, err
+	}
+
+	rpcsLog.Infof("[watchaddress] monitoring: %v", in.Address)
+	return &lnrpc.WatchAddressResponse{Address: in.Address}, nil
 }
 
 // NewAddress creates a new address under control of the local wallet.
