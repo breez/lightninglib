@@ -2686,13 +2686,12 @@ func (s *server) ConnectToPeer(addr *lnwire.NetAddress, perm bool) error {
 	// Peer was not found, continue to pursue connection with peer.
 
 	// If there's already a pending connection request for this pubkey,
-	// then we ignore this request to ensure we don't create a redundant
+	// then we cancel older requests to ensure we don't create a redundant
 	// connection.
 	if reqs, ok := s.persistentConnReqs[targetPub]; ok {
 		srvrLog.Warnf("Already have %d persistent connection "+
 			"requests for %v, connecting anyway.", len(reqs), addr)
-		s.mu.Unlock()
-		return fmt.Errorf("already have a connection request to peer: %x", targetPub)
+		s.cancelConnReqs(targetPub, nil)
 	}
 
 	// If there's not already a pending or active connection to this node,
