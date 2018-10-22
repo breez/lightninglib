@@ -561,8 +561,6 @@ func (r *rpcServer) SendRawTx(ctx context.Context,
 func (r *rpcServer) WatchAddress(ctx context.Context,
 	in *lnrpc.WatchAddressRequest) (*lnrpc.WatchAddressResponse, error) {
 
-	rpcsLog.Infof("[watchaddress] hextx=%v", in.Address)
-
 	a, err := btcutil.DecodeAddress(in.Address, nil)
 	if err != nil {
 		return nil, err
