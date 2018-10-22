@@ -479,7 +479,8 @@ func migratePruneEdgeUpdateIndex(tx *bolt.Tx) error {
 	}
 
 	// Retrieve some buckets that will be needed later on. These should
-	// already exist given the assumption that the buckets above do as well.
+	// already exist given the assumption that the buckets above do as
+	// well.
 	edgeIndex, err := edges.CreateBucketIfNotExists(edgeIndexBucket)
 	if edgeIndex == nil {
 		return fmt.Errorf("unable to create/fetch edge index " +
@@ -513,19 +514,33 @@ func migratePruneEdgeUpdateIndex(tx *bolt.Tx) error {
 			err)
 	}
 
-	// With the existing edge policies gathered, we'll recreate the index
-	// and populate it with the correct entries.
-	if err := edges.DeleteBucket(edgeUpdateIndexBucket); err != nil {
-		return fmt.Errorf("unable to remove existing edge update "+
-			"index: %v", err)
-	}
-	edgeUpdateIndex, err = edges.CreateBucketIfNotExists(
-		edgeUpdateIndexBucket,
-	)
+	log.Info("Constructing set of edge update entries to purge.")
+
+	// Build the set of keys that we will remove from the edge update index.
+	// This will include all keys contained within the bucket.
+	var updateKeysToRemove [][]byte
+	err = edgeUpdateIndex.ForEach(func(updKey, _ []byte) error {
+		updateKeysToRemove = append(updateKeysToRemove, updKey)
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("unable to recreate edge update index: %v",
+		return fmt.Errorf("unable to gather existing edge updates: %v",
 			err)
 	}
+
+	log.Infof("Removing %d entries from edge update index.",
+		len(updateKeysToRemove))
+
+	// With the set of keys contained in the edge update index constructed,
+	// we'll proceed in purging all of them from the index.
+	for _, updKey := range updateKeysToRemove {
+		if err := edgeUpdateIndex.Delete(updKey); err != nil {
+			return err
+		}
+	}
+
+	log.Infof("Repopulating edge update index with %d valid entries.",
+		len(edgeKeys))
 
 	// For each edge key, we'll retrieve the policy, deserialize it, and
 	// re-add it to the different buckets. By doing so, we'll ensure that

@@ -17,6 +17,7 @@ import (
 	"github.com/breez/lightninglib/lncfg"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/macaroons"
+	"github.com/breez/lightninglib/build"
 	"github.com/btcsuite/btcutil"
 	"github.com/urfave/cli"
 
@@ -34,10 +35,6 @@ const (
 )
 
 var (
-	// Commit stores the current commit hash of this build. This should be
-	// set using -ldflags during compilation.
-	Commit string
-
 	defaultLndDir      = btcutil.AppDataDir("lnd", false)
 	defaultTLSCertPath = filepath.Join(defaultLndDir, defaultTLSCertFilename)
 )
@@ -205,7 +202,7 @@ func extractPathArgs(ctx *cli.Context) (string, string, error) {
 func main() {
 	app := cli.NewApp()
 	app.Name = "lncli"
-	app.Version = fmt.Sprintf("%s commit=%s", "0.5", Commit)
+	app.Version = build.Version()
 	app.Usage = "control plane for your Lightning Network Daemon (lnd)"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -266,6 +263,7 @@ func main() {
 		openChannelCommand,
 		closeChannelCommand,
 		closeAllChannelsCommand,
+		abandonChannelCommand,
 		listPeersCommand,
 		walletBalanceCommand,
 		channelBalanceCommand,

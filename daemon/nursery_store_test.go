@@ -13,12 +13,6 @@ import (
 	"github.com/btcsuite/btclog"
 )
 
-func init() {
-	// Disable logging to prevent panics bc. of global state
-	channeldb.UseLogger(btclog.Disabled)
-	utxnLog = btclog.Disabled
-}
-
 // makeTestDB creates a new instance of the ChannelDB for testing purposes. A
 // callback which cleans up the created temporary directories is also returned
 // and intended to be executed after the test completes.

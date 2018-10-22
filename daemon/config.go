@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/htlcswitch/hodl"
+	"github.com/breez/lightninglib/build"
 	"github.com/breez/lightninglib/lncfg"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
@@ -327,7 +328,7 @@ func loadConfig(args []string) (*config, error) {
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	usageMessage := fmt.Sprintf("Use %s -h to show usage", appName)
 	if preCfg.ShowVersion {
-		fmt.Println(appName, "version", version())
+		fmt.Println(appName, "version", build.Version())
 		os.Exit(0)
 	}
 

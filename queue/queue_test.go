@@ -1,13 +1,14 @@
-package chainntnfs_test
+package queue_test
 
 import (
 	"testing"
 
 	"github.com/breez/lightninglib/chainntnfs"
+	"github.com/breez/lightninglib/queue"
 )
 
 func TestConcurrentQueue(t *testing.T) {
-	queue := chainntnfs.NewConcurrentQueue(100)
+	queue := queue.NewConcurrentQueue(100)
 	queue.Start()
 	defer queue.Stop()
 

@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/queue"
 	"github.com/breez/lightninglib/zpay32"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcutil"
@@ -415,7 +415,7 @@ type invoiceSubscription struct {
 	// are sent out.
 	settleIndex uint64
 
-	ntfnQueue *chainntnfs.ConcurrentQueue
+	ntfnQueue *queue.ConcurrentQueue
 
 	id uint32
 
@@ -456,7 +456,7 @@ func (i *invoiceRegistry) SubscribeNotifications(addIndex, settleIndex uint64) *
 		addIndex:        addIndex,
 		settleIndex:     settleIndex,
 		inv:             i,
-		ntfnQueue:       chainntnfs.NewConcurrentQueue(20),
+		ntfnQueue:       queue.NewConcurrentQueue(20),
 		cancelChan:      make(chan struct{}),
 	}
 	client.ntfnQueue.Start()

@@ -14,18 +14,8 @@ import (
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/btcsuite/btclog"
 	"github.com/btcsuite/btcutil"
 )
-
-func init() {
-	peerLog = btclog.Disabled
-	srvrLog = btclog.Disabled
-	lnwallet.UseLogger(btclog.Disabled)
-	htlcswitch.UseLogger(btclog.Disabled)
-	channeldb.UseLogger(btclog.Disabled)
-	contractcourt.UseLogger(btclog.Disabled)
-}
 
 // TestPeerChannelClosureAcceptFeeResponder tests the shutdown responder's
 // behavior if we can agree on the fee immediately.

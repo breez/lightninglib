@@ -3,6 +3,7 @@ package routing
 import (
 	"github.com/btcsuite/btclog"
 	"github.com/breez/lightninglib/routing/chainview"
+	"github.com/breez/lightninglib/build"
 )
 
 // log is a logger that is initialized with no output filters.  This means the
@@ -12,13 +13,13 @@ var log btclog.Logger
 
 // The default amount of logging is none.
 func init() {
-	DisableLog()
+	UseLogger(build.NewSubLogger("CRTR", nil))
 }
 
 // DisableLog disables all library log output.  Logging output is disabled by
 // by default until UseLogger is called.
 func DisableLog() {
-	log = btclog.Disabled
+	UseLogger(btclog.Disabled)
 }
 
 // UseLogger uses a specified Logger to output package logging info.  This
