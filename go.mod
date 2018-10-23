@@ -59,3 +59,5 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
+
+replace github.com/lightninglabs/neutrino v0.0.0-20181019013733-8018ab76e70a => github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804
