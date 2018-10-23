@@ -5108,6 +5108,7 @@ func NewUnilateralCloseSummary(chanState *channeldb.OpenChannel, signer Signer,
 		IsPending:               true,
 		RemoteCurrentRevocation: chanState.RemoteCurrentRevocation,
 		RemoteNextRevocation:    chanState.RemoteNextRevocation,
+		ShortChanID:             chanState.ShortChanID(),
 		LocalChanConfig:         chanState.LocalChanCfg,
 	}
 
