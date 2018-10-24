@@ -2,6 +2,7 @@ package submarine
 
 import (
 	"errors"
+	"bytes"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/btcsuite/btcd/btcec"
@@ -9,6 +10,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
+	"github.com/coreos/bbolt"
 )
 
 const (
@@ -38,15 +40,60 @@ func genSubmarineSwapScript(swapperPubKey, payerPubKey, hash []byte, lockHeight 
 	return builder.Script()
 }
 
-func saveSubmarineData(db *channeldb.DB, hash []byte, address btcutil.AddressScriptHash, swapperKey, script []byte) error {
-	//need to serialize address, swapperKey and script in order to save them
-	//address size is always ripemd160.Size + 1 = 20 + 1 = 21 bytes
-	//swapperKey size is btcec.PrivKeyBytesLen = 32 bytes
-	return nil
+func saveSubmarineData(db *channeldb.DB, netID byte, hash, swapperKey []byte, script []byte) error {
+	if len(swapperKey) != btcec.PrivKeyBytesLen {
+		return errors.New("pubKey not valid")
+	}
+
+	return db.Update(func(tx *bolt.Tx) error {
+		bucket, err := tx.CreateBucketIfNotExists(submarineBucket)
+		if err != nil {
+			return err
+		}
+
+		var submarineData bytes.Buffer
+		err = submarineData.WriteByte(netID)
+		if err != nil {
+			return err
+		}
+		_, err = submarineData.Write(swapperKey)
+		if err != nil {
+			return err
+		}
+		_, err = submarineData.Write(script)
+		if err != nil {
+			return err
+		}
+
+		return bucket.Put(hash, submarineData.Bytes())
+	})
 }
 
-func getSubmarineData(db *channeldb.DB, hash []byte) (address btcutil.Address, swapperKey, script []byte, err error) {
-	err = errors.New("hash not found")
+func getSubmarineData(db *channeldb.DB, netID byte, hash []byte) (swapperKey, script []byte, err error) {
+
+	err = db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(submarineBucket)
+		if bucket == nil {
+			return errors.New("Not found")
+		}
+
+		value := bucket.Get(hash)
+		if value == nil {
+			return errors.New("Not found")
+		}
+
+		if value[0] != netID {
+			return errors.New("Not the same network")
+		}
+
+		swapperKey = make([]byte, btcec.PrivKeyBytesLen)
+		copy(swapperKey, value[1:btcec.PrivKeyBytesLen+1])
+		script = make([]byte, len(value)-1-btcec.PrivKeyBytesLen)
+
+		return nil
+	})
+
 	return
 }
 
@@ -61,7 +108,7 @@ func NewAddress(net *chaincfg.Params, chainClient chain.Interface, db *channeldb
 	}
 
 	//Need to check that the hash doesn't already exists in our db
-	_, _, _, errGet := getSubmarineData(db, hash)
+	_, _, errGet := getSubmarineData(db, net.ScriptHashAddrID, hash)
 	if errGet == nil {
 		err = errors.New("Hash already exists")
 		return
@@ -88,7 +135,7 @@ func NewAddress(net *chaincfg.Params, chainClient chain.Interface, db *channeldb
 	}
 
 	//Need to save these keyed by hash:
-	err = saveSubmarineData(db, hash, address, swapperKey, script)
+	err = saveSubmarineData(db, net.ScriptHashAddrID, hash, swapperKey, script)
 	if err != nil {
 		return
 	}
