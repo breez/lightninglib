@@ -781,6 +781,20 @@
               "NESTED_PUBKEY_HASH"
             ],
             "default": "WITNESS_PUBKEY_HASH"
+          },
+          {
+            "name": "submarine_hash",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "submarine_pubkey",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
           }
         ],
         "tags": [
@@ -2189,6 +2203,14 @@
         "address": {
           "type": "string",
           "title": "/ The newly generated wallet address"
+        },
+        "submarine_script": {
+          "type": "string",
+          "format": "byte"
+        },
+        "submarine_pubkey": {
+          "type": "string",
+          "format": "byte"
         }
       }
     },

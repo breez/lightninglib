@@ -856,10 +856,16 @@ message NewAddressRequest {
 
     /// The address type
     AddressType type = 1;
+
+    bytes submarine_hash = 2 [json_name = "submarine_name"];
+    bytes submarine_pubkey = 3 [json_name = "submarine_pubkey"];
 }
 message NewAddressResponse {
     /// The newly generated wallet address
     string address = 1 [json_name = "address"];
+
+    bytes submarine_script = 2 [json_name = "submarine_script"];
+    bytes submarine_pubkey = 3 [json_name = "submarine_pubkey"];
 }
 
 message SignMessageRequest {

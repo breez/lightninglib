@@ -16,14 +16,15 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/build"
-	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
 	"github.com/breez/lightninglib/signal"
+	"github.com/breez/lightninglib/submarine"
 	"github.com/breez/lightninglib/zpay32"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcec"
@@ -580,23 +581,39 @@ func (r *rpcServer) WatchAddress(ctx context.Context,
 func (r *rpcServer) NewAddress(ctx context.Context,
 	in *lnrpc.NewAddressRequest) (*lnrpc.NewAddressResponse, error) {
 
-	// Translate the gRPC proto address type to the wallet controller's
-	// available address types.
-	var addrType lnwallet.AddressType
-	switch in.Type {
-	case lnrpc.NewAddressRequest_WITNESS_PUBKEY_HASH:
-		addrType = lnwallet.WitnessPubKey
-	case lnrpc.NewAddressRequest_NESTED_PUBKEY_HASH:
-		addrType = lnwallet.NestedWitnessPubKey
+	if len(in.SubmarineHash) == 0 {
+		// Translate the gRPC proto address type to the wallet controller's
+		// available address types.
+		var addrType lnwallet.AddressType
+		switch in.Type {
+		case lnrpc.NewAddressRequest_WITNESS_PUBKEY_HASH:
+			addrType = lnwallet.WitnessPubKey
+		case lnrpc.NewAddressRequest_NESTED_PUBKEY_HASH:
+			addrType = lnwallet.NestedWitnessPubKey
+		}
+
+		addr, err := r.server.cc.wallet.NewAddress(addrType, false)
+		if err != nil {
+			return nil, err
+		}
+
+		rpcsLog.Infof("[newaddress] addr=%v", addr.String())
+		return &lnrpc.NewAddressResponse{Address: addr.String()}, nil
 	}
 
-	addr, err := r.server.cc.wallet.NewAddress(addrType, false)
+	//Create a new submarine address and associated script
+	addr, script, swapperPubKey, err := submarine.NewAddress(
+		activeNetParams.Params,
+		r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient(),
+		r.server.cc.wallet.Cfg.Database,
+		in.SubmarinePubkey,
+		in.SubmarineHash,
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	rpcsLog.Infof("[newaddress] addr=%v", addr.String())
-	return &lnrpc.NewAddressResponse{Address: addr.String()}, nil
+	rpcsLog.Infof("[newaddress] addr=%v script=%x pubkey=%x", addr.String(), script, swapperPubKey)
+	return &lnrpc.NewAddressResponse{Address: addr.String(), SubmarineScript: script, SubmarinePubkey: swapperPubKey}, nil
 }
 
 var (
