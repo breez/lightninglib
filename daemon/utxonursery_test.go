@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/sweep"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"

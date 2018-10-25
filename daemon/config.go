@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/breez/lightninglib/htlcswitch/hodl"
 	"github.com/breez/lightninglib/build"
+	"github.com/breez/lightninglib/htlcswitch/hodl"
 	"github.com/breez/lightninglib/lncfg"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
