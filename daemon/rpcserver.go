@@ -601,6 +601,10 @@ func (r *rpcServer) NewAddress(ctx context.Context,
 		return &lnrpc.NewAddressResponse{Address: addr.String()}, nil
 	}
 
+	if in.Type != lnrpc.NewAddressRequest_WITNESS_PUBKEY_HASH {
+		return nil, errors.New("Only Witness Pubkey is supported when using Submarine swaps.")
+	}
+
 	//Create a new submarine address and associated script
 	addr, script, swapperPubKey, err := submarine.NewAddress(
 		activeNetParams.Params,
