@@ -101,6 +101,13 @@ var (
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
 func LndMain(args []string, readyChan chan interface{}) error {
+
+	//Start the signal that is responsible for shutdown
+	if err := signal.Start(); err != nil {
+		ltndLog.Errorf("failed to start signal %v", err)
+		return err
+	}
+
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
 	loadedConfig, err := loadConfig(args)
