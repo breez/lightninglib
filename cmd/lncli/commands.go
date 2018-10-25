@@ -108,7 +108,17 @@ var newAddressCommand = cli.Command{
 	Description: `
 	Generate a wallet new address. Address-types has to be one of:
 	    - p2wkh:  Pay to witness key hash
-	    - np2wkh: Pay to nested witness key hash`,
+		- np2wkh: Pay to nested witness key hash`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "hash",
+			Usage: "The hash of a secret preimage in a submarine swaps transaction",
+		},
+		cli.StringFlag{
+			Name:  "pubkey",
+			Usage: "The public key used if refund is needed in a submarine swaps transaction",
+		},
+	},
 	Action: actionDecorator(newAddress),
 }
 
@@ -131,10 +141,27 @@ func newAddress(ctx *cli.Context) error {
 			"are: p2wkh and np2wkh", stringAddrType)
 	}
 
-	ctxb := context.Background()
-	addr, err := client.NewAddress(ctxb, &lnrpc.NewAddressRequest{
+	req := &lnrpc.NewAddressRequest{
 		Type: addrType,
-	})
+	}
+
+	if ctx.IsSet("hash") {
+		hash, err := hex.DecodeString(ctx.String("hash"))
+		if err != nil {
+			return fmt.Errorf("unable to decode the hash: %v", err)
+		}
+		req.SubmarineHash = hash
+	}
+	if ctx.IsSet("pubkey") {
+		pubkey, err := hex.DecodeString(ctx.String("pubkey"))
+		if err != nil {
+			return fmt.Errorf("unable to decode the pubkey: %v", err)
+		}
+		req.SubmarinePubkey = pubkey
+	}
+
+	ctxb := context.Background()
+	addr, err := client.NewAddress(ctxb, req)
 	if err != nil {
 		return err
 	}
