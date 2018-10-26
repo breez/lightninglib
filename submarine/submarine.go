@@ -101,10 +101,12 @@ func NewAddress(net *chaincfg.Params, chainClient chain.Interface, db *channeldb
 
 	if len(pubKey) != btcec.PubKeyBytesLenCompressed {
 		err = errors.New("pubKey not valid")
+		return
 	}
 
 	if len(hash) != 32 {
 		err = errors.New("hash not valid")
+		return
 	}
 
 	//Need to check that the hash doesn't already exists in our db
