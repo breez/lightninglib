@@ -2927,6 +2927,60 @@ func decodePayReq(ctx *cli.Context) error {
 	return nil
 }
 
+var receivedAmountCommand = cli.Command{
+	Name:      "receivedamount",
+	Category:  "On-chain",
+	Usage:     "Returns the amount received in a watched address.",
+	ArgsUsage: "address",
+	Description: `
+	Returns the amount received in a watched address.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "address",
+			Usage: "",
+		},
+	},
+	Action: actionDecorator(receivedAmount),
+}
+
+func receivedAmount(ctx *cli.Context) error {
+	var (
+		address string
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "receivedamount")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("address"):
+		address = ctx.String("address")
+	case args.Present():
+		address = args.First()
+		args = args.Tail()
+	default:
+		return fmt.Errorf("address argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.ReceivedAmountRequest{
+		Address: address,
+	}
+	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(ReceivedAmountResponse)
+	return nil
+}
+
 var watchAddressCommand = cli.Command{
 	Name:      "watchaddress",
 	Category:  "On-chain",

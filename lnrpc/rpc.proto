@@ -252,6 +252,17 @@ service Lightning {
         };
     }
 
+    /** lncli: `receivedamount`
+    ReceivedAmount returns the total amount of the btc received in a watched address,
+    the block height and the age of the first transaction sending btc to the address.
+    */
+    rpc ReceivedAmount (ReceivedAmountRequest) returns (ReceivedAmountResponse) {
+        option (google.api.http) = {
+            post: "/v1/transactions"
+            body: "*"
+        };
+    }
+
     /**
     SubscribeTransactions creates a uni-directional stream from the server to
     the client in which any newly discovered transactions relevant to the
@@ -840,6 +851,20 @@ message WatchAddressRequest {
 message WatchAddressResponse {
     /// The address being watched
     string address = 1 [json_name = "address"];
+}
+
+message ReceivedAmountRequest {
+    /// The address
+    string address = 1 [json_name = "address"];
+}
+
+message ReceivedAmountResponse {
+    /// The amount
+    int64 amount = 1 [json_name = "amount"];
+    // The block height of the first transaction if any
+    int32 block_height = 2 [json_name = "block_height"];
+    // The age in height of the first transaction if any
+    int32 block_age = 3 [json_name = "block_age"];
 }
 
 /** 

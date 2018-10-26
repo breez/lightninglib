@@ -167,6 +167,10 @@ var (
 			Entity: "onchain",
 			Action: "write",
 		}},
+		"/lnrpc.Lightning/ReceivedAmount": {{
+			Entity: "onchain",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/NewAddress": {{
 			Entity: "address",
 			Action: "write",
@@ -602,7 +606,7 @@ func (r *rpcServer) NewAddress(ctx context.Context,
 	}
 
 	if in.Type != lnrpc.NewAddressRequest_WITNESS_PUBKEY_HASH {
-		return nil, errors.New("Only Witness Pubkey is supported when using Submarine swaps.")
+		return nil, errors.New("only Witness Pubkey is supported when using Submarine swaps")
 	}
 
 	//Create a new submarine address and associated script
@@ -3215,6 +3219,21 @@ func (r *rpcServer) SubscribeTransactions(req *lnrpc.GetTransactionsRequest,
 			return nil
 		}
 	}
+}
+
+// ReceivedAmount returns the total amount of the btc received in a watched address
+// and the height of the first transaction sending btc to the address.
+func (r *rpcServer) ReceivedAmount(ctx context.Context,
+	_ *lnrpc.ReceivedAmountRequest) (*lnrpc.ReceivedAmountResponse, error) {
+	b := r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
+	bestBlock := b.Manager.SyncedTo()
+	currentHeight := bestBlock.Height
+	amount, firstHeight, err := b.GetAddressTotalAmount(0, "rfk5agKhMzwiUyzC451Ron8AoyoSNpdXkA")
+	if err != nil {
+		return nil, err
+	}
+	rpcsLog.Infof("[ReceivedAmount] amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", amount, firstHeight, currentHeight, currentHeight-firstHeight, err)
+	return &lnrpc.ReceivedAmountResponse{Amount: int64(amount), BlockHeight: firstHeight, BlockAge: currentHeight - firstHeight}, nil
 }
 
 // GetTransactions returns a list of describing all the known transactions

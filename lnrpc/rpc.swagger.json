@@ -989,13 +989,13 @@
         ]
       },
       "post": {
-        "summary": "* lncli: `watchaddress`\nWatchAddress adds an address to be monitored for transactions. These will be received\nthrough the SubscribeTransactions stream.",
-        "operationId": "WatchAddress",
+        "summary": "* lncli: `receivedamount`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
+        "operationId": "ReceivedAmount",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/lnrpcWatchAddressResponse"
+              "$ref": "#/definitions/lnrpcReceivedAmountResponse"
             }
           }
         },
@@ -1005,7 +1005,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/lnrpcWatchAddressRequest"
+              "$ref": "#/definitions/lnrpcReceivedAmountRequest"
             }
           }
         ],
@@ -2604,6 +2604,35 @@
           "items": {
             "$ref": "#/definitions/lnrpcRoute"
           }
+        }
+      }
+    },
+    "lnrpcReceivedAmountRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "title": "/ The address"
+        }
+      }
+    },
+    "lnrpcReceivedAmountResponse": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The amount"
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "title": "The block height of the first transaction if any"
+        },
+        "block_age": {
+          "type": "integer",
+          "format": "int32",
+          "title": "The age in height of the first transaction if any"
         }
       }
     },
