@@ -856,8 +856,8 @@ message WatchAddressResponse {
 message ReceivedAmountRequest {
     /// The address
     string address = 1 [json_name = "address"];
+    bytes submarine_hash = 2 [json_name = "submarine_hash"];
 }
-
 message ReceivedAmountResponse {
     /// The amount
     int64 amount = 1 [json_name = "amount"];

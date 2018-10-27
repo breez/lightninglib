@@ -3224,15 +3224,23 @@ func (r *rpcServer) SubscribeTransactions(req *lnrpc.GetTransactionsRequest,
 // ReceivedAmount returns the total amount of the btc received in a watched address
 // and the height of the first transaction sending btc to the address.
 func (r *rpcServer) ReceivedAmount(ctx context.Context,
-	_ *lnrpc.ReceivedAmountRequest) (*lnrpc.ReceivedAmountResponse, error) {
+	in *lnrpc.ReceivedAmountRequest) (*lnrpc.ReceivedAmountResponse, error) {
 	b := r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
 	bestBlock := b.Manager.SyncedTo()
 	currentHeight := bestBlock.Height
-	amount, firstHeight, err := b.GetAddressTotalAmount(0, "rfk5agKhMzwiUyzC451Ron8AoyoSNpdXkA")
+	address := in.Address
+	if len(in.SubmarineHash) > 0 {
+		addr, err := submarine.AddressFromHash(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, in.SubmarineHash)
+		if err != nil {
+			return nil, err
+		}
+		address = addr.String()
+	}
+	amount, firstHeight, err := b.GetAddressTotalAmount(0, address)
 	if err != nil {
 		return nil, err
 	}
-	rpcsLog.Infof("[ReceivedAmount] amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", amount, firstHeight, currentHeight, currentHeight-firstHeight, err)
+	rpcsLog.Infof("[ReceivedAmount] address=%v, amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", address, amount, firstHeight, currentHeight, currentHeight-firstHeight, err)
 	return &lnrpc.ReceivedAmountResponse{Amount: int64(amount), BlockHeight: firstHeight, BlockAge: currentHeight - firstHeight}, nil
 }
 

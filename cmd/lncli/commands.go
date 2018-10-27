@@ -2937,8 +2937,12 @@ var receivedAmountCommand = cli.Command{
 	`,
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "address",
-			Usage: "",
+			Name:  "addr",
+			Usage: "Address",
+		},
+		cli.StringFlag{
+			Name:  "hash",
+			Usage: "Submarine hash",
 		},
 	},
 	Action: actionDecorator(receivedAmount),
@@ -2947,6 +2951,7 @@ var receivedAmountCommand = cli.Command{
 func receivedAmount(ctx *cli.Context) error {
 	var (
 		address string
+		hash    []byte
 	)
 	args := ctx.Args()
 
@@ -2956,8 +2961,15 @@ func receivedAmount(ctx *cli.Context) error {
 	}
 
 	switch {
-	case ctx.IsSet("address"):
-		address = ctx.String("address")
+	case ctx.IsSet("hash"):
+		hashString := ctx.String("hash")
+		var err error
+		hash, err = hex.DecodeString(hashString)
+		if err != nil {
+			return fmt.Errorf("malformed hash")
+		}
+	case ctx.IsSet("addr"):
+		address = ctx.String("addr")
 	case args.Present():
 		address = args.First()
 		args = args.Tail()
@@ -2970,7 +2982,8 @@ func receivedAmount(ctx *cli.Context) error {
 	defer cleanUp()
 
 	req := &lnrpc.ReceivedAmountRequest{
-		Address: address,
+		Address:       address,
+		SubmarineHash: hash,
 	}
 	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
 	if err != nil {

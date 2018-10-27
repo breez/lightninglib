@@ -2613,6 +2613,10 @@
         "address": {
           "type": "string",
           "title": "/ The address"
+        },
+        "submarine_hash": {
+          "type": "string",
+          "format": "byte"
         }
       }
     },

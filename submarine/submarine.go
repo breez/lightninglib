@@ -98,6 +98,16 @@ func getSubmarineData(db *channeldb.DB, netID byte, hash []byte) (swapperKey, sc
 	return
 }
 
+func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, err error) {
+	var script []byte
+	_, script, err = getSubmarineData(db, net.ScriptHashAddrID, hash)
+	if err != nil {
+		return
+	}
+	address, err = btcutil.NewAddressScriptHash(script, net)
+	return
+}
+
 func NewAddress(net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB, pubKey, hash []byte) (address btcutil.Address, script, swapperPubKey []byte, err error) {
 
 	if len(pubKey) != btcec.PubKeyBytesLenCompressed {
