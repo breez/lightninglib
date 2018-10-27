@@ -1,8 +1,8 @@
 package submarine
 
 import (
-	"errors"
 	"bytes"
+	"errors"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/btcsuite/btcd/btcec"
@@ -90,6 +90,7 @@ func getSubmarineData(db *channeldb.DB, netID byte, hash []byte) (swapperKey, sc
 		swapperKey = make([]byte, btcec.PrivKeyBytesLen)
 		copy(swapperKey, value[1:btcec.PrivKeyBytesLen+1])
 		script = make([]byte, len(value)-1-btcec.PrivKeyBytesLen)
+		copy(script, value[btcec.PrivKeyBytesLen+1:])
 
 		return nil
 	})
