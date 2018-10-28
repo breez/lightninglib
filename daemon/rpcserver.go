@@ -3229,14 +3229,16 @@ func (r *rpcServer) ReceivedAmount(ctx context.Context,
 	bestBlock := b.Manager.SyncedTo()
 	currentHeight := bestBlock.Height
 	address := in.Address
+	var start int32
 	if len(in.SubmarineHash) > 0 {
-		addr, err := submarine.AddressFromHash(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, in.SubmarineHash)
+		addr, creationHeight, err := submarine.AddressFromHash(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, in.SubmarineHash)
 		if err != nil {
 			return nil, err
 		}
 		address = addr.String()
+		start = int32(creationHeight)
 	}
-	amount, firstHeight, err := b.GetAddressTotalAmount(0, address)
+	amount, firstHeight, err := b.GetAddressTotalAmount(start, address)
 	if err != nil {
 		return nil, err
 	}

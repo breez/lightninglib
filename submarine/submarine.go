@@ -2,6 +2,7 @@ package submarine
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 
 	"github.com/breez/lightninglib/channeldb"
@@ -40,7 +41,18 @@ func genSubmarineSwapScript(swapperPubKey, payerPubKey, hash []byte, lockHeight 
 	return builder.Script()
 }
 
-func saveSubmarineData(db *channeldb.DB, netID byte, hash, swapperKey []byte, script []byte) error {
+func saveSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte, creationHeight, lockHeight int64, swapperKey []byte, script []byte) error {
+
+	/**
+	key: swapper:<hash>
+	value:
+		[0]: netID
+		[1:9]: creationHeight
+		[9:17]: lockHeight
+		[17:17+btcec.PrivKeyBytesLen]: swapperKey
+		[17+btcec.PrivKeyBytesLen:]: script
+	*/
+
 	if len(swapperKey) != btcec.PrivKeyBytesLen {
 		return errors.New("pubKey not valid")
 	}
@@ -51,8 +63,25 @@ func saveSubmarineData(db *channeldb.DB, netID byte, hash, swapperKey []byte, sc
 			return err
 		}
 
+		var key bytes.Buffer
+		_, err = key.WriteString("swapper:")
+		if err != nil {
+			return err
+		}
+		_, err = key.Write(hash)
+		if err != nil {
+			return err
+		}
+
 		var submarineData bytes.Buffer
 		err = submarineData.WriteByte(netID)
+		if err != nil {
+			return err
+		}
+		b := make([]byte, 16)
+		binary.BigEndian.PutUint64(b[0:], uint64(creationHeight))
+		binary.BigEndian.PutUint64(b[8:], uint64(lockHeight))
+		_, err = submarineData.Write(b)
 		if err != nil {
 			return err
 		}
@@ -65,11 +94,11 @@ func saveSubmarineData(db *channeldb.DB, netID byte, hash, swapperKey []byte, sc
 			return err
 		}
 
-		return bucket.Put(hash, submarineData.Bytes())
+		return bucket.Put(key.Bytes(), submarineData.Bytes())
 	})
 }
 
-func getSubmarineData(db *channeldb.DB, netID byte, hash []byte) (swapperKey, script []byte, err error) {
+func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creationHeight, lockHeight int64, swapperKey, script []byte, err error) {
 
 	err = db.View(func(tx *bolt.Tx) error {
 
@@ -78,19 +107,48 @@ func getSubmarineData(db *channeldb.DB, netID byte, hash []byte) (swapperKey, sc
 			return errors.New("Not found")
 		}
 
-		value := bucket.Get(hash)
+		var key bytes.Buffer
+		_, err = key.WriteString("swapper:")
+		if err != nil {
+			return err
+		}
+		_, err = key.Write(hash)
+		if err != nil {
+			return err
+		}
+
+		value := bucket.Get(key.Bytes())
 		if value == nil {
 			return errors.New("Not found")
 		}
 
-		if value[0] != netID {
+		submarineData := bytes.NewBuffer(value)
+		savedNetID, err := submarineData.ReadByte()
+		if err != nil {
+			return err
+		}
+		if savedNetID != netID {
 			return errors.New("Not the same network")
 		}
+		b := make([]byte, 16)
+		_, err = submarineData.Read(b)
+		if err != nil {
+			return err
+		}
+		creationHeight = int64(binary.BigEndian.Uint64(b[0:]))
+		lockHeight = int64(binary.BigEndian.Uint64(b[8:]))
 
 		swapperKey = make([]byte, btcec.PrivKeyBytesLen)
-		copy(swapperKey, value[1:btcec.PrivKeyBytesLen+1])
-		script = make([]byte, len(value)-1-btcec.PrivKeyBytesLen)
-		copy(script, value[btcec.PrivKeyBytesLen+1:])
+		_, err = submarineData.Read(swapperKey)
+		if err != nil {
+			return err
+		}
+
+		script = make([]byte, submarineData.Len())
+		_, err = submarineData.Read(script)
+		if err != nil {
+			return err
+		}
 
 		return nil
 	})
@@ -98,9 +156,9 @@ func getSubmarineData(db *channeldb.DB, netID byte, hash []byte) (swapperKey, sc
 	return
 }
 
-func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, err error) {
+func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, creationHeight int64, err error) {
 	var script []byte
-	_, script, err = getSubmarineData(db, net.ScriptHashAddrID, hash)
+	creationHeight, _, _, script, err = getSwapperSubmarineData(db, net.ScriptHashAddrID, hash)
 	if err != nil {
 		return
 	}
@@ -121,7 +179,7 @@ func NewAddress(net *chaincfg.Params, chainClient chain.Interface, db *channeldb
 	}
 
 	//Need to check that the hash doesn't already exists in our db
-	_, _, errGet := getSubmarineData(db, net.ScriptHashAddrID, hash)
+	_, _, _, _, errGet := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash)
 	if errGet == nil {
 		err = errors.New("Hash already exists")
 		return
@@ -147,8 +205,13 @@ func NewAddress(net *chaincfg.Params, chainClient chain.Interface, db *channeldb
 		return
 	}
 
+	_, currentHeight, err := chainClient.GetBestBlock()
+	if err != nil {
+		return
+	}
+
 	//Need to save these keyed by hash:
-	err = saveSubmarineData(db, net.ScriptHashAddrID, hash, swapperKey, script)
+	err = saveSwapperSubmarineData(db, net.ScriptHashAddrID, hash, int64(currentHeight), defaultLockHeight, swapperKey, script)
 	if err != nil {
 		return
 	}
