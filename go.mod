@@ -61,3 +61,5 @@ require (
 )
 
 replace github.com/lightninglabs/neutrino v0.0.0-20181019013733-8018ab76e70a => github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804
+
+replace github.com/btcsuite/btcwallet v0.0.0-20181017015332-c4dd27e481f9 => github.com/breez/btcwallet v0.0.0-20181029090957-3e2381ec8dea
