@@ -781,7 +781,26 @@
               "NESTED_PUBKEY_HASH"
             ],
             "default": "WITNESS_PUBKEY_HASH"
-          },
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/newsubmarineswap": {
+      "get": {
+        "summary": "* lncli: `newsubmarineswap`",
+        "operationId": "NewSubmarineSwap",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcNewSubmarineSwapResponse"
+            }
+          }
+        },
+        "parameters": [
           {
             "name": "submarine_hash",
             "in": "query",
@@ -944,6 +963,99 @@
         ]
       }
     },
+    "/v1/receivedamount": {
+      "get": {
+        "summary": "* lncli: `receivedamount`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
+        "operationId": "ReceivedAmount",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcReceivedAmountResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "address",
+            "description": "/ The address (to be used by a client using swap service).",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "submarine_hash",
+            "description": "/ The hash (to be used by a swapper service).",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/redeemsubmarineswap": {
+      "get": {
+        "summary": "* lncli: `redeemsubmarineswap`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
+        "operationId": "RedeemSubmarineSwap",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcRedeemSubmarineSwapResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "submarine_preimage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "target_conf",
+            "description": "/ The target number of blocks that the funding transaction should be confirmed by.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "sat_per_byte",
+            "description": "/ A manual fee rate set in sat/byte that should be used when crafting the funding transaction.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/submarineswapinit": {
+      "get": {
+        "summary": "* lncli: `submarineswapinit`",
+        "operationId": "SubmarineSwapInit",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubmarineSwapInitResponse"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/switch": {
       "post": {
         "summary": "* lncli: `fwdinghistory`\nForwardingHistory allows the caller to query the htlcswitch for a record of\nall HTLC's forwarded within the target time range, and integer offset\nwithin that time range. If no time-range is specified, then the first chunk\nof the past 24 hrs of forwarding history are returned.",
@@ -989,13 +1101,13 @@
         ]
       },
       "post": {
-        "summary": "* lncli: `receivedamount`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
-        "operationId": "ReceivedAmount",
+        "summary": "* lncli: `watchaddress`\nWatchAddress adds an address to be monitored for transactions. These will be received\nthrough the SubscribeTransactions stream.",
+        "operationId": "WatchAddress",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/lnrpcReceivedAmountResponse"
+              "$ref": "#/definitions/lnrpcWatchAddressResponse"
             }
           }
         },
@@ -1005,7 +1117,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/lnrpcReceivedAmountRequest"
+              "$ref": "#/definitions/lnrpcWatchAddressRequest"
             }
           }
         ],
@@ -1038,6 +1150,53 @@
         ],
         "tags": [
           "WalletUnlocker"
+        ]
+      }
+    },
+    "/v1/watchsubmarineswap": {
+      "get": {
+        "summary": "* lncli: `watchsubmarineswap`",
+        "operationId": "WatchSubmarineSwap",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcWatchSubmarineSwapResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "submarine_preimage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "submarine_key",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "submarine_swapper_pubkey",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "submarine_lock_height",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
         ]
       }
     }
@@ -2203,14 +2362,22 @@
         "address": {
           "type": "string",
           "title": "/ The newly generated wallet address"
-        },
-        "submarine_script": {
-          "type": "string",
-          "format": "byte"
+        }
+      }
+    },
+    "lnrpcNewSubmarineSwapResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
         },
         "submarine_pubkey": {
           "type": "string",
           "format": "byte"
+        },
+        "submarine_lock_height": {
+          "type": "string",
+          "format": "int64"
         }
       }
     },
@@ -2607,36 +2774,36 @@
         }
       }
     },
-    "lnrpcReceivedAmountRequest": {
-      "type": "object",
-      "properties": {
-        "address": {
-          "type": "string",
-          "title": "/ The address"
-        },
-        "submarine_hash": {
-          "type": "string",
-          "format": "byte"
-        }
-      }
-    },
     "lnrpcReceivedAmountResponse": {
       "type": "object",
       "properties": {
         "amount": {
           "type": "string",
           "format": "int64",
-          "title": "/ The amount"
+          "title": "/ The amount of the first transaction"
+        },
+        "txid": {
+          "type": "string",
+          "title": "/ The txid of the first transaction"
         },
         "block_height": {
           "type": "integer",
           "format": "int32",
-          "title": "The block height of the first transaction if any"
+          "title": "/ The block height of the first transaction if any"
         },
         "block_age": {
           "type": "integer",
           "format": "int32",
-          "title": "The age in height of the first transaction if any"
+          "title": "/ The age in height of the first transaction if any"
+        }
+      }
+    },
+    "lnrpcRedeemSubmarineSwapResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "title": "/ The txid of the first transaction"
         }
       }
     },
@@ -2864,6 +3031,27 @@
     "lnrpcStopResponse": {
       "type": "object"
     },
+    "lnrpcSubmarineSwapInitResponse": {
+      "type": "object",
+      "properties": {
+        "submarine_preimage": {
+          "type": "string",
+          "format": "byte"
+        },
+        "submarine_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "submarine_key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "submarine_pubkey": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
     "lnrpcTransaction": {
       "type": "object",
       "properties": {
@@ -2988,6 +3176,18 @@
         "address": {
           "type": "string",
           "title": "/ The address being watched"
+        }
+      }
+    },
+    "lnrpcWatchSubmarineSwapResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "submarine_script": {
+          "type": "string",
+          "format": "byte"
         }
       }
     }
