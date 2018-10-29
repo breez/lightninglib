@@ -788,39 +788,6 @@
         ]
       }
     },
-    "/v1/newsubmarineswap": {
-      "get": {
-        "summary": "* lncli: `newsubmarineswap`",
-        "operationId": "NewSubmarineSwap",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/lnrpcNewSubmarineSwapResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "submarine_hash",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "byte"
-          },
-          {
-            "name": "submarine_pubkey",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "byte"
-          }
-        ],
-        "tags": [
-          "Lightning"
-        ]
-      }
-    },
     "/v1/payments": {
       "get": {
         "summary": "* lncli: `listpayments`\nListPayments returns a list of all outgoing payments.",
@@ -984,7 +951,7 @@
             "type": "string"
           },
           {
-            "name": "submarine_hash",
+            "name": "hash",
             "description": "/ The hash (to be used by a swapper service).",
             "in": "query",
             "required": false,
@@ -997,21 +964,118 @@
         ]
       }
     },
-    "/v1/redeemsubmarineswap": {
+    "/v1/subswapclientinit": {
       "get": {
-        "summary": "* lncli: `redeemsubmarineswap`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
-        "operationId": "RedeemSubmarineSwap",
+        "summary": "* lncli: `subswapclientinit`",
+        "operationId": "SubSwapClientInit",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/lnrpcRedeemSubmarineSwapResponse"
+              "$ref": "#/definitions/lnrpcSubSwapClientInitResponse"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapclientwatch": {
+      "get": {
+        "summary": "* lncli: `subswapclientwatch`",
+        "operationId": "SubSwapClientWatch",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapClientWatchResponse"
             }
           }
         },
         "parameters": [
           {
-            "name": "submarine_preimage",
+            "name": "preimage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "service_pubkey",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "lock_height",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapserviceinit": {
+      "get": {
+        "summary": "* lncli: `subswapserviceinit`",
+        "operationId": "SubSwapServiceInit",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapServiceInitResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "pubkey",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapserviceredeem": {
+      "get": {
+        "summary": "* lncli: `subswapserviceredeem`\nSubSwapServiceRedeem redeem the amount received to a new address of the internal wallet.",
+        "operationId": "SubSwapServiceRedeem",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapServiceRedeemResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "preimage",
             "in": "query",
             "required": false,
             "type": "string",
@@ -1034,23 +1098,6 @@
             "format": "int64"
           }
         ],
-        "tags": [
-          "Lightning"
-        ]
-      }
-    },
-    "/v1/submarineswapinit": {
-      "get": {
-        "summary": "* lncli: `submarineswapinit`",
-        "operationId": "SubmarineSwapInit",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/lnrpcSubmarineSwapInitResponse"
-            }
-          }
-        },
         "tags": [
           "Lightning"
         ]
@@ -1150,53 +1197,6 @@
         ],
         "tags": [
           "WalletUnlocker"
-        ]
-      }
-    },
-    "/v1/watchsubmarineswap": {
-      "get": {
-        "summary": "* lncli: `watchsubmarineswap`",
-        "operationId": "WatchSubmarineSwap",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/lnrpcWatchSubmarineSwapResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "submarine_preimage",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "byte"
-          },
-          {
-            "name": "submarine_key",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "byte"
-          },
-          {
-            "name": "submarine_swapper_pubkey",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "byte"
-          },
-          {
-            "name": "submarine_lock_height",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "Lightning"
         ]
       }
     }
@@ -2365,22 +2365,6 @@
         }
       }
     },
-    "lnrpcNewSubmarineSwapResponse": {
-      "type": "object",
-      "properties": {
-        "address": {
-          "type": "string"
-        },
-        "submarine_pubkey": {
-          "type": "string",
-          "format": "byte"
-        },
-        "submarine_lock_height": {
-          "type": "string",
-          "format": "int64"
-        }
-      }
-    },
     "lnrpcNodeAddress": {
       "type": "object",
       "properties": {
@@ -2798,15 +2782,6 @@
         }
       }
     },
-    "lnrpcRedeemSubmarineSwapResponse": {
-      "type": "object",
-      "properties": {
-        "txid": {
-          "type": "string",
-          "title": "/ The txid of the first transaction"
-        }
-      }
-    },
     "lnrpcRoute": {
       "type": "object",
       "properties": {
@@ -3031,24 +3006,61 @@
     "lnrpcStopResponse": {
       "type": "object"
     },
-    "lnrpcSubmarineSwapInitResponse": {
+    "lnrpcSubSwapClientInitResponse": {
       "type": "object",
       "properties": {
-        "submarine_preimage": {
+        "preimage": {
           "type": "string",
           "format": "byte"
         },
-        "submarine_hash": {
+        "hash": {
           "type": "string",
           "format": "byte"
         },
-        "submarine_key": {
+        "key": {
           "type": "string",
           "format": "byte"
         },
-        "submarine_pubkey": {
+        "pubkey": {
           "type": "string",
           "format": "byte"
+        }
+      }
+    },
+    "lnrpcSubSwapClientWatchResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "lnrpcSubSwapServiceInitResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "pubkey": {
+          "type": "string",
+          "format": "byte"
+        },
+        "lock_height": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "lnrpcSubSwapServiceRedeemResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "title": "/ The txid of the first transaction"
         }
       }
     },
@@ -3176,18 +3188,6 @@
         "address": {
           "type": "string",
           "title": "/ The address being watched"
-        }
-      }
-    },
-    "lnrpcWatchSubmarineSwapResponse": {
-      "type": "object",
-      "properties": {
-        "address": {
-          "type": "string"
-        },
-        "submarine_script": {
-          "type": "string",
-          "format": "byte"
         }
       }
     }

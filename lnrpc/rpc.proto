@@ -276,27 +276,27 @@ service Lightning {
         };
     }
 
-    /** lncli: `submarineswapinit`
+    /** lncli: `subswapclientinit`
     */
-    rpc SubmarineSwapInit (SubmarineSwapInitRequest) returns (SubmarineSwapInitResponse) {
+    rpc SubSwapClientInit (SubSwapClientInitRequest) returns (SubSwapClientInitResponse) {
         option (google.api.http) = {
-            get: "/v1/submarineswapinit"
+            get: "/v1/subswapclientinit"
         };
     }
 
-    /** lncli: `newsubmarineswap`
+    /** lncli: `subswapserviceinit`
     */
-    rpc NewSubmarineSwap (NewSubmarineSwapRequest) returns (NewSubmarineSwapResponse) {
+    rpc SubSwapServiceInit (SubSwapServiceInitRequest) returns (SubSwapServiceInitResponse) {
         option (google.api.http) = {
-            get: "/v1/newsubmarineswap"
+            get: "/v1/subswapserviceinit"
         };
     }
 
-    /** lncli: `watchsubmarineswap`
+    /** lncli: `subswapclientwatch`
     */
-    rpc WatchSubmarineSwap (WatchSubmarineSwapRequest) returns (WatchSubmarineSwapResponse) {
+    rpc SubSwapClientWatch (SubSwapClientWatchRequest) returns (SubSwapClientWatchResponse) {
         option (google.api.http) = {
-            get: "/v1/watchsubmarineswap"
+            get: "/v1/subswapclientwatch"
         };
     }
 
@@ -310,13 +310,12 @@ service Lightning {
         };
     }
 
-    /** lncli: `redeemsubmarineswap`
-    ReceivedAmount returns the total amount of the btc received in a watched address,
-    the block height and the age of the first transaction sending btc to the address.
+    /** lncli: `subswapserviceredeem`
+    SubSwapServiceRedeem redeem the amount received to a new address of the internal wallet.
     */
-    rpc RedeemSubmarineSwap (RedeemSubmarineSwapRequest) returns (RedeemSubmarineSwapResponse) {
+    rpc SubSwapServiceRedeem (SubSwapServiceRedeemRequest) returns (SubSwapServiceRedeemResponse) {
         option (google.api.http) = {
-            get: "/v1/redeemsubmarineswap"
+            get: "/v1/subswapserviceredeem"
         };
     }
 
@@ -906,41 +905,41 @@ message NewAddressResponse {
     string address = 1 [json_name = "address"];
 }
 
-message SubmarineSwapInitRequest {
+message SubSwapClientInitRequest {
 }
-message SubmarineSwapInitResponse {
-    bytes submarine_preimage = 1 [json_name = "submarine_preimage"];
-    bytes submarine_hash = 2 [json_name = "submarine_hash"];
-    bytes submarine_key = 3 [json_name = "submarine_key"];
-    bytes submarine_pubkey = 4 [json_name = "submarine_pubkey"];
-}
-
-message NewSubmarineSwapRequest {
-    bytes submarine_hash = 1 [json_name = "submarine_hash"];
-    bytes submarine_pubkey = 2 [json_name = "submarine_pubkey"];
-}
-message NewSubmarineSwapResponse {
-    string address = 1 [json_name = "address"];
-    bytes submarine_pubkey = 2 [json_name = "submarine_pubkey"];
-    int64 submarine_lock_height = 3 [json_name = "submarine_lock_height"];
+message SubSwapClientInitResponse {
+    bytes preimage = 1 [json_name = "preimage"];
+    bytes hash = 2 [json_name = "hash"];
+    bytes key = 3 [json_name = "key"];
+    bytes pubkey = 4 [json_name = "pubkey"];
 }
 
-message WatchSubmarineSwapRequest {
-    bytes submarine_preimage = 1 [json_name = "submarine_preimage"];
-    bytes submarine_key = 2 [json_name = "submarine_key"];
-    bytes submarine_swapper_pubkey = 3 [json_name = "submarine_swapper_pubkey"];
-    int64 submarine_lock_height = 4 [json_name = "submarine_lock_height"];
+message SubSwapServiceInitRequest {
+    bytes hash = 1 [json_name = "hash"];
+    bytes pubkey = 2 [json_name = "pubkey"];
 }
-message WatchSubmarineSwapResponse {
+message SubSwapServiceInitResponse {
     string address = 1 [json_name = "address"];
-    bytes submarine_script = 2 [json_name = "submarine_script"];
+    bytes pubkey = 2 [json_name = "pubkey"];
+    int64 lock_height = 3 [json_name = "lock_height"];
+}
+
+message SubSwapClientWatchRequest {
+    bytes preimage = 1 [json_name = "preimage"];
+    bytes key = 2 [json_name = "key"];
+    bytes service_pubkey = 3 [json_name = "service_pubkey"];
+    int64 lock_height = 4 [json_name = "lock_height"];
+}
+message SubSwapClientWatchResponse {
+    string address = 1 [json_name = "address"];
+    bytes script = 2 [json_name = "script"];
 }
 
 message ReceivedAmountRequest {
     /// The address (to be used by a client using swap service)
     string address = 1 [json_name = "address"];
     /// The hash (to be used by a swapper service)
-    bytes submarine_hash = 2 [json_name = "submarine_hash"];
+    bytes hash = 2 [json_name = "hash"];
 }
 message ReceivedAmountResponse {
     /// The amount of the first transaction
@@ -953,16 +952,16 @@ message ReceivedAmountResponse {
     int32 block_age = 4 [json_name = "block_age"];
 }
 
-message RedeemSubmarineSwapRequest {
-    bytes submarine_preimage = 1 [json_name = "submarine_preimage"];
-    
+message SubSwapServiceRedeemRequest {
+    bytes preimage = 1 [json_name = "preimage"];
+
     /// The target number of blocks that the funding transaction should be confirmed by.
     int32 target_conf = 2;
 
     /// A manual fee rate set in sat/byte that should be used when crafting the funding transaction.
     int64 sat_per_byte = 3;
 }
-message RedeemSubmarineSwapResponse {
+message SubSwapServiceRedeemResponse {
     /// The txid of the first transaction
     string txid = 1 [json_name = "txid"];
 }
