@@ -2900,6 +2900,73 @@ func decodePayReq(ctx *cli.Context) error {
 	return nil
 }
 
+var receivedAmountCommand = cli.Command{
+	Name:      "receivedamount",
+	Category:  "On-chain",
+	Usage:     "Returns the amount received in a submarine transaction.",
+	ArgsUsage: "address",
+	Description: `
+	Returns the amount received in a watched address.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "addr",
+			Usage: "Address",
+		},
+		cli.StringFlag{
+			Name:  "hash",
+			Usage: "Submarine hash",
+		},
+	},
+	Action: actionDecorator(receivedAmount),
+}
+
+func receivedAmount(ctx *cli.Context) error {
+	var (
+		address string
+		hash    []byte
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "receivedamount")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("hash"):
+		hashString := ctx.String("hash")
+		var err error
+		hash, err = hex.DecodeString(hashString)
+		if err != nil {
+			return fmt.Errorf("malformed hash")
+		}
+	case ctx.IsSet("addr"):
+		address = ctx.String("addr")
+	case args.Present():
+		address = args.First()
+		args = args.Tail()
+	default:
+		return fmt.Errorf("address argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.ReceivedAmountRequest{
+		Address:       address,
+		SubmarineHash: hash,
+	}
+	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(ReceivedAmountResponse)
+	return nil
+}
+
 var watchAddressCommand = cli.Command{
 	Name:      "watchaddress",
 	Category:  "On-chain",

@@ -930,6 +930,179 @@
         ]
       }
     },
+    "/v1/receivedamount": {
+      "get": {
+        "summary": "* lncli: `receivedamount`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
+        "operationId": "ReceivedAmount",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcReceivedAmountResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "address",
+            "description": "/ The address (to be used by a client using swap service).",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "hash",
+            "description": "/ The hash (to be used by a swapper service).",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapclientinit": {
+      "get": {
+        "summary": "* lncli: `subswapclientinit`",
+        "operationId": "SubSwapClientInit",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapClientInitResponse"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapclientwatch": {
+      "get": {
+        "summary": "* lncli: `subswapclientwatch`",
+        "operationId": "SubSwapClientWatch",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapClientWatchResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "preimage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "service_pubkey",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "lock_height",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapserviceinit": {
+      "get": {
+        "summary": "* lncli: `subswapserviceinit`",
+        "operationId": "SubSwapServiceInit",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapServiceInitResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "pubkey",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
+    "/v1/subswapserviceredeem": {
+      "get": {
+        "summary": "* lncli: `subswapserviceredeem`\nSubSwapServiceRedeem redeem the amount received to a new address of the internal wallet.",
+        "operationId": "SubSwapServiceRedeem",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapServiceRedeemResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "preimage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          },
+          {
+            "name": "target_conf",
+            "description": "/ The target number of blocks that the funding transaction should be confirmed by.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "sat_per_byte",
+            "description": "/ A manual fee rate set in sat/byte that should be used when crafting the funding transaction.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/switch": {
       "post": {
         "summary": "* lncli: `fwdinghistory`\nForwardingHistory allows the caller to query the htlcswitch for a record of\nall HTLC's forwarded within the target time range, and integer offset\nwithin that time range. If no time-range is specified, then the first chunk\nof the past 24 hrs of forwarding history are returned.",
@@ -2585,6 +2758,30 @@
         }
       }
     },
+    "lnrpcReceivedAmountResponse": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The amount of the first transaction"
+        },
+        "txid": {
+          "type": "string",
+          "title": "/ The txid of the first transaction"
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "title": "/ The block height of the first transaction if any"
+        },
+        "block_age": {
+          "type": "integer",
+          "format": "int32",
+          "title": "/ The age in height of the first transaction if any"
+        }
+      }
+    },
     "lnrpcRoute": {
       "type": "object",
       "properties": {
@@ -2808,6 +3005,64 @@
     },
     "lnrpcStopResponse": {
       "type": "object"
+    },
+    "lnrpcSubSwapClientInitResponse": {
+      "type": "object",
+      "properties": {
+        "preimage": {
+          "type": "string",
+          "format": "byte"
+        },
+        "hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "pubkey": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "lnrpcSubSwapClientWatchResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "lnrpcSubSwapServiceInitResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "pubkey": {
+          "type": "string",
+          "format": "byte"
+        },
+        "lock_height": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "lnrpcSubSwapServiceRedeemResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "title": "/ The txid of the first transaction"
+        }
+      }
     },
     "lnrpcTransaction": {
       "type": "object",

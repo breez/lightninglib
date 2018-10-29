@@ -16,14 +16,15 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/build"
-	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
 	"github.com/breez/lightninglib/signal"
+	"github.com/breez/lightninglib/submarine"
 	"github.com/breez/lightninglib/zpay32"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcec"
@@ -165,6 +166,10 @@ var (
 		"/lnrpc.Lightning/WatchAddress": {{
 			Entity: "onchain",
 			Action: "write",
+		}},
+		"/lnrpc.Lightning/ReceivedAmount": {{
+			Entity: "onchain",
+			Action: "read",
 		}},
 		"/lnrpc.Lightning/NewAddress": {{
 			Entity: "address",
@@ -597,6 +602,127 @@ func (r *rpcServer) NewAddress(ctx context.Context,
 
 	rpcsLog.Infof("[newaddress] addr=%v", addr.String())
 	return &lnrpc.NewAddressResponse{Address: addr.String()}, nil
+}
+
+// SubSwapClientInit
+func (r *rpcServer) SubSwapClientInit(ctx context.Context,
+	in *lnrpc.SubSwapClientInitRequest) (*lnrpc.SubSwapClientInitResponse, error) {
+
+	preimage, hash, key, pubKey, err := submarine.SubmarineSwapInit()
+
+	rpcsLog.Infof("[SubSwapClientInit] Preimage=%x, Hash=%x, Key=%x, Pubkey=%x", preimage, hash, key, pubKey)
+
+	return &lnrpc.SubSwapClientInitResponse{
+		Preimage: preimage,
+		Hash:     hash,
+		Key:      key,
+		Pubkey:   pubKey,
+	}, err
+}
+
+// SubSwapServiceInit
+func (r *rpcServer) SubSwapServiceInit(ctx context.Context,
+	in *lnrpc.SubSwapServiceInitRequest) (*lnrpc.SubSwapServiceInitResponse, error) {
+	//Create a new submarine address and associated script
+	addr, script, swapServicePubKey, lockHeight, err := submarine.NewSubmarineSwap(
+		activeNetParams.Params,
+		r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient(),
+		r.server.cc.wallet.Cfg.Database,
+		in.Pubkey,
+		in.Hash,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rpcsLog.Infof("[newaddress] addr=%v script=%x pubkey=%x", addr.String(), script, swapServicePubKey)
+	return &lnrpc.SubSwapServiceInitResponse{Address: addr.String(), Pubkey: swapServicePubKey, LockHeight: lockHeight}, nil
+}
+
+// WatchSubmarineSwap
+func (r *rpcServer) SubSwapClientWatch(ctx context.Context,
+	in *lnrpc.SubSwapClientWatchRequest) (*lnrpc.SubSwapClientWatchResponse, error) {
+	address, script, err := submarine.WatchSubmarineSwap(
+		activeNetParams.Params,
+		r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient(),
+		r.server.cc.wallet.Cfg.Database,
+		in.Preimage,
+		in.Key,
+		in.ServicePubkey,
+		in.LockHeight,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &lnrpc.SubSwapClientWatchResponse{
+		Address: address.String(),
+		Script:  script,
+	}, nil
+}
+
+// ReceivedAmount returns the total amount of the btc received in a watched address
+// and the height of the first transaction sending btc to the address.
+func (r *rpcServer) ReceivedAmount(ctx context.Context,
+	in *lnrpc.ReceivedAmountRequest) (*lnrpc.ReceivedAmountResponse, error) {
+	b := r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
+	bestBlock := b.Manager.SyncedTo()
+	currentHeight := bestBlock.Height
+	address := in.Address
+	var start int32
+	if len(in.Hash) > 0 {
+		addr, creationHeight, err := submarine.AddressFromHash(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, in.Hash)
+		if err != nil {
+			return nil, err
+		}
+		address = addr.String()
+		start = int32(creationHeight)
+	} else {
+		addr, err := btcutil.DecodeAddress(address, activeNetParams.Params)
+		if err != nil {
+			return nil, err
+		}
+		creationHeight, err := submarine.CreationHeight(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, addr)
+		start = int32(creationHeight)
+	}
+	amount, txid, firstHeight, err := b.GetFirstTransaction(start, address)
+	if err != nil {
+		return nil, err
+	}
+	var age int32
+	if firstHeight > -1 {
+		age = currentHeight - firstHeight
+	}
+	rpcsLog.Infof("[ReceivedAmount] address=%v, txid=%v, amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", address, txid.String(), amount, firstHeight, currentHeight, age, err)
+	return &lnrpc.ReceivedAmountResponse{Amount: int64(amount), BlockHeight: firstHeight, BlockAge: age, Txid: txid.String()}, nil
+}
+
+func (r *rpcServer) SubSwapServiceRedeem(ctx context.Context,
+	in *lnrpc.SubSwapServiceRedeemRequest) (*lnrpc.SubSwapServiceRedeemResponse, error) {
+
+	redeemAddress, err := r.server.cc.wallet.NewAddress(lnwallet.WitnessPubKey, false)
+	if err != nil {
+		return nil, err
+	}
+
+	feePerKw, err := determineFeePerKw(
+		r.server.cc.feeEstimator, in.TargetConf, in.SatPerByte,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := submarine.Redeem(r.server.cc.wallet.Cfg.Database,
+		activeNetParams.Params,
+		r.server.cc.wallet,
+		in.Preimage,
+		redeemAddress,
+		feePerKw,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	rpcsLog.Infof("[redeemsubmarineswap] txid: %v", tx.TxHash().String())
+	return &lnrpc.SubSwapServiceRedeemResponse{Txid: tx.TxHash().String()}, nil
 }
 
 var (
