@@ -268,6 +268,12 @@ func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creatio
 	return
 }
 
+func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (btcutil.Address, error){
+	witnessProg := sha256.Sum256(script)
+	return btcutil.NewAddressWitnessScriptHash(witnessProg[:], net)
+}
+
+
 // AddressFromHash
 func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, creationHeight int64, err error) {
 	var script []byte
@@ -275,7 +281,7 @@ func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (addre
 	if err != nil {
 		return
 	}
-	address, err = btcutil.NewAddressScriptHash(script, net)
+	address, err = newAddressWitnessScriptHash(script, net)
 	return
 }
 
@@ -334,7 +340,7 @@ func NewSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *cha
 	}
 
 	//Generate the address
-	address, err = btcutil.NewAddressScriptHash(script, net)
+	address, err = newAddressWitnessScriptHash(script, net)
 	if err != nil {
 		return
 	}
@@ -378,7 +384,7 @@ func WatchSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *c
 		return
 	}
 	//Generate the address
-	address, err = btcutil.NewAddressScriptHash(script, net)
+	address, err = newAddressWitnessScriptHash(script, net)
 	if err != nil {
 		return
 	}
@@ -401,7 +407,7 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	if err != nil {
 		return nil, err
 	}
-	address, err := btcutil.NewAddressScriptHash(script, net)
+	address, err := newAddressWitnessScriptHash(script, net)
 	if err != nil {
 		return nil, err
 	}
