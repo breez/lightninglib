@@ -167,12 +167,24 @@ var (
 			Entity: "onchain",
 			Action: "write",
 		}},
+		"/lnrpc.Lightning/NewAddress": {{
+			Entity: "address",
+			Action: "write",
+		}},
+		"/lnrpc.Lightning/SubSwapClientInit": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
+		"/lnrpc.Lightning/SubSwapServiceInit": {{
+			Entity: "info",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/ReceivedAmount": {{
 			Entity: "onchain",
 			Action: "read",
 		}},
-		"/lnrpc.Lightning/NewAddress": {{
-			Entity: "address",
+		"/lnrpc.Lightning/SubSwapServiceRedeem": {{
+			Entity: "onchain",
 			Action: "write",
 		}},
 		"/lnrpc.Lightning/SignMessage": {{
