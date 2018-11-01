@@ -256,6 +256,7 @@ func main() {
 		newAddressCommand,
 		subSwapClientInitCommand,
 		subSwapServiceInitCommand,
+		subSwapClientWatchCommand,
 		receivedAmountCommand,
 		watchAddressCommand,
 		sendManyCommand,

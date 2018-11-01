@@ -3003,6 +3003,109 @@ func subSwapServiceInit(ctx *cli.Context) error {
 	return nil
 }
 
+var subSwapClientWatchCommand = cli.Command{
+	Name:      "subswapclientwatch",
+	Category:  "On-chain",
+	Usage:     "Watch a submarine swap.",
+	ArgsUsage: "preimage key servicepubkey lockheight",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "preimage",
+			Usage: "Preimage",
+		},
+		cli.StringFlag{
+			Name:  "key",
+			Usage: "Key",
+		},
+		cli.StringFlag{
+			Name:  "servicepubkey",
+			Usage: "ServicePubkey",
+		},
+		cli.Int64Flag{
+			Name:  "lockheight",
+			Usage: "LockHeight",
+		},
+	},
+	Action: actionDecorator(subSwapClientWatch),
+}
+
+func subSwapClientWatch(ctx *cli.Context) error {
+	var (
+		preimage      []byte
+		key           []byte
+		servicepubkey []byte
+		lockheight    int64
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "subswapclientwatch")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("preimage"):
+		preimageString := ctx.String("preimage")
+		var err error
+		preimage, err = hex.DecodeString(preimageString)
+		if err != nil {
+			return fmt.Errorf("malformed preimage")
+		}
+	case ctx.IsSet("key"):
+		keyString := ctx.String("key")
+		var err error
+		key, err = hex.DecodeString(keyString)
+		if err != nil {
+			return fmt.Errorf("malformed key")
+		}
+	case ctx.IsSet("servicepubkey"):
+		servicePubkeyString := ctx.String("servicepubkey")
+		var err error
+		servicepubkey, err = hex.DecodeString(servicePubkeyString)
+		if err != nil {
+			return fmt.Errorf("malformed service pubkey")
+		}
+	case ctx.IsSet("lockheight"):
+		lockheight = ctx.Int64("lockheight")
+	case args.Present():
+		var err error
+		preimage, err = hex.DecodeString(args.First())
+		if err != nil {
+			return fmt.Errorf("malformed preimage")
+		}
+		args = args.Tail()
+		key, err = hex.DecodeString(args.First())
+		if err != nil {
+			return fmt.Errorf("malformed key")
+		}
+		args = args.Tail()
+		servicepubkey, err = hex.DecodeString(args.First())
+		if err != nil {
+			return fmt.Errorf("malformed service pubkey")
+		}
+	default:
+		return fmt.Errorf("preimage argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapClientWatchRequest{
+		Preimage:      preimage,
+		Key:           key,
+		ServicePubkey: servicepubkey,
+		LockHeight:    lockheight,
+	}
+	SubSwapClientWatchResponse, err := client.SubSwapClientWatch(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapClientWatchResponse)
+	return nil
+}
+
 var receivedAmountCommand = cli.Command{
 	Name:      "receivedamount",
 	Category:  "On-chain",
