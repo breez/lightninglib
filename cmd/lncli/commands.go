@@ -2901,10 +2901,10 @@ func decodePayReq(ctx *cli.Context) error {
 }
 
 var subSwapClientInitCommand = cli.Command{
-	Name:      "subswapclientinit",
-	Category:  "On-chain",
-	Usage:     "Initiate a submarine swap client.",
-	Action: actionDecorator(subSwapClientInit),
+	Name:     "subswapclientinit",
+	Category: "On-chain",
+	Usage:    "Initiate a submarine swap client.",
+	Action:   actionDecorator(subSwapClientInit),
 }
 
 func subSwapClientInit(ctx *cli.Context) error {
@@ -2949,41 +2949,24 @@ func subSwapServiceInit(ctx *cli.Context) error {
 		pubkey []byte
 		hash   []byte
 	)
-	args := ctx.Args()
+	//args := ctx.Args()
 
-	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+	if ctx.NumFlags() < 2 {
 		cli.ShowCommandHelp(ctx, "subswapserviceinit")
 		return nil
 	}
 
-	switch {
-	case ctx.IsSet("pubkey"):
-		pubkeyString := ctx.String("pubkey")
-		var err error
-		pubkey, err = hex.DecodeString(pubkeyString)
-		if err != nil {
-			return fmt.Errorf("malformed pubkey")
-		}
-	case ctx.IsSet("hash"):
-		hashString := ctx.String("hash")
-		var err error
-		hash, err = hex.DecodeString(hashString)
-		if err != nil {
-			return fmt.Errorf("malformed hash")
-		}
-	case args.Present():
-		var err error
-		pubkey, err = hex.DecodeString(args.First())
-		if err != nil {
-			return fmt.Errorf("malformed pubkey")
-		}
-		args = args.Tail()
-		hash, err = hex.DecodeString(args.First())
-		if err != nil {
-			return fmt.Errorf("malformed hash")
-		}
-	default:
-		return fmt.Errorf("pubkey argument missing")
+	pubkeyString := ctx.String("pubkey")
+	var err error
+	pubkey, err = hex.DecodeString(pubkeyString)
+	if err != nil {
+		return fmt.Errorf("malformed pubkey")
+	}
+
+	hashString := ctx.String("hash")
+	hash, err = hex.DecodeString(hashString)
+	if err != nil {
+		return fmt.Errorf("malformed hash")
 	}
 
 	ctxb := context.Background()
@@ -2994,6 +2977,7 @@ func subSwapServiceInit(ctx *cli.Context) error {
 		Pubkey: pubkey,
 		Hash:   hash,
 	}
+
 	SubSwapServiceInitResponse, err := client.SubSwapServiceInit(ctxb, req)
 	if err != nil {
 		return err
@@ -3161,8 +3145,8 @@ func receivedAmount(ctx *cli.Context) error {
 	defer cleanUp()
 
 	req := &lnrpc.ReceivedAmountRequest{
-		Address:       address,
-		Hash: hash,
+		Address: address,
+		Hash:    hash,
 	}
 	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
 	if err != nil {
@@ -3236,7 +3220,7 @@ func subSwapServicerRedeem(ctx *cli.Context) error {
 	defer cleanUp()
 
 	req := &lnrpc.SubSwapServiceRedeemRequest{
-		Preimage: preimage,
+		Preimage:   preimage,
 		TargetConf: int32(targetconf),
 		SatPerByte: satperbyte,
 	}
