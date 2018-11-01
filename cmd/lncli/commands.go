@@ -3117,11 +3117,11 @@ var receivedAmountCommand = cli.Command{
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "addr",
-			Usage: "Address",
+			Usage: "The address (to be used by a client using swap service)",
 		},
 		cli.StringFlag{
 			Name:  "hash",
-			Usage: "Submarine hash",
+			Usage: "The hash (to be used by a swapper service)",
 		},
 	},
 	Action: actionDecorator(receivedAmount),
