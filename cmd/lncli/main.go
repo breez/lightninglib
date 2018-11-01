@@ -254,6 +254,7 @@ func main() {
 		unlockCommand,
 		changePasswordCommand,
 		newAddressCommand,
+		subSwapServiceInitCommand,
 		receivedAmountCommand,
 		watchAddressCommand,
 		sendManyCommand,

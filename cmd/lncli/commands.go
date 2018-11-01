@@ -2900,6 +2900,86 @@ func decodePayReq(ctx *cli.Context) error {
 	return nil
 }
 
+var subSwapServiceInitCommand = cli.Command{
+	Name:      "subswapserviceinit",
+	Category:  "On-chain",
+	Usage:     "Initiate a submarine swap service.",
+	ArgsUsage: "pubkey hash",
+	Description: `
+	Initiate a submarine swap service.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "pubkey",
+			Usage: "Pubkey",
+		},
+		cli.StringFlag{
+			Name:  "hash",
+			Usage: "Hash",
+		},
+	},
+	Action: actionDecorator(SubSwapServiceInitCommand),
+}
+
+func SubSwapServiceInitCommand(ctx *cli.Context) error {
+	var (
+		pubkey []byte
+		hash   []byte
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "subswapserviceinit")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("pubkey"):
+		pubkeyString := ctx.String("pubkey")
+		var err error
+		pubkey, err = hex.DecodeString(pubkeyString)
+		if err != nil {
+			return fmt.Errorf("malformed pubkey")
+		}
+	case ctx.IsSet("hash"):
+		hashString := ctx.String("hash")
+		var err error
+		hash, err = hex.DecodeString(hashString)
+		if err != nil {
+			return fmt.Errorf("malformed hash")
+		}
+	case args.Present():
+		var err error
+		pubkey, err = hex.DecodeString(args.First())
+		if err != nil {
+			return fmt.Errorf("malformed pubkey")
+		}
+		args = args.Tail()
+		hash, err = hex.DecodeString(args.First())
+		if err != nil {
+			return fmt.Errorf("malformed hash")
+		}
+	default:
+		return fmt.Errorf("pubkey argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapServiceInitRequest{
+		Pubkey: pubkey,
+		Hash:   hash,
+	}
+	SubSwapServiceInitResponse, err := client.SubSwapServiceInit(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapServiceInitResponse)
+	return nil
+}
+
 var receivedAmountCommand = cli.Command{
 	Name:      "receivedamount",
 	Category:  "On-chain",
