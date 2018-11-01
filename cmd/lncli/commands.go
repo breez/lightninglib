@@ -3173,6 +3173,82 @@ func receivedAmount(ctx *cli.Context) error {
 	return nil
 }
 
+var subSwapServicerRedeemCommand = cli.Command{
+	Name:      "subswapserviceredeem",
+	Category:  "On-chain",
+	Usage:     "Reedem a submarine swap.",
+	ArgsUsage: "preimage targetconf satperbyte",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "preimage",
+			Usage: "Preimage",
+		},
+		cli.IntFlag{
+			Name:  "targetconf",
+			Usage: "The target number of blocks that the funding transaction should be confirmed by",
+		},
+		cli.Int64Flag{
+			Name:  "satperbyte",
+			Usage: "A manual fee rate set in sat/byte that should be used when crafting the funding transaction",
+		},
+	},
+	Action: actionDecorator(subSwapServicerRedeem),
+}
+
+func subSwapServicerRedeem(ctx *cli.Context) error {
+	var (
+		preimage   []byte
+		targetconf int
+		satperbyte int64
+	)
+	args := ctx.Args()
+
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "subswapserviceredeem")
+		return nil
+	}
+
+	switch {
+	case ctx.IsSet("preimage"):
+		preimageString := ctx.String("preimage")
+		var err error
+		preimage, err = hex.DecodeString(preimageString)
+		if err != nil {
+			return fmt.Errorf("malformed preimage")
+		}
+	case ctx.IsSet("targetconf"):
+		targetconf = ctx.Int("targetconf")
+	case ctx.IsSet("satperbyte"):
+		satperbyte = ctx.Int64("satperbyte")
+	case args.Present():
+		var err error
+		preimage, err = hex.DecodeString(args.First())
+		if err != nil {
+			return fmt.Errorf("malformed preimage")
+		}
+		args = args.Tail()
+	default:
+		return fmt.Errorf("preimage argument missing")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapServiceRedeemRequest{
+		Preimage: preimage,
+		TargetConf: int32(targetconf),
+		SatPerByte: satperbyte,
+	}
+	SubSwapServiceRedeemResponse, err := client.SubSwapServiceRedeem(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapServiceRedeemResponse)
+	return nil
+}
+
 var watchAddressCommand = cli.Command{
 	Name:      "watchaddress",
 	Category:  "On-chain",
