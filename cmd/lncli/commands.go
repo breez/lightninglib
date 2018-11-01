@@ -2900,6 +2900,29 @@ func decodePayReq(ctx *cli.Context) error {
 	return nil
 }
 
+var subSwapClientInitCommand = cli.Command{
+	Name:      "subswapclientinit",
+	Category:  "On-chain",
+	Usage:     "Initiate a submarine swap client.",
+	Action: actionDecorator(subSwapClientInit),
+}
+
+func subSwapClientInit(ctx *cli.Context) error {
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapClientInitRequest{}
+	SubSwapClientInitResponse, err := client.SubSwapClientInit(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapClientInitResponse)
+	return nil
+}
+
 var subSwapServiceInitCommand = cli.Command{
 	Name:      "subswapserviceinit",
 	Category:  "On-chain",
