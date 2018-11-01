@@ -2956,7 +2956,7 @@ func receivedAmount(ctx *cli.Context) error {
 
 	req := &lnrpc.ReceivedAmountRequest{
 		Address:       address,
-		SubmarineHash: hash,
+		Hash: hash,
 	}
 	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
 	if err != nil {
