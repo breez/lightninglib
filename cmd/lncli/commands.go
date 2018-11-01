@@ -2918,10 +2918,10 @@ var subSwapServiceInitCommand = cli.Command{
 			Usage: "Hash",
 		},
 	},
-	Action: actionDecorator(SubSwapServiceInitCommand),
+	Action: actionDecorator(subSwapServiceInit),
 }
 
-func SubSwapServiceInitCommand(ctx *cli.Context) error {
+func subSwapServiceInit(ctx *cli.Context) error {
 	var (
 		pubkey []byte
 		hash   []byte
