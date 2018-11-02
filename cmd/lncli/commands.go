@@ -2900,6 +2900,171 @@ func decodePayReq(ctx *cli.Context) error {
 	return nil
 }
 
+var subSwapClientInitCommand = cli.Command{
+	Name:     "subswapclientinit",
+	Category: "On-chain",
+	Usage:    "Initiate a submarine swap client.",
+	Action:   actionDecorator(subSwapClientInit),
+}
+
+func subSwapClientInit(ctx *cli.Context) error {
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapClientInitRequest{}
+	SubSwapClientInitResponse, err := client.SubSwapClientInit(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapClientInitResponse)
+	return nil
+}
+
+var subSwapServiceInitCommand = cli.Command{
+	Name:      "subswapserviceinit",
+	Category:  "On-chain",
+	Usage:     "Initiate a submarine swap service.",
+	ArgsUsage: "pubkey hash",
+	Description: `
+	Initiate a submarine swap service.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "pubkey",
+			Usage: "Pubkey",
+		},
+		cli.StringFlag{
+			Name:  "hash",
+			Usage: "Hash",
+		},
+	},
+	Action: actionDecorator(subSwapServiceInit),
+}
+
+func subSwapServiceInit(ctx *cli.Context) error {
+	var (
+		pubkey []byte
+		hash   []byte
+	)
+
+	if ctx.NumFlags() < 2 {
+		cli.ShowCommandHelp(ctx, "subswapserviceinit")
+		return nil
+	}
+
+	pubkeyString := ctx.String("pubkey")
+	var err error
+	pubkey, err = hex.DecodeString(pubkeyString)
+	if err != nil {
+		return fmt.Errorf("malformed pubkey")
+	}
+
+	hashString := ctx.String("hash")
+	hash, err = hex.DecodeString(hashString)
+	if err != nil {
+		return fmt.Errorf("malformed hash")
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapServiceInitRequest{
+		Pubkey: pubkey,
+		Hash:   hash,
+	}
+
+	SubSwapServiceInitResponse, err := client.SubSwapServiceInit(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapServiceInitResponse)
+	return nil
+}
+
+var subSwapClientWatchCommand = cli.Command{
+	Name:      "subswapclientwatch",
+	Category:  "On-chain",
+	Usage:     "Watch a submarine swap.",
+	ArgsUsage: "preimage key servicepubkey lockheight",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "preimage",
+			Usage: "Preimage",
+		},
+		cli.StringFlag{
+			Name:  "key",
+			Usage: "Key",
+		},
+		cli.StringFlag{
+			Name:  "servicepubkey",
+			Usage: "ServicePubkey",
+		},
+		cli.Int64Flag{
+			Name:  "lockheight",
+			Usage: "LockHeight",
+		},
+	},
+	Action: actionDecorator(subSwapClientWatch),
+}
+
+func subSwapClientWatch(ctx *cli.Context) error {
+	var (
+		preimage      []byte
+		key           []byte
+		servicepubkey []byte
+		lockheight    int64
+	)
+
+	if ctx.NumFlags() < 4 {
+		cli.ShowCommandHelp(ctx, "subswapclientwatch")
+		return nil
+	}
+
+	preimageString := ctx.String("preimage")
+	var err error
+	preimage, err = hex.DecodeString(preimageString)
+	if err != nil {
+		return fmt.Errorf("malformed preimage")
+	}
+
+	keyString := ctx.String("key")
+	key, err = hex.DecodeString(keyString)
+	if err != nil {
+		return fmt.Errorf("malformed key")
+	}
+
+	servicePubkeyString := ctx.String("servicepubkey")
+	servicepubkey, err = hex.DecodeString(servicePubkeyString)
+	if err != nil {
+		return fmt.Errorf("malformed service pubkey")
+	}
+
+	lockheight = ctx.Int64("lockheight")
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapClientWatchRequest{
+		Preimage:      preimage,
+		Key:           key,
+		ServicePubkey: servicepubkey,
+		LockHeight:    lockheight,
+	}
+	SubSwapClientWatchResponse, err := client.SubSwapClientWatch(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapClientWatchResponse)
+	return nil
+}
+
 var receivedAmountCommand = cli.Command{
 	Name:      "receivedamount",
 	Category:  "On-chain",
@@ -2911,11 +3076,11 @@ var receivedAmountCommand = cli.Command{
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "addr",
-			Usage: "Address",
+			Usage: "The address (to be used by a client using swap service)",
 		},
 		cli.StringFlag{
 			Name:  "hash",
-			Usage: "Submarine hash",
+			Usage: "The hash (to be used by a swapper service)",
 		},
 	},
 	Action: actionDecorator(receivedAmount),
@@ -2955,8 +3120,8 @@ func receivedAmount(ctx *cli.Context) error {
 	defer cleanUp()
 
 	req := &lnrpc.ReceivedAmountRequest{
-		Address:       address,
-		SubmarineHash: hash,
+		Address: address,
+		Hash:    hash,
 	}
 	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
 	if err != nil {
@@ -2964,6 +3129,69 @@ func receivedAmount(ctx *cli.Context) error {
 	}
 
 	printRespJSON(ReceivedAmountResponse)
+	return nil
+}
+
+var subSwapServicerRedeemCommand = cli.Command{
+	Name:      "subswapserviceredeem",
+	Category:  "On-chain",
+	Usage:     "Reedem a submarine swap.",
+	ArgsUsage: "preimage targetconf satperbyte",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "preimage",
+			Usage: "Preimage",
+		},
+		cli.IntFlag{
+			Name:  "targetconf",
+			Usage: "The target number of blocks that the funding transaction should be confirmed by",
+		},
+		cli.Int64Flag{
+			Name:  "satperbyte",
+			Usage: "A manual fee rate set in sat/byte that should be used when crafting the funding transaction",
+		},
+	},
+	Action: actionDecorator(subSwapServicerRedeem),
+}
+
+func subSwapServicerRedeem(ctx *cli.Context) error {
+	var (
+		preimage   []byte
+		targetconf int
+		satperbyte int64
+	)
+
+	if ctx.NumFlags() < 3 {
+		cli.ShowCommandHelp(ctx, "subswapserviceredeem")
+		return nil
+	}
+
+	preimageString := ctx.String("preimage")
+	var err error
+	preimage, err = hex.DecodeString(preimageString)
+	if err != nil {
+		return fmt.Errorf("malformed preimage")
+	}
+
+	targetconf = ctx.Int("targetconf")
+
+	satperbyte = ctx.Int64("satperbyte")
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapServiceRedeemRequest{
+		Preimage:   preimage,
+		TargetConf: int32(targetconf),
+		SatPerByte: satperbyte,
+	}
+	SubSwapServiceRedeemResponse, err := client.SubSwapServiceRedeem(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(SubSwapServiceRedeemResponse)
 	return nil
 }
 
