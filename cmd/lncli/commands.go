@@ -2949,7 +2949,6 @@ func subSwapServiceInit(ctx *cli.Context) error {
 		pubkey []byte
 		hash   []byte
 	)
-	//args := ctx.Args()
 
 	if ctx.NumFlags() < 2 {
 		cli.ShowCommandHelp(ctx, "subswapserviceinit")
@@ -3020,56 +3019,32 @@ func subSwapClientWatch(ctx *cli.Context) error {
 		servicepubkey []byte
 		lockheight    int64
 	)
-	args := ctx.Args()
 
-	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+	if ctx.NumFlags() < 4 {
 		cli.ShowCommandHelp(ctx, "subswapclientwatch")
 		return nil
 	}
 
-	switch {
-	case ctx.IsSet("preimage"):
-		preimageString := ctx.String("preimage")
-		var err error
-		preimage, err = hex.DecodeString(preimageString)
-		if err != nil {
-			return fmt.Errorf("malformed preimage")
-		}
-	case ctx.IsSet("key"):
-		keyString := ctx.String("key")
-		var err error
-		key, err = hex.DecodeString(keyString)
-		if err != nil {
-			return fmt.Errorf("malformed key")
-		}
-	case ctx.IsSet("servicepubkey"):
-		servicePubkeyString := ctx.String("servicepubkey")
-		var err error
-		servicepubkey, err = hex.DecodeString(servicePubkeyString)
-		if err != nil {
-			return fmt.Errorf("malformed service pubkey")
-		}
-	case ctx.IsSet("lockheight"):
-		lockheight = ctx.Int64("lockheight")
-	case args.Present():
-		var err error
-		preimage, err = hex.DecodeString(args.First())
-		if err != nil {
-			return fmt.Errorf("malformed preimage")
-		}
-		args = args.Tail()
-		key, err = hex.DecodeString(args.First())
-		if err != nil {
-			return fmt.Errorf("malformed key")
-		}
-		args = args.Tail()
-		servicepubkey, err = hex.DecodeString(args.First())
-		if err != nil {
-			return fmt.Errorf("malformed service pubkey")
-		}
-	default:
-		return fmt.Errorf("preimage argument missing")
+	preimageString := ctx.String("preimage")
+	var err error
+	preimage, err = hex.DecodeString(preimageString)
+	if err != nil {
+		return fmt.Errorf("malformed preimage")
 	}
+
+	keyString := ctx.String("key")
+	key, err = hex.DecodeString(keyString)
+	if err != nil {
+		return fmt.Errorf("malformed key")
+	}
+
+	servicePubkeyString := ctx.String("servicepubkey")
+	servicepubkey, err = hex.DecodeString(servicePubkeyString)
+	if err != nil {
+		return fmt.Errorf("malformed service pubkey")
+	}
+
+	lockheight = ctx.Int64("lockheight")
 
 	ctxb := context.Background()
 	client, cleanUp := getClient(ctx)
@@ -3185,35 +3160,22 @@ func subSwapServicerRedeem(ctx *cli.Context) error {
 		targetconf int
 		satperbyte int64
 	)
-	args := ctx.Args()
 
-	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+	if ctx.NumFlags() < 3 {
 		cli.ShowCommandHelp(ctx, "subswapserviceredeem")
 		return nil
 	}
 
-	switch {
-	case ctx.IsSet("preimage"):
-		preimageString := ctx.String("preimage")
-		var err error
-		preimage, err = hex.DecodeString(preimageString)
-		if err != nil {
-			return fmt.Errorf("malformed preimage")
-		}
-	case ctx.IsSet("targetconf"):
-		targetconf = ctx.Int("targetconf")
-	case ctx.IsSet("satperbyte"):
-		satperbyte = ctx.Int64("satperbyte")
-	case args.Present():
-		var err error
-		preimage, err = hex.DecodeString(args.First())
-		if err != nil {
-			return fmt.Errorf("malformed preimage")
-		}
-		args = args.Tail()
-	default:
-		return fmt.Errorf("preimage argument missing")
+	preimageString := ctx.String("preimage")
+	var err error
+	preimage, err = hex.DecodeString(preimageString)
+	if err != nil {
+		return fmt.Errorf("malformed preimage")
 	}
+
+	targetconf = ctx.Int("targetconf")
+
+	satperbyte = ctx.Int64("satperbyte")
 
 	ctxb := context.Background()
 	client, cleanUp := getClient(ctx)
