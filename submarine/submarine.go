@@ -12,10 +12,13 @@ import (
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
+	"github.com/btcsuite/btcwallet/walletdb"
+	"github.com/btcsuite/btcwallet/wtxmgr"
 	"github.com/coreos/bbolt"
 )
 
@@ -24,7 +27,8 @@ const (
 )
 
 var (
-	submarineBucket = []byte("submarineTransactions")
+	submarineBucket    = []byte("submarineTransactions")
+	wtxmgrNamespaceKey = []byte("wtxmgr")
 )
 
 func genSubmarineSwapScript(swapperPubKey, payerPubKey, hash []byte, lockHeight int64) ([]byte, error) {
@@ -397,6 +401,50 @@ func WatchSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *c
 	//Watch the new address
 	err = chainClient.NotifyReceived([]btcutil.Address{address})
 	return
+}
+
+// GetFirstTransaction returns the amount of btc in an address from transaction mined
+// from the start height. Returns also the height of the transaction and it's id
+func GetFirstTransaction(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start int32, address string) (btcutil.Amount, chainhash.Hash, uint32, int32, error) {
+	var amt btcutil.Amount
+	var txid chainhash.Hash
+	var txIndex uint32
+	firstHeight := int32(-1)
+	err := walletdb.View(db, func(dbtx walletdb.ReadTx) error {
+		txmgrNs := dbtx.ReadBucket(wtxmgrNamespaceKey)
+		rangeFn := func(details []wtxmgr.TxDetails) (bool, error) {
+			// TODO: probably should make RangeTransactions not reuse the
+			// details backing array memory.
+			dets := make([]wtxmgr.TxDetails, len(details))
+			copy(dets, details)
+			details = dets
+
+			//txs := make([]TransactionSummary, 0, len(details))
+			for _, d := range details {
+				//txs = append(txs, makeTxSummary(dbtx, w, &details[i]))
+				if d.Block.Height != -1 {
+					for i, txout := range d.MsgTx.TxOut {
+						_, addrs, _, err := txscript.ExtractPkScriptAddrs(txout.PkScript, net)
+						if err == nil {
+							if addrs[0].String() == address {
+								if firstHeight < 0 {
+									firstHeight = d.Block.Height
+									amt = btcutil.Amount(txout.Value)
+									txIndex = uint32(i)
+									txid = d.MsgTx.TxHash()
+								}
+								return true, nil
+							}
+						}
+					}
+				}
+			}
+			return false, nil
+		}
+
+		return txstore.RangeTransactions(txmgrNs, start, int32(^uint32(0)>>1), rangeFn)
+	})
+	return amt, txid, txIndex, firstHeight, err
 }
 
 // Redeem
