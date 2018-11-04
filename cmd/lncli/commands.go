@@ -2918,8 +2918,12 @@ func subSwapClientInit(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-
-	printRespJSON(SubSwapClientInitResponse)
+	mapResponse := make(map[string]string)
+	mapResponse["Preimage"] = hex.EncodeToString(SubSwapClientInitResponse.Preimage)
+	mapResponse["Hash"] = hex.EncodeToString(SubSwapClientInitResponse.Hash)
+	mapResponse["Key"] = hex.EncodeToString(SubSwapClientInitResponse.Key)
+	mapResponse["Pubkey"] = hex.EncodeToString(SubSwapClientInitResponse.Pubkey)
+	printJSON(mapResponse)
 	return nil
 }
 
