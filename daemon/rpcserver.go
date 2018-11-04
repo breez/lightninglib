@@ -646,7 +646,7 @@ func (r *rpcServer) SubSwapServiceInit(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	rpcsLog.Infof("[newaddress] addr=%v script=%x pubkey=%x", addr.String(), script, swapServicePubKey)
+	rpcsLog.Infof("[SubSwapServiceInit] addr=%v script=%x pubkey=%x", addr.String(), script, swapServicePubKey)
 	return &lnrpc.SubSwapServiceInitResponse{Address: addr.String(), Pubkey: swapServicePubKey, LockHeight: lockHeight}, nil
 }
 
