@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	defaultLockHeight = 72
+	defaultLockHeight      = 72
+	redeemWitnessInputSize = 1 + 1 + 73 + 1 + 32 + 1 + 100
 )
 
 var (
@@ -482,7 +483,7 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	}
 	redeemTx.LockTime = uint32(currentHeight)
 
-	weight := 4*redeemTx.SerializeSizeStripped() + 73 + len(preimage) + len(script) // 73 is the max size for the signature
+	weight := 4*redeemTx.SerializeSizeStripped() + redeemWitnessInputSize*len(redeemTx.TxIn)
 	redeemTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
 
 	sigHashes := txscript.NewTxSigHashes(redeemTx)
