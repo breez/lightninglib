@@ -695,7 +695,7 @@ func (r *rpcServer) ReceivedAmount(ctx context.Context,
 		creationHeight, err := submarine.CreationHeight(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, addr)
 		start = int32(creationHeight)
 	}
-	amount, txid, firstHeight, err := b.GetFirstTransaction(start, address)
+	amount, txid, idx, firstHeight, err := submarine.GetFirstTransaction(b.Database(), b.TxStore, activeNetParams.Params, start, address)
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +703,7 @@ func (r *rpcServer) ReceivedAmount(ctx context.Context,
 	if firstHeight > -1 {
 		age = currentHeight - firstHeight
 	}
-	rpcsLog.Infof("[ReceivedAmount] address=%v, txid=%v, amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", address, txid.String(), amount, firstHeight, currentHeight, age, err)
+	rpcsLog.Infof("[ReceivedAmount] address=%v, txid=%v, idx=%v, amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", address, txid.String(), idx, amount, firstHeight, currentHeight, age, err)
 	return &lnrpc.ReceivedAmountResponse{Amount: int64(amount), BlockHeight: firstHeight, BlockAge: age, Txid: txid.String()}, nil
 }
 
