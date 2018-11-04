@@ -272,11 +272,10 @@ func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creatio
 	return
 }
 
-func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (btcutil.Address, error){
+func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (btcutil.Address, error) {
 	witnessProg := sha256.Sum256(script)
 	return btcutil.NewAddressWitnessScriptHash(witnessProg[:], net)
 }
-
 
 // AddressFromHash
 func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, creationHeight int64, err error) {
@@ -451,7 +450,7 @@ func GetFirstTransaction(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Pa
 func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, preimage []byte, redeemAddress btcutil.Address, feePerKw lnwallet.SatPerKWeight) (*wire.MsgTx, error) {
 
 	hash := sha256.Sum256(preimage)
-	creationHeight, _, swapperKey, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
+	creationHeight, _, serviceKey, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
 	if err != nil {
 		return nil, err
 	}
@@ -459,40 +458,45 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	if err != nil {
 		return nil, err
 	}
-	amount, txid, _, err := wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().GetFirstTransaction(int32(creationHeight), address.String())
+	w := wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
+	amount, txid, vout, _, err := GetFirstTransaction(w.Database(), w.TxStore, net, int32(creationHeight), address.String())
 
-	// Type 2 supports CSV
-	redeemTx := wire.NewMsgTx(2)
-
-	// We need to reference the swap transactions outpoint
-	prevOut := wire.NewOutPoint(&txid, 0)
+	redeemTx := wire.NewMsgTx(1)
 
 	// Send the funds to an address
 	redeemScript, err := txscript.PayToAddrScript(redeemAddress)
 	if err != nil {
 		return nil, err
 	}
-
-	feeSatPerKB := btcutil.Amount(feePerKw.FeePerKVByte())
-	// TODO: Need to calculate the Fee using feeSatPerKB
-	fee := feeSatPerKB
-	txAmount := amount - fee
-	txOut := wire.NewTxOut(int64(txAmount), redeemScript)
+	txOut := wire.NewTxOut(int64(amount), redeemScript)
 	redeemTx.AddTxOut(txOut)
 
-	// Sign with out private key
-	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), swapperKey)
-	scriptSig, err := txscript.SignatureScript(redeemTx, 0, script, txscript.SigHashAll, privateKey, true)
+	prevOut := wire.NewOutPoint(&txid, vout)
+	txIn := wire.NewTxIn(prevOut, nil, nil)
+	txIn.Sequence = 0
+	redeemTx.AddTxIn(txIn)
+
+	_, currentHeight, err := w.ChainClient().GetBestBlock()
 	if err != nil {
 		return nil, err
 	}
+	redeemTx.LockTime = uint32(currentHeight)
 
-	txIn := wire.NewTxIn(prevOut, script, [][]byte{scriptSig, preimage})
-	redeemTx.AddTxIn(txIn)
+	weight := 4*redeemTx.SerializeSizeStripped() + 73 + len(preimage) + len(script) // 73 is the max size for the signature
+	redeemTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
+
+	sigHashes := txscript.NewTxSigHashes(redeemTx)
+	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), serviceKey)
+	scriptSig, err := txscript.RawTxInWitnessSignature(redeemTx, sigHashes, 0, int64(amount), script, txscript.SigHashAll, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	redeemTx.TxIn[0].Witness = [][]byte{scriptSig, preimage, script}
 
 	err = wallet.PublishTransaction(redeemTx)
 	if err != nil {
 		return nil, err
 	}
+
 	return redeemTx, nil
 }
