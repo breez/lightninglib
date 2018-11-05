@@ -930,40 +930,6 @@
         ]
       }
     },
-    "/v1/receivedamount": {
-      "get": {
-        "summary": "* lncli: `receivedamount`\nReceivedAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
-        "operationId": "ReceivedAmount",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/lnrpcReceivedAmountResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "address",
-            "description": "/ The address (to be used by a client using swap service).",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          },
-          {
-            "name": "hash",
-            "description": "/ The hash (to be used by a swapper service).",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "byte"
-          }
-        ],
-        "tags": [
-          "Lightning"
-        ]
-      }
-    },
     "/v1/subswapclientinit": {
       "get": {
         "summary": "* lncli: `subswapclientinit`",
@@ -1199,6 +1165,40 @@
           "WalletUnlocker"
         ]
       }
+    },
+    "/v1/unspentamount": {
+      "get": {
+        "summary": "* lncli: `unspentamount`\nUnspentAmount returns the total amount of the btc received in a watched address,\nthe block height and the age of the first transaction sending btc to the address.",
+        "operationId": "UnspentAmount",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcUnspentAmountResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "address",
+            "description": "/ The address (to be used by a client using swap service).",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "hash",
+            "description": "/ The hash (to be used by a swapper service).",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
     }
   },
   "definitions": {
@@ -1337,6 +1337,26 @@
           "type": "string",
           "format": "int64",
           "title": "/ The balance in satoshis encumbered in this channel"
+        }
+      }
+    },
+    "UnspentAmountResponseUtxo": {
+      "type": "object",
+      "properties": {
+        "block_height": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -2758,30 +2778,6 @@
         }
       }
     },
-    "lnrpcReceivedAmountResponse": {
-      "type": "object",
-      "properties": {
-        "amount": {
-          "type": "string",
-          "format": "int64",
-          "title": "/ The amount of the first transaction"
-        },
-        "txid": {
-          "type": "string",
-          "title": "/ The txid of the first transaction"
-        },
-        "block_height": {
-          "type": "integer",
-          "format": "int32",
-          "title": "/ The block height of the first transaction if any"
-        },
-        "block_age": {
-          "type": "integer",
-          "format": "int32",
-          "title": "/ The age in height of the first transaction if any"
-        }
-      }
-    },
     "lnrpcRoute": {
       "type": "object",
       "properties": {
@@ -3138,6 +3134,26 @@
     },
     "lnrpcUnlockWalletResponse": {
       "type": "object"
+    },
+    "lnrpcUnspentAmountResponse": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The total amount"
+        },
+        "lock_height": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "utxos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UnspentAmountResponseUtxo"
+          }
+        }
+      }
     },
     "lnrpcVerifyMessageResponse": {
       "type": "object",

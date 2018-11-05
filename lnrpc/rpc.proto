@@ -300,13 +300,13 @@ service Lightning {
         };
     }
 
-    /** lncli: `receivedamount`
-    ReceivedAmount returns the total amount of the btc received in a watched address,
+    /** lncli: `unspentamount`
+    UnspentAmount returns the total amount of the btc received in a watched address,
     the block height and the age of the first transaction sending btc to the address.
     */
-    rpc ReceivedAmount (ReceivedAmountRequest) returns (ReceivedAmountResponse) {
+    rpc UnspentAmount (UnspentAmountRequest) returns (UnspentAmountResponse) {
         option (google.api.http) = {
-            get: "/v1/receivedamount"
+            get: "/v1/unspentamount"
         };
     }
 
@@ -935,21 +935,23 @@ message SubSwapClientWatchResponse {
     bytes script = 2 [json_name = "script"];
 }
 
-message ReceivedAmountRequest {
+message UnspentAmountRequest {
     /// The address (to be used by a client using swap service)
     string address = 1 [json_name = "address"];
     /// The hash (to be used by a swapper service)
     bytes hash = 2 [json_name = "hash"];
 }
-message ReceivedAmountResponse {
-    /// The amount of the first transaction
+message UnspentAmountResponse {
+    message Utxo {
+        int32 block_height = 1 [json_name = "block_height"];
+        int64 amount = 2 [json_name = "amount"];
+        string txid = 3 [json_name = "txid"];
+        uint32 index = 4 [json_name = "index"];
+    }
+    /// The total amount
     int64 amount = 1 [json_name = "amount"];
-    /// The txid of the first transaction
-    string txid = 2 [json_name = "txid"];
-    /// The block height of the first transaction if any
-    int32 block_height = 3 [json_name = "block_height"];
-    /// The age in height of the first transaction if any
-    int32 block_age = 4 [json_name = "block_age"];
+    int32 lock_height = 2 [json_name = "lock_height"];
+    repeated Utxo utxos = 3 [json_name = "utxos"];
 }
 
 message SubSwapServiceRedeemRequest {

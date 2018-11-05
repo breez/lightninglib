@@ -179,7 +179,7 @@ var (
 			Entity: "info",
 			Action: "read",
 		}},
-		"/lnrpc.Lightning/ReceivedAmount": {{
+		"/lnrpc.Lightning/UnspentAmount": {{
 			Entity: "onchain",
 			Action: "read",
 		}},
@@ -671,40 +671,47 @@ func (r *rpcServer) SubSwapClientWatch(ctx context.Context,
 	}, nil
 }
 
-// ReceivedAmount returns the total amount of the btc received in a watched address
+// UnspentAmount returns the total amount of the btc received in a watched address
 // and the height of the first transaction sending btc to the address.
-func (r *rpcServer) ReceivedAmount(ctx context.Context,
-	in *lnrpc.ReceivedAmountRequest) (*lnrpc.ReceivedAmountResponse, error) {
+func (r *rpcServer) UnspentAmount(ctx context.Context,
+	in *lnrpc.UnspentAmountRequest) (*lnrpc.UnspentAmountResponse, error) {
 	b := r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
-	bestBlock := b.Manager.SyncedTo()
-	currentHeight := bestBlock.Height
 	address := in.Address
-	var start int32
+	var start, lockHeight int32
 	if len(in.Hash) > 0 {
-		addr, creationHeight, err := submarine.AddressFromHash(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, in.Hash)
+		addr, creationHeight, lh, err := submarine.AddressFromHash(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, in.Hash)
 		if err != nil {
 			return nil, err
 		}
 		address = addr.String()
 		start = int32(creationHeight)
+		lockHeight = int32(lh)
 	} else {
 		addr, err := btcutil.DecodeAddress(address, activeNetParams.Params)
 		if err != nil {
 			return nil, err
 		}
-		creationHeight, err := submarine.CreationHeight(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, addr)
+		creationHeight, lh, err := submarine.CreationHeight(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, addr)
 		start = int32(creationHeight)
+		lockHeight = int32(lh)
 	}
-	amount, txid, idx, firstHeight, err := submarine.GetFirstTransaction(b.Database(), b.TxStore, activeNetParams.Params, start, address)
+	utxos, err := submarine.GetUtxos(b.Database(), b.TxStore, activeNetParams.Params, start, address)
 	if err != nil {
 		return nil, err
 	}
-	var age int32
-	if firstHeight > -1 {
-		age = currentHeight - firstHeight
+	var totalAmount int64
+	var u []*lnrpc.UnspentAmountResponse_Utxo
+	for _, utxo := range utxos {
+		u = append(u, &lnrpc.UnspentAmountResponse_Utxo{
+			BlockHeight: utxo.BlockHeight,
+			Amount:      int64(utxo.Value),
+			Txid:        utxo.Hash.String(),
+			Index:       utxo.Index,
+		})
+		totalAmount += int64(utxo.Value)
 	}
-	rpcsLog.Infof("[ReceivedAmount] address=%v, txid=%v, idx=%v, amount=%v firstHeight=%v currentHeight=%v age=%v err=%v", address, txid.String(), idx, amount, firstHeight, currentHeight, age, err)
-	return &lnrpc.ReceivedAmountResponse{Amount: int64(amount), BlockHeight: firstHeight, BlockAge: age, Txid: txid.String()}, nil
+	rpcsLog.Infof("[UnspentAmount] address=%v, totalAmount=%v", address, totalAmount)
+	return &lnrpc.UnspentAmountResponse{Amount: totalAmount, LockHeight: lockHeight, Utxos: u}, nil
 }
 
 func (r *rpcServer) SubSwapServiceRedeem(ctx context.Context,

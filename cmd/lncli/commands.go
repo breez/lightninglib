@@ -3069,8 +3069,8 @@ func subSwapClientWatch(ctx *cli.Context) error {
 	return nil
 }
 
-var receivedAmountCommand = cli.Command{
-	Name:      "receivedamount",
+var unspentAmountCommand = cli.Command{
+	Name:      "unspentamount",
 	Category:  "On-chain",
 	Usage:     "Returns the amount received in a submarine transaction.",
 	ArgsUsage: "address",
@@ -3087,10 +3087,10 @@ var receivedAmountCommand = cli.Command{
 			Usage: "The hash (to be used by a swapper service)",
 		},
 	},
-	Action: actionDecorator(receivedAmount),
+	Action: actionDecorator(unspentAmount),
 }
 
-func receivedAmount(ctx *cli.Context) error {
+func unspentAmount(ctx *cli.Context) error {
 	var (
 		address string
 		hash    []byte
@@ -3098,7 +3098,7 @@ func receivedAmount(ctx *cli.Context) error {
 	args := ctx.Args()
 
 	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
-		cli.ShowCommandHelp(ctx, "receivedamount")
+		cli.ShowCommandHelp(ctx, "unspentamount")
 		return nil
 	}
 
@@ -3123,16 +3123,16 @@ func receivedAmount(ctx *cli.Context) error {
 	client, cleanUp := getClient(ctx)
 	defer cleanUp()
 
-	req := &lnrpc.ReceivedAmountRequest{
+	req := &lnrpc.UnspentAmountRequest{
 		Address: address,
 		Hash:    hash,
 	}
-	ReceivedAmountResponse, err := client.ReceivedAmount(ctxb, req)
+	UnspentAmountResponse, err := client.UnspentAmount(ctxb, req)
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(ReceivedAmountResponse)
+	printRespJSON(UnspentAmountResponse)
 	return nil
 }
 

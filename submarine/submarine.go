@@ -6,13 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
@@ -279,9 +279,9 @@ func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (btcutil.A
 }
 
 // AddressFromHash
-func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, creationHeight int64, err error) {
+func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, creationHeight, lockHeight int64, err error) {
 	var script []byte
-	creationHeight, _, _, script, err = getSwapperSubmarineData(db, net.ScriptHashAddrID, hash)
+	creationHeight, lockHeight, _, script, err = getSwapperSubmarineData(db, net.ScriptHashAddrID, hash)
 	if err != nil {
 		return
 	}
@@ -290,8 +290,8 @@ func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (addre
 }
 
 // CreationHeight
-func CreationHeight(net *chaincfg.Params, db *channeldb.DB, address btcutil.Address) (creationHeight int64, err error) {
-	creationHeight, _, _, _, _, _, err = getSubmarineData(db, net.ScriptHashAddrID, address)
+func CreationHeight(net *chaincfg.Params, db *channeldb.DB, address btcutil.Address) (creationHeight, lockHeight int64, err error) {
+	creationHeight, lockHeight, _, _, _, _, err = getSubmarineData(db, net.ScriptHashAddrID, address)
 	return
 }
 
@@ -403,13 +403,17 @@ func WatchSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *c
 	return
 }
 
-// GetFirstTransaction returns the amount of btc in an address from transaction mined
-// from the start height. Returns also the height of the transaction and it's id
-func GetFirstTransaction(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start int32, address string) (btcutil.Amount, chainhash.Hash, uint32, int32, error) {
-	var amt btcutil.Amount
-	var txid chainhash.Hash
-	var txIndex uint32
-	firstHeight := int32(-1)
+type Utxo struct {
+	Value       btcutil.Amount
+	BlockHeight int32
+	wire.OutPoint
+}
+
+// GetUtxos returns the list of utxos into a specific address from a start height
+func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start int32, address string) ([]Utxo, error) {
+	var txos []Utxo
+	outPoints := make(map[string]struct{})
+	spentOutPoints := make(map[string]struct{})
 	err := walletdb.View(db, func(dbtx walletdb.ReadTx) error {
 		txmgrNs := dbtx.ReadBucket(wtxmgrNamespaceKey)
 		rangeFn := func(details []wtxmgr.TxDetails) (bool, error) {
@@ -427,14 +431,23 @@ func GetFirstTransaction(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Pa
 						_, addrs, _, err := txscript.ExtractPkScriptAddrs(txout.PkScript, net)
 						if err == nil {
 							if addrs[0].String() == address {
-								if firstHeight < 0 {
-									firstHeight = d.Block.Height
-									amt = btcutil.Amount(txout.Value)
-									txIndex = uint32(i)
-									txid = d.MsgTx.TxHash()
-								}
-								return true, nil
+								h := d.MsgTx.TxHash()
+								op := wire.NewOutPoint(&h, uint32(i))
+								txos = append(txos, Utxo{
+									Value:       btcutil.Amount(txout.Value),
+									BlockHeight: d.Block.Height,
+									OutPoint:    *op,
+								})
+								outPoints[op.String()] = struct{}{}
+								fmt.Printf("height: %v, amt: %v, idx: %v, txid: %v\n", d.Block.Height, txout.Value, i, d.MsgTx.TxHash())
+								//return true, nil
 							}
+						}
+					}
+					for i, txin := range d.MsgTx.TxIn {
+						if _, ok := outPoints[txin.PreviousOutPoint.String()]; ok {
+							spentOutPoints[txin.PreviousOutPoint.String()] = struct{}{}
+							fmt.Printf("height: %v, idx: %v, txid: %v\n", d.Block.Height, i, d.MsgTx.TxHash())
 						}
 					}
 				}
@@ -444,7 +457,16 @@ func GetFirstTransaction(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Pa
 
 		return txstore.RangeTransactions(txmgrNs, start, int32(^uint32(0)>>1), rangeFn)
 	})
-	return amt, txid, txIndex, firstHeight, err
+	if err != nil {
+		return nil, err
+	}
+	var utxos []Utxo
+	for _, txo := range txos {
+		if _, ok := spentOutPoints[txo.OutPoint.String()]; !ok {
+			utxos = append(utxos, txo)
+		}
+	}
+	return utxos, nil
 }
 
 // Redeem
@@ -460,22 +482,26 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 		return nil, err
 	}
 	w := wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
-	amount, txid, vout, _, err := GetFirstTransaction(w.Database(), w.TxStore, net, int32(creationHeight), address.String())
+	utxos, err := GetUtxos(w.Database(), w.TxStore, net, int32(creationHeight), address.String())
 
 	redeemTx := wire.NewMsgTx(1)
 
-	// Send the funds to an address
+	// Add the inputs without the witness and calculate the amount to redeem
+	var amount btcutil.Amount
+	for _, utxo := range utxos {
+		amount += utxo.Value
+		txIn := wire.NewTxIn(&utxo.OutPoint, nil, nil)
+		txIn.Sequence = 0
+		redeemTx.AddTxIn(txIn)
+	}
+
+	// Add the single output
 	redeemScript, err := txscript.PayToAddrScript(redeemAddress)
 	if err != nil {
 		return nil, err
 	}
-	txOut := wire.NewTxOut(int64(amount), redeemScript)
-	redeemTx.AddTxOut(txOut)
-
-	prevOut := wire.NewOutPoint(&txid, vout)
-	txIn := wire.NewTxIn(prevOut, nil, nil)
-	txIn.Sequence = 0
-	redeemTx.AddTxIn(txIn)
+	txOut := wire.TxOut{PkScript: redeemScript}
+	redeemTx.AddTxOut(&txOut)
 
 	_, currentHeight, err := w.ChainClient().GetBestBlock()
 	if err != nil {
@@ -483,16 +509,20 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	}
 	redeemTx.LockTime = uint32(currentHeight)
 
+	// Calcluate the weight and the fee
 	weight := 4*redeemTx.SerializeSizeStripped() + redeemWitnessInputSize*len(redeemTx.TxIn)
+	// Adjust the amount in the txout
 	redeemTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
 
 	sigHashes := txscript.NewTxSigHashes(redeemTx)
 	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), serviceKey)
-	scriptSig, err := txscript.RawTxInWitnessSignature(redeemTx, sigHashes, 0, int64(amount), script, txscript.SigHashAll, privateKey)
-	if err != nil {
-		return nil, err
+	for idx := range redeemTx.TxIn {
+		scriptSig, err := txscript.RawTxInWitnessSignature(redeemTx, sigHashes, idx, int64(utxos[idx].Value), script, txscript.SigHashAll, privateKey)
+		if err != nil {
+			return nil, err
+		}
+		redeemTx.TxIn[idx].Witness = [][]byte{scriptSig, preimage, script}
 	}
-	redeemTx.TxIn[0].Witness = [][]byte{scriptSig, preimage, script}
 
 	err = wallet.PublishTransaction(redeemTx)
 	if err != nil {
