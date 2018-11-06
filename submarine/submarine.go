@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"fmt"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwallet"
@@ -25,6 +24,7 @@ import (
 const (
 	defaultLockHeight      = 72
 	redeemWitnessInputSize = 1 + 1 + 73 + 1 + 32 + 1 + 100
+	refundWitnessInputSize = 1 + 1 + 73 + 1 + 0 + 1 + 100
 )
 
 var (
@@ -439,7 +439,6 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 									OutPoint:    *op,
 								})
 								outPoints[op.String()] = struct{}{}
-								fmt.Printf("height: %v, amt: %v, idx: %v, txid: %v\n", d.Block.Height, txout.Value, i, d.MsgTx.TxHash())
 								//return true, nil
 							}
 						}
@@ -447,7 +446,6 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 					for i, txin := range d.MsgTx.TxIn {
 						if _, ok := outPoints[txin.PreviousOutPoint.String()]; ok {
 							spentOutPoints[txin.PreviousOutPoint.String()] = struct{}{}
-							fmt.Printf("height: %v, idx: %v, txid: %v\n", d.Block.Height, i, d.MsgTx.TxHash())
 						}
 					}
 				}
@@ -483,6 +481,12 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	}
 	w := wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
 	utxos, err := GetUtxos(w.Database(), w.TxStore, net, int32(creationHeight), address.String())
+	if err != nil {
+		return nil, err
+	}
+	if len(utxos) == 0 {
+		return nil, errors.New("no utxo")
+	}
 
 	redeemTx := wire.NewMsgTx(1)
 
@@ -530,4 +534,74 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	}
 
 	return redeemTx, nil
+}
+
+// Refund
+func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, address, refundAddress btcutil.Address, feePerKw lnwallet.SatPerKWeight) (*wire.MsgTx, error) {
+
+	creationHeight, lockHeight, _, clientKey, _, script, err := getSubmarineData(db, net.ScriptHashAddrID, address)
+	if err != nil {
+		return nil, err
+	}
+
+	w := wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
+	utxos, err := GetUtxos(w.Database(), w.TxStore, net, int32(creationHeight), address.String())
+	if err != nil {
+		return nil, err
+	}
+	if len(utxos) == 0 {
+		return nil, errors.New("no utxo")
+	}
+
+	refundTx := wire.NewMsgTx(2)
+
+	// Add the inputs without the witness and calculate the amount to redeem
+	var amount btcutil.Amount
+	for _, utxo := range utxos {
+		amount += utxo.Value
+		txIn := wire.NewTxIn(&utxo.OutPoint, nil, nil)
+		txIn.Sequence = uint32(lockHeight)
+		refundTx.AddTxIn(txIn)
+	}
+
+	// Add the single output
+	refundScript, err := txscript.PayToAddrScript(refundAddress)
+	if err != nil {
+		return nil, err
+	}
+	txOut := wire.TxOut{PkScript: refundScript}
+	refundTx.AddTxOut(&txOut)
+
+	_, currentHeight, err := w.ChainClient().GetBestBlock()
+	if err != nil {
+		return nil, err
+	}
+	lockTime := uint32(utxos[len(utxos)-1].BlockHeight) + uint32(lockHeight)
+
+	if lockTime < uint32(currentHeight) {
+		lockTime = uint32(currentHeight)
+	}
+	refundTx.LockTime = lockTime
+
+	// Calcluate the weight and the fee
+	weight := 4*refundTx.SerializeSizeStripped() + refundWitnessInputSize*len(refundTx.TxIn)
+	// Adjust the amount in the txout
+	refundTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
+
+	sigHashes := txscript.NewTxSigHashes(refundTx)
+	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), clientKey)
+	for idx := range refundTx.TxIn {
+		scriptSig, err := txscript.RawTxInWitnessSignature(refundTx, sigHashes, idx, int64(utxos[idx].Value), script, txscript.SigHashAll, privateKey)
+		if err != nil {
+			return nil, err
+		}
+		refundTx.TxIn[idx].Witness = [][]byte{scriptSig, nil, script}
+	}
+
+	err = wallet.PublishTransaction(refundTx)
+	if err != nil {
+		return nil, err
+	}
+
+	return refundTx, nil
 }

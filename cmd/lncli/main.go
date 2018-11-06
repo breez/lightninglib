@@ -259,6 +259,7 @@ func main() {
 		subSwapClientWatchCommand,
 		unspentAmountCommand,
 		subSwapServicerRedeemCommand,
+		subSwapClientRefundCommand,
 		watchAddressCommand,
 		sendManyCommand,
 		sendCoinsCommand,

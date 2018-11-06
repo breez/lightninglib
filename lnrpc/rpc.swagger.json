@@ -947,6 +947,55 @@
         ]
       }
     },
+    "/v1/subswapclientrefund": {
+      "get": {
+        "summary": "* lncli: `subswapclientrefund`\nSubSwapClientRefund refunds the amount received to a an external address.",
+        "operationId": "SubSwapClientRefund",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcSubSwapClientRefundResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "address",
+            "description": "/ The address used for the swap.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "refundAddress",
+            "description": "/ The address to receive the refund.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "target_conf",
+            "description": "/ The target number of blocks that the funding transaction should be confirmed by.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "sat_per_byte",
+            "description": "/ A manual fee rate set in sat/byte that should be used when crafting the funding transaction.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/subswapclientwatch": {
       "get": {
         "summary": "* lncli: `subswapclientwatch`",
@@ -1029,7 +1078,7 @@
     },
     "/v1/subswapserviceredeem": {
       "get": {
-        "summary": "* lncli: `subswapserviceredeem`\nSubSwapServiceRedeem redeem the amount received to a new address of the internal wallet.",
+        "summary": "* lncli: `subswapserviceredeem`\nSubSwapServiceRedeem redeems the amount received to a new address of the internal wallet.",
         "operationId": "SubSwapServiceRedeem",
         "responses": {
           "200": {
@@ -3023,6 +3072,15 @@
         }
       }
     },
+    "lnrpcSubSwapClientRefundResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "description": "/ The txid of the transaction."
+        }
+      }
+    },
     "lnrpcSubSwapClientWatchResponse": {
       "type": "object",
       "properties": {
@@ -3056,7 +3114,7 @@
       "properties": {
         "txid": {
           "type": "string",
-          "title": "/ The txid of the first transaction"
+          "description": "/ The txid of the transaction."
         }
       }
     },

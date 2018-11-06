@@ -187,6 +187,10 @@ var (
 			Entity: "onchain",
 			Action: "write",
 		}},
+		"/lnrpc.Lightning/SubSwapClientRefund": {{
+			Entity: "onchain",
+			Action: "write",
+		}},
 		"/lnrpc.Lightning/SubSwapClientWatch": {{
 			Entity: "onchain",
 			Action: "read",
@@ -744,8 +748,42 @@ func (r *rpcServer) SubSwapServiceRedeem(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	rpcsLog.Infof("[redeemsubmarineswap] txid: %v", tx.TxHash().String())
+	rpcsLog.Infof("[subswapserviceredeem] txid: %v", tx.TxHash().String())
 	return &lnrpc.SubSwapServiceRedeemResponse{Txid: tx.TxHash().String()}, nil
+}
+
+func (r *rpcServer) SubSwapClientRefund(ctx context.Context,
+	in *lnrpc.SubSwapClientRefundRequest) (*lnrpc.SubSwapClientRefundResponse, error) {
+
+	address, err := btcutil.DecodeAddress(in.Address, nil)
+	if err != nil {
+		return nil, err
+	}
+	refundAddress, err := btcutil.DecodeAddress(in.RefundAddress, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	feePerKw, err := determineFeePerKw(
+		r.server.cc.feeEstimator, in.TargetConf, in.SatPerByte,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := submarine.Refund(r.server.cc.wallet.Cfg.Database,
+		activeNetParams.Params,
+		r.server.cc.wallet,
+		address,
+		refundAddress,
+		feePerKw,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	rpcsLog.Infof("[subswapclientrefund] txid: %v", tx.TxHash().String())
+	return &lnrpc.SubSwapClientRefundResponse{Txid: tx.TxHash().String()}, nil
 }
 
 var (

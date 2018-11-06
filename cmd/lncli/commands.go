@@ -2914,16 +2914,16 @@ func subSwapClientInit(ctx *cli.Context) error {
 	defer cleanUp()
 
 	req := &lnrpc.SubSwapClientInitRequest{}
-	SubSwapClientInitResponse, err := client.SubSwapClientInit(ctxb, req)
+	resp, err := client.SubSwapClientInit(ctxb, req)
 	if err != nil {
 		return err
 	}
-	mapResponse := make(map[string]string)
-	mapResponse["Preimage"] = hex.EncodeToString(SubSwapClientInitResponse.Preimage)
-	mapResponse["Hash"] = hex.EncodeToString(SubSwapClientInitResponse.Hash)
-	mapResponse["Key"] = hex.EncodeToString(SubSwapClientInitResponse.Key)
-	mapResponse["Pubkey"] = hex.EncodeToString(SubSwapClientInitResponse.Pubkey)
-	printJSON(mapResponse)
+	mapResp := make(map[string]string)
+	mapResp["Preimage"] = hex.EncodeToString(resp.Preimage)
+	mapResp["Hash"] = hex.EncodeToString(resp.Hash)
+	mapResp["Key"] = hex.EncodeToString(resp.Key)
+	mapResp["Pubkey"] = hex.EncodeToString(resp.Pubkey)
+	printJSON(mapResp)
 	return nil
 }
 
@@ -2981,12 +2981,12 @@ func subSwapServiceInit(ctx *cli.Context) error {
 		Hash:   hash,
 	}
 
-	SubSwapServiceInitResponse, err := client.SubSwapServiceInit(ctxb, req)
+	resp, err := client.SubSwapServiceInit(ctxb, req)
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(SubSwapServiceInitResponse)
+	printRespJSON(resp)
 	return nil
 }
 
@@ -3060,12 +3060,12 @@ func subSwapClientWatch(ctx *cli.Context) error {
 		ServicePubkey: servicepubkey,
 		LockHeight:    lockheight,
 	}
-	SubSwapClientWatchResponse, err := client.SubSwapClientWatch(ctxb, req)
+	resp, err := client.SubSwapClientWatch(ctxb, req)
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(SubSwapClientWatchResponse)
+	printRespJSON(resp)
 	return nil
 }
 
@@ -3127,12 +3127,12 @@ func unspentAmount(ctx *cli.Context) error {
 		Address: address,
 		Hash:    hash,
 	}
-	UnspentAmountResponse, err := client.UnspentAmount(ctxb, req)
+	resp, err := client.UnspentAmount(ctxb, req)
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(UnspentAmountResponse)
+	printRespJSON(resp)
 	return nil
 }
 
@@ -3190,12 +3190,75 @@ func subSwapServicerRedeem(ctx *cli.Context) error {
 		TargetConf: int32(targetconf),
 		SatPerByte: satperbyte,
 	}
-	SubSwapServiceRedeemResponse, err := client.SubSwapServiceRedeem(ctxb, req)
+	resp, err := client.SubSwapServiceRedeem(ctxb, req)
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(SubSwapServiceRedeemResponse)
+	printRespJSON(resp)
+	return nil
+}
+
+var subSwapClientRefundCommand = cli.Command{
+	Name:      "subswapclientrefund",
+	Category:  "On-chain",
+	Usage:     "Refund a submarine swap.",
+	ArgsUsage: "addr refundaddr targetconf satperbyte",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "addr",
+			Usage: "Submarine Swap Address",
+		},
+		cli.StringFlag{
+			Name:  "refundaddr",
+			Usage: "Refund Address",
+		},
+		cli.IntFlag{
+			Name:  "targetconf",
+			Usage: "The target number of blocks that the funding transaction should be confirmed by",
+		},
+		cli.Int64Flag{
+			Name:  "satperbyte",
+			Usage: "A manual fee rate set in sat/byte that should be used when crafting the funding transaction",
+		},
+	},
+	Action: actionDecorator(subSwapClientRefund),
+}
+
+func subSwapClientRefund(ctx *cli.Context) error {
+	var (
+		address       string
+		refundAddress string
+		targetconf    int
+		satperbyte    int64
+	)
+
+	if ctx.NumFlags() < 3 {
+		cli.ShowCommandHelp(ctx, "subswapclientrefund")
+		return nil
+	}
+
+	address = ctx.String("addr")
+	refundAddress = ctx.String("refundaddr")
+	targetconf = ctx.Int("targetconf")
+	satperbyte = ctx.Int64("satperbyte")
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.SubSwapClientRefundRequest{
+		Address:       address,
+		RefundAddress: refundAddress,
+		TargetConf:    int32(targetconf),
+		SatPerByte:    satperbyte,
+	}
+	resp, err := client.SubSwapClientRefund(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
 	return nil
 }
 

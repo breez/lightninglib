@@ -311,11 +311,20 @@ service Lightning {
     }
 
     /** lncli: `subswapserviceredeem`
-    SubSwapServiceRedeem redeem the amount received to a new address of the internal wallet.
+    SubSwapServiceRedeem redeems the amount received to a new address of the internal wallet.
     */
     rpc SubSwapServiceRedeem (SubSwapServiceRedeemRequest) returns (SubSwapServiceRedeemResponse) {
         option (google.api.http) = {
             get: "/v1/subswapserviceredeem"
+        };
+    }
+
+    /** lncli: `subswapclientrefund`
+    SubSwapClientRefund refunds the amount received to a an external address.
+    */
+    rpc SubSwapClientRefund (SubSwapClientRefundRequest) returns (SubSwapClientRefundResponse) {
+        option (google.api.http) = {
+            get: "/v1/subswapclientrefund"
         };
     }
 
@@ -964,7 +973,25 @@ message SubSwapServiceRedeemRequest {
     int64 sat_per_byte = 3;
 }
 message SubSwapServiceRedeemResponse {
-    /// The txid of the first transaction
+    /// The txid of the transaction.
+    string txid = 1 [json_name = "txid"];
+}
+
+message SubSwapClientRefundRequest {
+    /// The address used for the swap.
+    string address = 1 [json_name = "address"];
+
+    /// The address to receive the refund.
+    string refundAddress = 2 [json_name = "refund_address"];
+
+    /// The target number of blocks that the funding transaction should be confirmed by.
+    int32 target_conf = 3;
+
+    /// A manual fee rate set in sat/byte that should be used when crafting the funding transaction.
+    int64 sat_per_byte = 4;
+}
+message SubSwapClientRefundResponse {
+    /// The txid of the transaction.
     string txid = 1 [json_name = "txid"];
 }
 
