@@ -6,6 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"math"
+	"strings"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwallet"
@@ -115,46 +118,57 @@ func getSubmarineData(db *channeldb.DB, netID byte, address btcutil.Address) (cr
 			return errors.New("Not found")
 		}
 
-		submarineData := bytes.NewBuffer(value)
-		savedNetID, err := submarineData.ReadByte()
-		if err != nil {
-			return err
-		}
-		if savedNetID != netID {
-			return errors.New("Not the same network")
-		}
-		b := make([]byte, 16)
-		_, err = submarineData.Read(b)
-		if err != nil {
-			return err
-		}
-		creationHeight = int64(binary.BigEndian.Uint64(b[0:]))
-		lockHeight = int64(binary.BigEndian.Uint64(b[8:]))
-
-		preimage = make([]byte, 32)
-		_, err = submarineData.Read(preimage)
-		if err != nil {
-			return err
-		}
-		key = make([]byte, btcec.PrivKeyBytesLen)
-		_, err = submarineData.Read(key)
-		if err != nil {
-			return err
-		}
-		swapperPubKey = make([]byte, btcec.PubKeyBytesLenCompressed)
-		_, err = submarineData.Read(swapperPubKey)
-		if err != nil {
-			return err
-		}
-
-		script = make([]byte, submarineData.Len())
-		_, err = submarineData.Read(script)
+		creationHeight, lockHeight, preimage, key, swapperPubKey, script, err = decodeClientData(value, netID)
 		if err != nil {
 			return err
 		}
 
 		return nil
 	})
+	return
+}
+
+func decodeClientData(data []byte, netID byte) (creationHeight, lockHeight int64, preimage, key, swapperPubKey, script []byte, err error) {
+	err = nil
+	submarineData := bytes.NewBuffer(value)
+	savedNetID, err := submarineData.ReadByte()
+	if err != nil {
+		return
+	}
+	if savedNetID != netID {
+		err = errors.New("Not the same network")
+		return
+	}
+	b := make([]byte, 16)
+	_, err = submarineData.Read(b)
+	if err != nil {
+		return
+	}
+	creationHeight = int64(binary.BigEndian.Uint64(b[0:]))
+	lockHeight = int64(binary.BigEndian.Uint64(b[8:]))
+
+	preimage = make([]byte, 32)
+	_, err = submarineData.Read(preimage)
+	if err != nil {
+		return
+	}
+	key = make([]byte, btcec.PrivKeyBytesLen)
+	_, err = submarineData.Read(key)
+	if err != nil {
+		return
+	}
+	swapperPubKey = make([]byte, btcec.PubKeyBytesLenCompressed)
+	_, err = submarineData.Read(swapperPubKey)
+	if err != nil {
+		return
+	}
+
+	script = make([]byte, submarineData.Len())
+	_, err = submarineData.Read(script)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -239,30 +253,7 @@ func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creatio
 			return errors.New("Not found")
 		}
 
-		submarineData := bytes.NewBuffer(value)
-		savedNetID, err := submarineData.ReadByte()
-		if err != nil {
-			return err
-		}
-		if savedNetID != netID {
-			return errors.New("Not the same network")
-		}
-		b := make([]byte, 16)
-		_, err = submarineData.Read(b)
-		if err != nil {
-			return err
-		}
-		creationHeight = int64(binary.BigEndian.Uint64(b[0:]))
-		lockHeight = int64(binary.BigEndian.Uint64(b[8:]))
-
-		swapperKey = make([]byte, btcec.PrivKeyBytesLen)
-		_, err = submarineData.Read(swapperKey)
-		if err != nil {
-			return err
-		}
-
-		script = make([]byte, submarineData.Len())
-		_, err = submarineData.Read(script)
+		creationHeight, lockHeight, swapperKey, script, err = decodeSwapperData(value, netID)
 		if err != nil {
 			return err
 		}
@@ -271,6 +262,86 @@ func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creatio
 	})
 
 	return
+}
+
+func decodeSwapperData(data []byte, netID byte) (creationHeight, lockHeight int64, swapperKey, script []byte, err error) {
+	err = nil
+	submarineData := bytes.NewBuffer(data)
+	savedNetID, err := submarineData.ReadByte()
+	if err != nil {
+		return
+	}
+	if savedNetID != netID {
+		err = errors.New("not the same network")
+		return
+	}
+	b := make([]byte, 16)
+	_, err = submarineData.Read(b)
+	if err != nil {
+		return
+	}
+	creationHeight = int64(binary.BigEndian.Uint64(b[0:]))
+	lockHeight = int64(binary.BigEndian.Uint64(b[8:]))
+
+	swapperKey = make([]byte, btcec.PrivKeyBytesLen)
+	_, err = submarineData.Read(swapperKey)
+	if err != nil {
+		return
+	}
+
+	script = make([]byte, submarineData.Len())
+	_, err = submarineData.Read(script)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func getSubSwapAddresses(db *channeldb.DB, net *chaincfg.Params) (int64, []btcutil.Address,  error) {
+	var addresses []btcutil.Address
+	var oldestCreationHeight int64 = math.MaxInt64
+
+	err := db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(submarineBucket)
+		if bucket == nil {
+			return errors.New("submarine bucket not found")
+		}
+
+		bucket.ForEach(func(k, v []byte) error {
+			var creationHeight int64
+			var script []byte
+			var err error
+			if strings.HasPrefix(string(k[:]), "swapper:") {
+				creationHeight, _, _, script, err = decodeSwapperData(v, net.ScriptHashAddrID)
+				if err != nil {
+					return err
+				}
+			} else if strings.HasPrefix(string(k[:]), "swapClient:") {
+				creationHeight, _, _, _, _, script, err = decodeClientData(v, net.ScriptHashAddrID)
+				if err != nil {
+					return err
+				}
+			}
+
+			if creationHeight < oldestCreationHeight {
+				oldestCreationHeight = creationHeight
+			}
+
+			address, err := newAddressWitnessScriptHash(script, net)
+			if err != nil {
+				return err
+			}
+
+			addresses = append(addresses, address)
+			return nil
+			})
+		return nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return oldestCreationHeight, addresses, nil
 }
 
 func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (btcutil.Address, error) {
