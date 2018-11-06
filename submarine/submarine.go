@@ -443,7 +443,7 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 							}
 						}
 					}
-					for i, txin := range d.MsgTx.TxIn {
+					for _, txin := range d.MsgTx.TxIn {
 						if _, ok := outPoints[txin.PreviousOutPoint.String()]; ok {
 							spentOutPoints[txin.PreviousOutPoint.String()] = struct{}{}
 						}
