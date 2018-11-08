@@ -316,7 +316,7 @@ func (b *BtcWallet) ListUnspentWitness(minConfs int32) ([]*lnwallet.Utxo, error)
 			return nil, err
 		}
 
-		var addressType lnwallet.AddressType
+		addressType := lnwallet.UnknownAddressType
 		if txscript.IsPayToWitnessPubKeyHash(pkScript) {
 			addressType = lnwallet.WitnessPubKey
 		} else if txscript.IsPayToScriptHash(pkScript) {
