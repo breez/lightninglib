@@ -12,10 +12,12 @@ import (
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
+	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/btcsuite/btcwallet/wtxmgr"
 	"github.com/coreos/bbolt"
@@ -28,8 +30,9 @@ const (
 )
 
 var (
-	submarineBucket    = []byte("submarineTransactions")
-	wtxmgrNamespaceKey = []byte("wtxmgr")
+	submarineBucket      = []byte("submarineTransactions")
+	wtxmgrNamespaceKey   = []byte("wtxmgr")
+	waddrmgrNamespaceKey = []byte("waddrmgr")
 )
 
 func genSubmarineSwapScript(swapperPubKey, payerPubKey, hash []byte, lockHeight int64) ([]byte, error) {
@@ -273,7 +276,7 @@ func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creatio
 	return
 }
 
-func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (btcutil.Address, error) {
+func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (*btcutil.AddressWitnessScriptHash, error) {
 	witnessProg := sha256.Sum256(script)
 	return btcutil.NewAddressWitnessScriptHash(witnessProg[:], net)
 }
@@ -310,7 +313,7 @@ func SubmarineSwapInit() (preimage, hash, key, pubKey []byte, err error) {
 	return
 }
 
-func NewSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB, pubKey, hash []byte) (address btcutil.Address, script, swapperPubKey []byte, lockHeight int64, err error) {
+func NewSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB, pubKey, hash []byte) (address btcutil.Address, script, swapperPubKey []byte, lockHeight int64, err error) {
 
 	if len(pubKey) != btcec.PubKeyBytesLenCompressed {
 		err = errors.New("pubKey not valid")
@@ -336,6 +339,7 @@ func NewSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *cha
 	}
 	swapperKey := key.Serialize()
 	swapperPubKey = key.PubKey().SerializeCompressed()
+	lockHeight = defaultLockHeight
 
 	//Create the script
 	script, err = genSubmarineSwapScript(swapperPubKey, pubKey, hash, defaultLockHeight)
@@ -343,63 +347,67 @@ func NewSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *cha
 		return
 	}
 
-	//Generate the address
-	address, err = newAddressWitnessScriptHash(script, net)
+	currentHash, currentHeight, err := chainClient.GetBestBlock()
 	if err != nil {
 		return
 	}
 
-	_, currentHeight, err := chainClient.GetBestBlock()
+	address, err = importScript(
+		wdb,
+		manager,
+		net,
+		currentHeight,
+		*currentHash,
+		script,
+	)
 	if err != nil {
 		return
 	}
-
-	//Need to save these keyed by hash:
-	err = saveSwapperSubmarineData(db, net.ScriptHashAddrID, hash, int64(currentHeight), defaultLockHeight, swapperKey, script)
-	if err != nil {
-		return
-	}
-
-	lockHeight = defaultLockHeight
-
 	//Watch the new address
 	err = chainClient.NotifyReceived([]btcutil.Address{address})
 	if err != nil {
 		return
 	}
+	//Need to save the data keyed by hash
+	err = saveSwapperSubmarineData(db, net.ScriptHashAddrID, hash, int64(currentHeight), lockHeight, swapperKey, script)
 
 	return
 }
 
-func WatchSubmarineSwap(net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB,
+func WatchSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB,
 	preimage, key, swapperPubKey []byte, lockHeight int64) (address btcutil.Address, script []byte, err error) {
 
-	_, currentHeight, err := chainClient.GetBestBlock()
+	currentHash, currentHeight, err := chainClient.GetBestBlock()
 	if err != nil {
 		return
 	}
 
 	_, pu := btcec.PrivKeyFromBytes(btcec.S256(), key)
-	h := sha256.Sum256(preimage)
-	hash := h[:]
+	hash := sha256.Sum256(preimage)
 	//Create the script
-	script, err = genSubmarineSwapScript(swapperPubKey, pu.SerializeCompressed(), hash, lockHeight)
+	script, err = genSubmarineSwapScript(swapperPubKey, pu.SerializeCompressed(), hash[:], lockHeight)
 	if err != nil {
 		return
 	}
-	//Generate the address
-	address, err = newAddressWitnessScriptHash(script, net)
+
+	address, err = importScript(
+		wdb,
+		manager,
+		net,
+		currentHeight,
+		*currentHash,
+		script,
+	)
+	if err != nil {
+		return
+	}
+	//Watch the new address
+	err = chainClient.NotifyReceived([]btcutil.Address{address})
 	if err != nil {
 		return
 	}
 
 	err = saveSubmarineData(db, net.ScriptHashAddrID, address, int64(currentHeight), lockHeight, preimage, key, swapperPubKey, script)
-	if err != nil {
-		return
-	}
-
-	//Watch the new address
-	err = chainClient.NotifyReceived([]btcutil.Address{address})
 	return
 }
 
@@ -407,6 +415,40 @@ type Utxo struct {
 	Value       btcutil.Amount
 	BlockHeight int32
 	wire.OutPoint
+}
+
+func importScript(db walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params, startHeight int32, startHash chainhash.Hash, script []byte) (btcutil.Address, error) {
+	var p2wshAddr *btcutil.AddressWitnessScriptHash
+	err := walletdb.Update(db, func(tx walletdb.ReadWriteTx) error {
+		addrmgrNs := tx.ReadWriteBucket(waddrmgrNamespaceKey)
+
+		bs := &waddrmgr.BlockStamp{
+			Hash:   startHash,
+			Height: startHeight,
+		}
+
+		// As this is a regular P2SH script, we'll import this into the
+		// BIP0044 scope.
+		bip44Mgr, err := manager.FetchScopedKeyManager(
+			waddrmgr.KeyScopeBIP0084,
+		)
+		if err != nil {
+			return err
+		}
+
+		addrInfo, err := bip44Mgr.ImportWitnessScript(addrmgrNs, script, bs)
+		if err != nil {
+			if waddrmgr.IsError(err, waddrmgr.ErrDuplicateAddress) {
+				p2wshAddr, _ = newAddressWitnessScriptHash(script, net)
+				return nil
+			}
+			return err
+		}
+
+		p2wshAddr = addrInfo.Address().(*btcutil.AddressWitnessScriptHash)
+		return nil
+	})
+	return p2wshAddr, err
 }
 
 // GetUtxos returns the list of utxos into a specific address from a start height

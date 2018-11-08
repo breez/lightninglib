@@ -643,10 +643,13 @@ func (r *rpcServer) SubSwapClientInit(ctx context.Context,
 // SubSwapServiceInit
 func (r *rpcServer) SubSwapServiceInit(ctx context.Context,
 	in *lnrpc.SubSwapServiceInitRequest) (*lnrpc.SubSwapServiceInitResponse, error) {
+	b := r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
 	//Create a new submarine address and associated script
 	addr, script, swapServicePubKey, lockHeight, err := submarine.NewSubmarineSwap(
+		b.Database(),
+		b.Manager,
 		activeNetParams.Params,
-		r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient(),
+		b.ChainClient(),
 		r.server.cc.wallet.Cfg.Database,
 		in.Pubkey,
 		in.Hash,
@@ -661,9 +664,12 @@ func (r *rpcServer) SubSwapServiceInit(ctx context.Context,
 // WatchSubmarineSwap
 func (r *rpcServer) SubSwapClientWatch(ctx context.Context,
 	in *lnrpc.SubSwapClientWatchRequest) (*lnrpc.SubSwapClientWatchResponse, error) {
+	b := r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
 	address, script, err := submarine.WatchSubmarineSwap(
+		b.Database(),
+		b.Manager,
 		activeNetParams.Params,
-		r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient(),
+		b.ChainClient(),
 		r.server.cc.wallet.Cfg.Database,
 		in.Preimage,
 		in.Key,
