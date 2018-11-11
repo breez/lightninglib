@@ -2254,6 +2254,7 @@ var peerSubscriberNextID uint
 // 2. Adding this subscription to the subscribers list so it will receive future events.
 func (s *server) NewPeerSubscription() *PeerSubscription {
 
+	s.mu.Lock()
 	//creating a new subscription with unique id
 	subscription := &PeerSubscription{
 		ConnectedPeers:    make(chan *peer),
@@ -2261,6 +2262,9 @@ func (s *server) NewPeerSubscription() *PeerSubscription {
 		id:                peerSubscriberNextID,
 		server:            s,
 	}
+	s.peerSubscriptions[subscription.id] = subscription
+	peerSubscriberNextID++
+	s.mu.Unlock()
 
 	//send notification for the new subscriber for each current online peer
 	for _, p := range s.Peers() {
@@ -2273,11 +2277,6 @@ func (s *server) NewPeerSubscription() *PeerSubscription {
 		}(p)
 	}
 
-	//add the new subscribe to the list of subscribers
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.peerSubscriptions[subscription.id] = subscription
-	peerSubscriberNextID++
 	return subscription
 }
 

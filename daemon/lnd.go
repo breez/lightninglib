@@ -101,6 +101,13 @@ var (
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
 func LndMain(args []string, readyChan chan interface{}) error {
+
+	//Start the signal that is responsible for shutdown
+	if err := signal.Start(); err != nil {
+		ltndLog.Errorf("failed to start signal %v", err)
+		return err
+	}
+
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
 	loadedConfig, err := loadConfig(args)
@@ -366,6 +373,10 @@ func LndMain(args []string, readyChan chan interface{}) error {
 			rpcsLog.Infof("RPC server listening on %s", memoryRPCListener.Addr())
 			grpcServer.Serve(memoryRPCListener)
 		}()
+		if readyChan != nil {
+			readyChan <- struct{}{}
+		}
+		atomic.StoreInt32(&ready, 1)
 	}
 
 	// Finally, start the REST proxy for our gRPC server above.
@@ -440,11 +451,6 @@ func LndMain(args []string, readyChan chan interface{}) error {
 		return err
 	}
 	defer server.Stop()
-
-	if readyChan != nil {
-		readyChan <- struct{}{}
-	}
-	atomic.StoreInt32(&ready, 1)
 
 	// Now that the server has started, if the autopilot mode is currently
 	// active, then we'll initialize a fresh instance of it and start it.
