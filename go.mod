@@ -20,8 +20,8 @@ require (
 	github.com/davecgh/go-spew v0.0.0-20180221232628-8991bc29aa16
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/go-errors/errors v1.0.1
-	github.com/golang/protobuf v0.0.0-20180821051752-b27b920f9e71
-	github.com/grpc-ecosystem/grpc-gateway v0.0.0-20170724004829-f2862b476edc
+	github.com/golang/protobuf v1.2.0
+	github.com/grpc-ecosystem/grpc-gateway v1.5.1
 	github.com/hpcloud/tail v1.0.0 // indirect
 	github.com/jackpal/gateway v1.0.4
 	github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad
@@ -44,12 +44,11 @@ require (
 	github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02
 	github.com/urfave/cli v1.18.0
 	golang.org/x/crypto v0.0.0-20180820150726-614d502a4dac
-	golang.org/x/net v0.0.0-20180821023952-922f4815f713
-	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
+	golang.org/x/net v0.0.0-20180826012351-8a410e7b638d
 	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8 // indirect
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
-	google.golang.org/grpc v1.12.0
+	google.golang.org/grpc v1.16.0
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/errgo.v1 v1.0.0-20180502123906-c17903c6b19d // indirect
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
