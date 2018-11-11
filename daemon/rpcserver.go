@@ -4451,5 +4451,5 @@ func (r *rpcServer) ForwardingHistory(ctx context.Context,
 		}
 	}
 
-	return resp, nilgi
+	return resp, nil
 }
