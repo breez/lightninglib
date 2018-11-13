@@ -159,14 +159,6 @@ var (
 			Entity: "onchain",
 			Action: "write",
 		}},
-		"/lnrpc.Lightning/SendRawTx": {{
-			Entity: "onchain",
-			Action: "write",
-		}},
-		"/lnrpc.Lightning/WatchAddress": {{
-			Entity: "onchain",
-			Action: "write",
-		}},
 		"/lnrpc.Lightning/NewAddress": {{
 			Entity: "address",
 			Action: "write",
@@ -548,57 +540,6 @@ func (r *rpcServer) SendMany(ctx context.Context,
 	rpcsLog.Infof("[sendmany] spend generated txid: %v", txid.String())
 
 	return &lnrpc.SendManyResponse{Txid: txid.String()}, nil
-}
-
-// SendRawTx executes a request to broacast a raw transaction over the network.
-func (r *rpcServer) SendRawTx(ctx context.Context,
-	in *lnrpc.SendRawTxRequest) (*lnrpc.SendRawTxResponse, error) {
-
-	rpcsLog.Infof("[sendrawtx] hextx=%v", in.Hextx)
-
-	// Deserialize the transaction.
-	hexStr := in.Hextx
-	if len(hexStr)%2 != 0 {
-		hexStr = "0" + hexStr
-	}
-
-	serializedTx, err := hex.DecodeString(hexStr)
-	if err != nil {
-		return nil, err
-	}
-
-	var tx wire.MsgTx
-	err = tx.Deserialize(bytes.NewReader(serializedTx))
-	if err != nil {
-		return nil, err
-	}
-
-	err = r.server.cc.wallet.PublishTransaction(&tx)
-	if err != nil {
-		return nil, err
-	}
-
-	rpcsLog.Infof("[sendrawtx] txid: %v", tx.TxHash().String())
-
-	return &lnrpc.SendRawTxResponse{Txid: tx.TxHash().String()}, nil
-}
-
-// WatchAddress adds an address to be monitored for on-chain transactions
-func (r *rpcServer) WatchAddress(ctx context.Context,
-	in *lnrpc.WatchAddressRequest) (*lnrpc.WatchAddressResponse, error) {
-
-	a, err := btcutil.DecodeAddress(in.Address, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	err = r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().ChainClient().NotifyReceived([]btcutil.Address{a})
-	if err != nil {
-		return nil, err
-	}
-
-	rpcsLog.Infof("[watchaddress] monitoring: %v", in.Address)
-	return &lnrpc.WatchAddressResponse{Address: in.Address}, nil
 }
 
 // NewAddress creates a new address under control of the local wallet.
