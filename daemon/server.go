@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -65,6 +66,10 @@ var (
 	// ErrServerShuttingDown indicates that the server is in the process of
 	// gracefully exiting.
 	ErrServerShuttingDown = errors.New("server is shutting down")
+
+	// validColorRegexp is a regexp that lets you check if a particular
+	// color string matches the standard hex color format #RRGGBB.
+	validColorRegexp = regexp.MustCompile("^#[A-Fa-f0-9]{6}$")
 )
 
 // server is the main server of the Lightning Network Daemon. The server houses
@@ -1537,6 +1542,7 @@ func (s *server) initTorController() error {
 		Color:        newNodeAnn.RGBColor,
 		AuthSigBytes: newNodeAnn.Signature.ToSignatureBytes(),
 	}
+	copy(selfNode.PubKeyBytes[:], s.identityPriv.PubKey().SerializeCompressed())
 	if err := s.chanDB.ChannelGraph().SetSourceNode(selfNode); err != nil {
 		return fmt.Errorf("can't set self node: %v", err)
 	}
@@ -2900,8 +2906,10 @@ func (s *server) Peers() []*peer {
 // form "#RRGGBB", parses the hex color values, and returns a color.RGBA
 // struct of the same color.
 func parseHexColor(colorStr string) (color.RGBA, error) {
-	if len(colorStr) != 7 || colorStr[0] != '#' {
-		return color.RGBA{}, errors.New("Color must be in format #RRGGBB")
+	// Check if the hex color string is a valid color representation.
+	if !validColorRegexp.MatchString(colorStr) {
+		return color.RGBA{}, errors.New("Color must be specified " +
+			"using a hexadecimal value in the form #RRGGBB")
 	}
 
 	// Decode the hex color string to bytes.
