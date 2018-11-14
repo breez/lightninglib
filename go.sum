@@ -19,6 +19,8 @@ github.com/breez/btcwallet v0.0.0-20181029090957-3e2381ec8dea h1:oOwSeoV9GeXg9kO
 github.com/breez/btcwallet v0.0.0-20181029090957-3e2381ec8dea/go.mod h1:Sxi9czQ0paWQSTFAa8jz0DYr+nvMM65bhaNZmZiD3O8=
 github.com/breez/btcwallet v0.0.0-20181108095430-ecd7fb361e83 h1:Bto0tW/zFg0rKx4A6KRAnSkp8A4M2nGVF7aSli2GFdc=
 github.com/breez/btcwallet v0.0.0-20181108095430-ecd7fb361e83/go.mod h1:Sxi9czQ0paWQSTFAa8jz0DYr+nvMM65bhaNZmZiD3O8=
+github.com/breez/btcwallet v0.0.0-20181114091041-dfc0ecf8df75 h1:2dTU/qq0H+CoaH5TsPzpl02Cps/Cr9XeB0AEiS+zt1U=
+github.com/breez/btcwallet v0.0.0-20181114091041-dfc0ecf8df75/go.mod h1:Sxi9czQ0paWQSTFAa8jz0DYr+nvMM65bhaNZmZiD3O8=
 github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804 h1:GPbLS0rSo+fhMQe04V66s2oP6RocdtG6nxRJ1P7M2Xk=
 github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
 github.com/breez/neutrino v0.0.0-20181025065603-14bd66aff1db h1:m+VblI90ZFNqXdXZFy4O3Z3+a54NPq/oUt47DiU4/40=
@@ -32,6 +34,8 @@ github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a h1:RQMUrEILyYJEoA
 github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
 github.com/btcsuite/btcwallet v0.0.0-20181017015332-c4dd27e481f9 h1:YmgBq9XwdnZGBRF2DXq1a4qh/pfduvdQlzaDCjPV/jc=
 github.com/btcsuite/btcwallet v0.0.0-20181017015332-c4dd27e481f9/go.mod h1:+q7/nPeXqu8jJ0ah0fcMOlWGZ2GeL2QoL6c7nCFUEVA=
+github.com/btcsuite/btcwallet v0.0.0-20181107234839-9eec895db8ff h1:BYMw/+l9FyhMdhRYmtIV2bi0p6nUfO0epbexHnzfQpw=
+github.com/btcsuite/btcwallet v0.0.0-20181107234839-9eec895db8ff/go.mod h1:+q7/nPeXqu8jJ0ah0fcMOlWGZ2GeL2QoL6c7nCFUEVA=
 github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941 h1:kij1x2aL7VE6gtx8KMIt8PGPgI5GV9LgtHFG5KaEMPY=
 github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941/go.mod h1:QcFA8DZHtuIAdYKCq/BzELOaznRsCvwf4zTPmaYwaig=
 github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd h1:R/opQEbFEy9JGkIguV40SvRY1uliPX8ifOvi6ICsFCw=

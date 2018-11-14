@@ -1,18 +1,18 @@
-package chainntnfs
+package lookout
 
 import (
 	"github.com/breez/lightninglib/build"
 	"github.com/btcsuite/btclog"
 )
 
-// Log is a logger that is initialized with no output filters.  This
+// log is a logger that is initialized with no output filters.  This
 // means the package will not perform any logging by default until the caller
 // requests it.
-var Log btclog.Logger
+var log btclog.Logger
 
 // The default amount of logging is none.
 func init() {
-	UseLogger(build.NewSubLogger("NTFN", nil))
+	UseLogger(build.NewSubLogger("WTWR", nil))
 }
 
 // DisableLog disables all library log output.  Logging output is disabled
@@ -25,5 +25,5 @@ func DisableLog() {
 // This should be used in preference to SetLogWriter if the caller is also
 // using btclog.
 func UseLogger(logger btclog.Logger) {
-	Log = logger
+	log = logger
 }

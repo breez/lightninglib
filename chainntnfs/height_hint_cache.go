@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/breez/lightninglib/channeldb"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	bolt "github.com/coreos/bbolt"
-	"github.com/breez/lightninglib/channeldb"
 )
 
 const (

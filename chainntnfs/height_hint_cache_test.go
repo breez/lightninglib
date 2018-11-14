@@ -5,9 +5,9 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/breez/lightninglib/channeldb"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/breez/lightninglib/channeldb"
 )
 
 func initHintCache(t *testing.T) *HeightHintCache {
