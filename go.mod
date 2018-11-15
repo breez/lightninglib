@@ -36,7 +36,7 @@ require (
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20180324010646-462a8a753885 // indirect
-	github.com/lightninglabs/neutrino v0.0.0-20181024021741-23d294f83059
+	github.com/lightninglabs/neutrino v0.0.0-20181102193151-641af1ca5561
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
 	github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
@@ -59,6 +59,6 @@ require (
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
 
-replace github.com/lightninglabs/neutrino v0.0.0-20181019013733-8018ab76e70a => github.com/breez/neutrino v0.0.0-20181025065603-14bd66aff1db
+replace github.com/lightninglabs/neutrino v0.0.0-20181102193151-641af1ca5561 => github.com/breez/neutrino v0.0.0-20181115061052-77f47710fcc4
 
 replace github.com/btcsuite/btcwallet v0.0.0-20181107234839-9eec895db8ff => github.com/breez/btcwallet v0.0.0-20181114091041-dfc0ecf8df75

@@ -25,6 +25,8 @@ github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804 h1:GPbLS0rSo+fhMQe0
 github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
 github.com/breez/neutrino v0.0.0-20181025065603-14bd66aff1db h1:m+VblI90ZFNqXdXZFy4O3Z3+a54NPq/oUt47DiU4/40=
 github.com/breez/neutrino v0.0.0-20181025065603-14bd66aff1db/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
+github.com/breez/neutrino v0.0.0-20181115061052-77f47710fcc4 h1:556uXozMCBu7c1D2OaVFi+MPT8FCiWBR6aUBuEh80Do=
+github.com/breez/neutrino v0.0.0-20181115061052-77f47710fcc4/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
 github.com/btcsuite/btcd v0.0.0-20180823030728-d81d8877b8f3/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
 github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc h1:nLRj+ULuRYb0qTAOnuayFXRnLjYXBots5CSp5zH4RqU=
 github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
@@ -108,6 +110,8 @@ github.com/lightninglabs/neutrino v0.0.0-20181019013733-8018ab76e70a h1:028dRQ5y
 github.com/lightninglabs/neutrino v0.0.0-20181019013733-8018ab76e70a/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
 github.com/lightninglabs/neutrino v0.0.0-20181024021741-23d294f83059 h1:82zz3CBwPCNVY0gCcE/CMSWe91TwZX7Lj43DVJPi558=
 github.com/lightninglabs/neutrino v0.0.0-20181024021741-23d294f83059/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
+github.com/lightninglabs/neutrino v0.0.0-20181102193151-641af1ca5561 h1:Xi58PB1hIfj5xbUEFYerU14LiBXYdLg5bnUD1OJmH7U=
+github.com/lightninglabs/neutrino v0.0.0-20181102193151-641af1ca5561/go.mod h1:KJq43Fu9ceitbJsSXMILcT4mGDNI/crKmPIkDOZXFyM=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6 h1:ONLGrYJVQdbtP6CE/ff1KNWZtygRGEh12RzonTiCzPs=
 github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6/go.mod h1:8EgEt4a/NUOVQd+3kk6n9aZCJ1Ssj96Pb6lCrci+6oc=
 github.com/ltcsuite/ltcd v0.0.0-20170901085657-5f654d5faab9 h1:aLgtHOvaE6DjIKS5IpQU6ZLjdcQzjxHTMPOpq4pAY+M=
