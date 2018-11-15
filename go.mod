@@ -59,6 +59,4 @@ require (
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
 
-replace github.com/lightninglabs/neutrino v0.0.0-20181102193151-641af1ca5561 => github.com/breez/neutrino v0.0.0-20181115061052-77f47710fcc4
-
 replace github.com/btcsuite/btcwallet v0.0.0-20181107234839-9eec895db8ff => github.com/breez/btcwallet v0.0.0-20181114091041-dfc0ecf8df75
