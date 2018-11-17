@@ -23,6 +23,8 @@ github.com/breez/btcwallet v0.0.0-20181114091041-dfc0ecf8df75 h1:2dTU/qq0H+CoaH5
 github.com/breez/btcwallet v0.0.0-20181114091041-dfc0ecf8df75/go.mod h1:Sxi9czQ0paWQSTFAa8jz0DYr+nvMM65bhaNZmZiD3O8=
 github.com/breez/btcwallet v0.0.0-20181116092036-532d97ed3279 h1:acGBWNzdWENAGoaslq7OOBAsVR/ksCTDcaSqPjU9yZE=
 github.com/breez/btcwallet v0.0.0-20181116092036-532d97ed3279/go.mod h1:Sxi9czQ0paWQSTFAa8jz0DYr+nvMM65bhaNZmZiD3O8=
+github.com/breez/btcwallet v0.0.0-20181116143700-0824eb7ec53b h1:W5m0o/XpfbPxsPAKDaKoBMRpxFMd5o5iw0pDm/+u2wM=
+github.com/breez/btcwallet v0.0.0-20181116143700-0824eb7ec53b/go.mod h1:Sxi9czQ0paWQSTFAa8jz0DYr+nvMM65bhaNZmZiD3O8=
 github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804 h1:GPbLS0rSo+fhMQe04V66s2oP6RocdtG6nxRJ1P7M2Xk=
 github.com/breez/neutrino v0.0.0-20181023044851-1943c07c9804/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
 github.com/breez/neutrino v0.0.0-20181025065603-14bd66aff1db h1:m+VblI90ZFNqXdXZFy4O3Z3+a54NPq/oUt47DiU4/40=
