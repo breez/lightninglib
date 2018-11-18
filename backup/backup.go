@@ -2,7 +2,6 @@ package backup
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -61,9 +60,6 @@ func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB wall
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println(walletdbPath)
-	log.Println(channeldbPath)
 
 	return []string{walletdbPath, channeldbPath}, nil
 }
