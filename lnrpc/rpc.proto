@@ -371,6 +371,12 @@ service Lightning {
         };
     }
 
+    rpc GetBackup (GetBackupRequest) returns (GetBackupResponse) {
+        option (google.api.http) = {
+            get: "/v1/getbackup"
+        };
+    }
+
     // TODO(roasbeef): merge with below with bool?
     /** lncli: `pendingchannels`
     PendingChannels returns a list of all the channels that are currently
@@ -1245,6 +1251,12 @@ message GetInfoResponse {
 
     /// Number of inactive channels
     uint32 num_inactive_channels = 15 [json_name = "num_inactive_channels"];
+}
+
+message GetBackupRequest {
+}
+message GetBackupResponse {
+    repeated string files = 1 [ json_name = "files" ];
 }
 
 message ConfirmationUpdate {
