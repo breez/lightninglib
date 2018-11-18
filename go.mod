@@ -7,7 +7,7 @@ require (
 	github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/aead/siphash v1.0.1 // indirect
-	github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc
+	github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
 	github.com/btcsuite/btcwallet v0.0.0-20181116030035-55c7c6399321

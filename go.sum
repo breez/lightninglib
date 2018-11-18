@@ -32,6 +32,8 @@ github.com/breez/neutrino v0.0.0-20181025065603-14bd66aff1db/go.mod h1:l720ah/7j
 github.com/breez/neutrino v0.0.0-20181115061052-77f47710fcc4 h1:556uXozMCBu7c1D2OaVFi+MPT8FCiWBR6aUBuEh80Do=
 github.com/breez/neutrino v0.0.0-20181115061052-77f47710fcc4/go.mod h1:l720ah/7jc5nqsjW0O4ZjKHj33egitv8TKBHXmphyo8=
 github.com/btcsuite/btcd v0.0.0-20180823030728-d81d8877b8f3/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
+github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101 h1:/xe0TaCPKYG1hw3IffeXdmiJfw8x6SFBDKnr83vtVbw=
+github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
 github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc h1:nLRj+ULuRYb0qTAOnuayFXRnLjYXBots5CSp5zH4RqU=
 github.com/btcsuite/btcd v0.0.0-20180903232927-cff30e1d23fc/go.mod h1:Dmm/EzmjnCiweXmzRIAiUWCInVmPgjkzgv5k4tVyXiQ=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f h1:bAs4lUbRJpnnkd9VhRV3jjAVU7DJVjMaK+IsvSeZvFo=
