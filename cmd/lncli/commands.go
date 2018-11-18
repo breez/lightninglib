@@ -1589,6 +1589,27 @@ func getInfo(ctx *cli.Context) error {
 	return nil
 }
 
+var getBackupCommand = cli.Command{
+	Name:   "getbackup",
+	Usage:  "Generate and returns backup files.",
+	Action: actionDecorator(getBackup),
+}
+
+func getBackup(ctx *cli.Context) error {
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.GetBackupRequest{}
+	resp, err := client.GetBackup(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
+	return nil
+}
+
 var pendingChannelsCommand = cli.Command{
 	Name:     "pendingchannels",
 	Category: "Channels",
