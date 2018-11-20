@@ -59,4 +59,6 @@ require (
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
 
+replace github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101 => github.com/breez/btcd v0.0.0-20181025150601-acccfea9669b
+
 replace github.com/btcsuite/btcwallet v0.0.0-20181116030035-55c7c6399321 => github.com/breez/btcwallet v0.0.0-20181116143700-0824eb7ec53b
