@@ -18,6 +18,7 @@ import (
 	"github.com/breez/lightninglib/build"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
+	"github.com/breez/lightninglib/backup"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
@@ -229,6 +230,10 @@ var (
 			Action: "write",
 		}},
 		"/lnrpc.Lightning/GetInfo": {{
+			Entity: "info",
+			Action: "read",
+		}},
+		"/lnrpc.Lightning/GetBackup": {{
 			Entity: "info",
 			Action: "read",
 		}},
@@ -1617,6 +1622,12 @@ func (r *rpcServer) GetInfo(ctx context.Context,
 		BestHeaderTimestamp: int64(bestHeaderTimestamp),
 		Version:             build.Version(),
 	}, nil
+}
+
+func (r *rpcServer) GetBackup(ctx context.Context,
+	_ *lnrpc.GetBackupRequest) (*lnrpc.GetBackupResponse, error) {
+	files, err := backup.Backup(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().Database())
+	return &lnrpc.GetBackupResponse{Files: files}, err
 }
 
 // ListPeers returns a verbose listing of all currently active peers.

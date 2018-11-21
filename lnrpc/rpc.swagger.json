@@ -424,13 +424,29 @@
         ]
       }
     },
+    "/v1/getbackup": {
+      "get": {
+        "operationId": "GetBackup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lnrpcGetBackupResponse"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/getinfo": {
       "get": {
         "summary": "* lncli: `getinfo`\nGetInfo returns general information concerning the lightning node including\nit's identity pubkey, alias, the chains it is connected to, and information\nconcerning the number of open+pending channels.",
         "operationId": "GetInfo",
         "responses": {
           "200": {
-            "description": "",
+            "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/lnrpcGetInfoResponse"
             }
@@ -1979,6 +1995,17 @@
           "type": "string",
           "format": "byte",
           "description": "*\nenciphered_seed are the raw aezeed cipher seed bytes. This is the raw\ncipher text before run through our mnemonic encoding scheme."
+        }
+      }
+    },
+    "lnrpcGetBackupResponse": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
