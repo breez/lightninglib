@@ -129,10 +129,10 @@ func dropSyncedBlock(chainParams *chaincfg.Params, wallet string) error {
 func walletdbCopy(dir string, walletDB walletdb.DB) (string, error) {
 	walletCopy := filepath.Join(dir, "wallet-temp.db")
 	f1, err := os.Create(walletCopy)
-	defer f1.Close()
 	if err != nil {
 		return "", err
 	}
+	defer f1.Close()
 	err = walletDB.Copy(f1)
 	if err != nil {
 		return "", err
