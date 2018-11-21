@@ -10,7 +10,7 @@ require (
 	github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
-	github.com/btcsuite/btcwallet v0.0.0-20181116030035-55c7c6399321
+	github.com/btcsuite/btcwallet v0.0.0-20181120233725-7ad4f1e81d78
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8 // indirect
@@ -61,4 +61,4 @@ require (
 
 replace github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101 => github.com/breez/btcd v0.0.0-20181025150601-acccfea9669b
 
-replace github.com/btcsuite/btcwallet v0.0.0-20181116030035-55c7c6399321 => github.com/breez/btcwallet v0.0.0-20181116143700-0824eb7ec53b
+replace github.com/btcsuite/btcwallet v0.0.0-20181120233725-7ad4f1e81d78 => github.com/breez/btcwallet v0.0.0-20181121053730-b0e44c9563a8
