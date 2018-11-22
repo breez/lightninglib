@@ -1626,7 +1626,7 @@ func (r *rpcServer) GetInfo(ctx context.Context,
 
 func (r *rpcServer) GetBackup(ctx context.Context,
 	_ *lnrpc.GetBackupRequest) (*lnrpc.GetBackupResponse, error) {
-	files, err := backup.Backup(activeNetParams.Params, r.server.cc.wallet.Cfg.Database, r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().Database())
+	files, err := backup.Backup(cfg.DataDir, activeNetParams.Params, r.server.cc.wallet.Cfg.Database, r.server.cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().Database())
 	return &lnrpc.GetBackupResponse{Files: files}, err
 }
 

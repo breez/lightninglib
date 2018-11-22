@@ -28,9 +28,9 @@ var (
 	birthdayBlockVerifiedName = []byte("birthdayblockverified")
 )
 
-func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
+func Backup(dataDir string, chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
 
-	dir, err := ioutil.TempDir("", "backup")
+	dir, err := ioutil.TempDir(dataDir, "backup")
 	if err != nil {
 		return nil, err
 	}
