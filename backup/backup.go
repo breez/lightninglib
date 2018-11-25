@@ -24,8 +24,6 @@ var (
 	syncedToName              = []byte("syncedto")
 	startBlockName            = []byte("startblock")
 	birthdayName              = []byte("birthday")
-	birthdayBlockName         = []byte("birthdayblock")
-	birthdayBlockVerifiedName = []byte("birthdayblockverified")
 )
 
 func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
@@ -77,8 +75,6 @@ func dropSyncedBlock(chainParams *chaincfg.Params, wallet string) error {
 		}
 		syncBucketOld := ns.NestedReadWriteBucket(syncBucketName)
 		birthday := syncBucketOld.Get(birthdayName)
-		birthdayBlock := syncBucketOld.Get(birthdayBlockName)
-		birthdayBlockVerified := syncBucketOld.Get(birthdayBlockVerifiedName)
 		ns.DeleteNestedBucket(syncBucketName)
 
 		genesis := chainParams.GenesisHash.CloneBytes()
@@ -91,18 +87,6 @@ func dropSyncedBlock(chainParams *chaincfg.Params, wallet string) error {
 		err = syncBucket.Put(birthdayName, birthday)
 		if err != nil {
 			return err
-		}
-		if birthdayBlock != nil {
-			err = syncBucket.Put(birthdayBlockName, birthdayBlock)
-			if err != nil {
-				return err
-			}
-		}
-		if birthdayBlockVerified != nil {
-			err = syncBucket.Put(birthdayBlockVerifiedName, birthdayBlockVerified)
-			if err != nil {
-				return err
-			}
 		}
 		err = syncBucket.Put([]byte{0, 0, 0, 0}, genesis)
 		if err != nil {
