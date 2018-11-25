@@ -61,4 +61,4 @@ require (
 
 replace github.com/btcsuite/btcd v0.0.0-20180824064422-79e00513b101 => github.com/breez/btcd v0.0.0-20181025150601-acccfea9669b
 
-replace github.com/btcsuite/btcwallet v0.0.0-20181120233725-7ad4f1e81d78 => github.com/breez/btcwallet v0.0.0-20181121053730-b0e44c9563a8
+replace github.com/btcsuite/btcwallet v0.0.0-20181120233725-7ad4f1e81d78 => github.com/breez/btcwallet v0.0.0-20181125122430-d942b679e4d4
