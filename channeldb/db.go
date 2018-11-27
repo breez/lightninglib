@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/coreos/bbolt"
 	"github.com/go-errors/errors"
-	"github.com/lightningnetwork/lnd/lnwire"
 )
 
 const (
