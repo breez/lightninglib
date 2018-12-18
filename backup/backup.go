@@ -21,9 +21,9 @@ var (
 	syncBucketName    = []byte("sync")
 
 	// Sync related key names (sync bucket).
-	syncedToName              = []byte("syncedto")
-	startBlockName            = []byte("startblock")
-	birthdayName              = []byte("birthday")
+	syncedToName   = []byte("syncedto")
+	startBlockName = []byte("startblock")
+	birthdayName   = []byte("birthday")
 )
 
 func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
