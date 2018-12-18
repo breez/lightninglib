@@ -688,13 +688,6 @@ func loadConfig(args []string) (*config, error) {
 			return nil, err
 		}
 
-		if cfg.Bitcoin.Node == "neutrino" && cfg.Bitcoin.MainNet {
-			str := "%s: neutrino isn't yet supported for " +
-				"bitcoin's mainnet"
-			err := fmt.Errorf(str, funcName)
-			return nil, err
-		}
-
 		if cfg.Bitcoin.TimeLockDelta < minTimeLockDelta {
 			return nil, fmt.Errorf("timelockdelta must be at least %v",
 				minTimeLockDelta)
