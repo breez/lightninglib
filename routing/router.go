@@ -977,7 +977,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 				"chan_id=%v", msg.ChannelID)
 		}
 
-		if !r.cfg.AssumeChannelValid {
+		if !r.cfg.AssumeChannelValid || msg.NodeKey1Bytes == r.selfNode.PubKeyBytes || msg.NodeKey2Bytes == r.selfNode.PubKeyBytes{
 			// Before we can add the channel to the channel graph, we need
 			// to obtain the full funding outpoint that's encoded within
 			// the channel ID.
