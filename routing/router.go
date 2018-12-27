@@ -977,40 +977,37 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 				"chan_id=%v", msg.ChannelID)
 		}
 
-		// Before we can add the channel to the channel graph, we need
-		// to obtain the full funding outpoint that's encoded within
-		// the channel ID.
-		channelID := lnwire.NewShortChanIDFromInt(msg.ChannelID)
-		fundingPoint, fundingTxOut, err := r.fetchChanPoint(&channelID)
-		if err != nil {
-			r.rejectMtx.Lock()
-			r.rejectCache[msg.ChannelID] = struct{}{}
-			r.rejectMtx.Unlock()
+		if !r.cfg.AssumeChannelValid {
+			// Before we can add the channel to the channel graph, we need
+			// to obtain the full funding outpoint that's encoded within
+			// the channel ID.
+			channelID := lnwire.NewShortChanIDFromInt(msg.ChannelID)
+			fundingPoint, _, err := r.fetchChanPoint(&channelID)
+			if err != nil {
+				r.rejectMtx.Lock()
+				r.rejectCache[msg.ChannelID] = struct{}{}
+				r.rejectMtx.Unlock()
 
-			return errors.Errorf("unable to fetch chan point for "+
-				"chan_id=%v: %v", msg.ChannelID, err)
-		}
+				return errors.Errorf("unable to fetch chan point for "+
+					"chan_id=%v: %v", msg.ChannelID, err)
+			}
 
-		// Recreate witness output to be sure that declared in channel
-		// edge bitcoin keys and channel value corresponds to the
-		// reality.
-		witnessScript, err := lnwallet.GenMultiSigScript(
-			msg.BitcoinKey1Bytes[:], msg.BitcoinKey2Bytes[:],
-		)
-		if err != nil {
-			return err
-		}
-		fundingPkScript, err := lnwallet.WitnessScriptHash(witnessScript)
-		if err != nil {
-			return err
-		}
+			// Recreate witness output to be sure that declared in channel
+			// edge bitcoin keys and channel value corresponds to the
+			// reality.
+			witnessScript, err := lnwallet.GenMultiSigScript(
+				msg.BitcoinKey1Bytes[:], msg.BitcoinKey2Bytes[:],
+			)
+			if err != nil {
+				return err
+			}
+			fundingPkScript, err := lnwallet.WitnessScriptHash(witnessScript)
+			if err != nil {
+				return err
+			}
 
-		var chanUtxo *wire.TxOut
-		if r.cfg.AssumeChannelValid {
-			// If AssumeChannelValid is present, we'll just use the
-			// txout returned from fetchChanPoint.
-			chanUtxo = fundingTxOut
-		} else {
+			var chanUtxo *wire.TxOut
+
 			// Now that we have the funding outpoint of the channel,
 			// ensure that it hasn't yet been spent. If so, then
 			// this channel has been closed so we'll ignore it.
@@ -1027,24 +1024,42 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 					"for chan_id=%v, chan_point=%v: %v",
 					msg.ChannelID, fundingPoint, err)
 			}
-		}
 
-		// By checking the equality of witness pkscripts we checks that
-		// funding witness script is multisignature lock which contains
-		// both local and remote public keys which was declared in
-		// channel edge and also that the announced channel value is
-		// right.
-		if !bytes.Equal(fundingPkScript, chanUtxo.PkScript) {
-			return errors.Errorf("pkScript mismatch: expected %x, "+
-				"got %x", fundingPkScript, chanUtxo.PkScript)
-		}
+			// By checking the equality of witness pkscripts we checks that
+			// funding witness script is multisignature lock which contains
+			// both local and remote public keys which was declared in
+			// channel edge and also that the announced channel value is
+			// right.
+			if !bytes.Equal(fundingPkScript, chanUtxo.PkScript) {
+				return errors.Errorf("pkScript mismatch: expected %x, "+
+					"got %x", fundingPkScript, chanUtxo.PkScript)
+			}
 
-		// TODO(roasbeef): this is a hack, needs to be removed
-		// after commitment fees are dynamic.
-		msg.Capacity = btcutil.Amount(chanUtxo.Value)
-		msg.ChannelPoint = *fundingPoint
-		if err := r.cfg.Graph.AddChannelEdge(msg); err != nil {
-			return errors.Errorf("unable to add edge: %v", err)
+			// TODO(roasbeef): this is a hack, needs to be removed
+			// after commitment fees are dynamic.
+			msg.Capacity = btcutil.Amount(chanUtxo.Value)
+			msg.ChannelPoint = *fundingPoint
+			if err := r.cfg.Graph.AddChannelEdge(msg); err != nil {
+				return errors.Errorf("unable to add edge: %v", err)
+			}
+
+			// As a new edge has been added to the channel graph, we'll
+			// update the current UTXO filter within our active
+			// FilteredChainView so we are notified if/when this channel is
+			// closed.
+			filterUpdate := []channeldb.EdgePoint{
+				{
+					FundingPkScript: fundingPkScript,
+					OutPoint:        *fundingPoint,
+				},
+			}
+			err = r.cfg.ChainView.UpdateFilter(
+				filterUpdate, atomic.LoadUint32(&r.bestHeight),
+			)
+			if err != nil {
+				return errors.Errorf("unable to update chain "+
+					"view: %v", err)
+			}
 		}
 
 		invalidateCache = true
@@ -1052,25 +1067,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 			"connects %x and %x with ChannelPoint(%v): "+
 			"chan_id=%v, capacity=%v",
 			msg.NodeKey1Bytes, msg.NodeKey2Bytes,
-			fundingPoint, msg.ChannelID, msg.Capacity)
-
-		// As a new edge has been added to the channel graph, we'll
-		// update the current UTXO filter within our active
-		// FilteredChainView so we are notified if/when this channel is
-		// closed.
-		filterUpdate := []channeldb.EdgePoint{
-			{
-				FundingPkScript: fundingPkScript,
-				OutPoint:        *fundingPoint,
-			},
-		}
-		err = r.cfg.ChainView.UpdateFilter(
-			filterUpdate, atomic.LoadUint32(&r.bestHeight),
-		)
-		if err != nil {
-			return errors.Errorf("unable to update chain "+
-				"view: %v", err)
-		}
+			msg.ChannelPoint, msg.ChannelID, msg.Capacity)
 
 	case *channeldb.ChannelEdgePolicy:
 		// If we recently rejected this channel edge, then we won't
