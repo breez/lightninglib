@@ -1039,9 +1039,6 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 			// after commitment fees are dynamic.
 			msg.Capacity = btcutil.Amount(chanUtxo.Value)
 			msg.ChannelPoint = *fundingPoint
-			if err := r.cfg.Graph.AddChannelEdge(msg); err != nil {
-				return errors.Errorf("unable to add edge: %v", err)
-			}
 
 			// As a new edge has been added to the channel graph, we'll
 			// update the current UTXO filter within our active
@@ -1060,6 +1057,10 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 				return errors.Errorf("unable to update chain "+
 					"view: %v", err)
 			}
+		}
+
+		if err := r.cfg.Graph.AddChannelEdge(msg); err != nil {
+			return errors.Errorf("unable to add edge: %v", err)
 		}
 
 		invalidateCache = true
