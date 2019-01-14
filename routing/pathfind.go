@@ -572,7 +572,7 @@ func findPath(tx *bolt.Tx, graph *channeldb.ChannelGraph,
 
 		// If the estimated band width of the channel edge is not able
 		// to carry the amount that needs to be send, return.
-		if bandwidth < amountToSend {
+		if bandwidth > 0 && bandwidth < amountToSend {
 			return
 		}
 
