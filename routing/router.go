@@ -399,16 +399,22 @@ func (r *ChannelRouter) Start() error {
 
 	// Before we begin normal operation of the router, we first need to
 	// synchronize the channel graph to the latest state of the UTXO set.
+
+	/* Skip syncGraphWithChain
 	if err := r.syncGraphWithChain(); err != nil {
 		return err
-	}
+	}*/
 
 	// Finally, before we proceed, we'll prune any unconnected nodes from
 	// the graph in order to ensure we maintain a tight graph of "useful"
 	// nodes.
-	if err := r.cfg.Graph.PruneGraphNodes(); err != nil {
+
+	//Skip Prune, we need to optimize this function before it can be used
+	//in startup
+
+	/*if err := r.cfg.Graph.PruneGraphNodes(); err != nil {
 		return err
-	}
+	}*/
 
 	r.wg.Add(1)
 	go r.networkHandler()
@@ -977,7 +983,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 				"chan_id=%v", msg.ChannelID)
 		}
 
-		if !r.cfg.AssumeChannelValid || msg.NodeKey1Bytes == r.selfNode.PubKeyBytes || msg.NodeKey2Bytes == r.selfNode.PubKeyBytes{
+		if !r.cfg.AssumeChannelValid || msg.NodeKey1Bytes == r.selfNode.PubKeyBytes || msg.NodeKey2Bytes == r.selfNode.PubKeyBytes {
 			// Before we can add the channel to the channel graph, we need
 			// to obtain the full funding outpoint that's encoded within
 			// the channel ID.
