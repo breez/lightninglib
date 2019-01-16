@@ -400,6 +400,10 @@ func (r *ChannelRouter) Start() error {
 	// Before we begin normal operation of the router, we first need to
 	// synchronize the channel graph to the latest state of the UTXO set.
 
+	//This is the missing logic that we need from syncGraphWithChain that
+	// that we commented out.
+	r.bestHeight = uint32(bestHeight)
+
 	/* Skip syncGraphWithChain
 	if err := r.syncGraphWithChain(); err != nil {
 		return err
