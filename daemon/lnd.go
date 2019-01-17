@@ -432,7 +432,7 @@ func LndMain(args []string, readyChan chan interface{}) error {
 				break
 			}
 
-			time.Sleep(time.Second * 1)
+			time.Sleep(time.Millisecond * 100)
 		}
 
 		_, bestHeight, err = activeChainControl.chainIO.GetBestBlock()
@@ -589,7 +589,7 @@ func genCertPair(certFile, keyFile string) error {
 
 		KeyUsage: x509.KeyUsageKeyEncipherment |
 			x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		IsCA:                  true, // so can sign self.
+		IsCA: true, // so can sign self.
 		BasicConstraintsValid: true,
 
 		DNSNames:    dnsNames,
