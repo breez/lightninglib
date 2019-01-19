@@ -245,9 +245,14 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 		neutrino.BanDuration = 5 * time.Second
 		svc, err := neutrino.NewChainService(config)
 		if err != nil {
+			nodeDatabase.Close()
 			return nil, nil, fmt.Errorf("unable to create neutrino: %v", err)
 		}
 		svc.Start()
+		cleanUp = func() {
+			svc.Stop()
+			nodeDatabase.Close()
+		}
 
 		// Next we'll create the instances of the ChainNotifier and
 		// FilteredChainView interface which is backed by the neutrino
@@ -256,10 +261,12 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 			svc, hintCache, hintCache,
 		)
 		if err != nil {
+			cleanUp()
 			return nil, nil, err
 		}
 		cc.chainView, err = chainview.NewCfFilteredChainView(svc)
 		if err != nil {
+			cleanUp()
 			return nil, nil, err
 		}
 
@@ -269,10 +276,6 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 		walletConfig.ChainSource = chain.NewNeutrinoClient(
 			activeNetParams.Params, svc,
 		)
-		cleanUp = func() {
-			svc.Stop()
-			nodeDatabase.Close()
-		}
 	case "bitcoind", "litecoind":
 		var bitcoindMode *bitcoindConfig
 		switch {
@@ -496,6 +499,9 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 	wc, err := btcwallet.New(*walletConfig)
 	if err != nil {
 		fmt.Printf("unable to create wallet controller: %v\n", err)
+		if cleanUp != nil {
+			cleanUp()
+		}
 		return nil, nil, err
 	}
 
@@ -529,10 +535,16 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 	lnWallet, err := lnwallet.NewLightningWallet(walletCfg)
 	if err != nil {
 		fmt.Printf("unable to create wallet: %v\n", err)
+		if cleanUp != nil {
+			cleanUp()
+		}
 		return nil, nil, err
 	}
 	if err := lnWallet.Startup(); err != nil {
 		fmt.Printf("unable to start wallet: %v\n", err)
+		if cleanUp != nil {
+			cleanUp()
+		}
 		return nil, nil, err
 	}
 
