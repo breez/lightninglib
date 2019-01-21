@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"github.com/btcsuite/btcd/chaincfg"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/btcsuite/btcd/chaincfg"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcutil"
@@ -86,10 +87,11 @@ func (i *InvoiceRegistry) Start() error {
 }
 
 // Stop signals the registry for a graceful shutdown.
-func (i *InvoiceRegistry) Stop() {
+func (i *InvoiceRegistry) Stop() error {
 	close(i.quit)
 
 	i.wg.Wait()
+	return nil
 }
 
 // invoiceEvent represents a new event that has modified on invoice on disk.

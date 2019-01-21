@@ -426,9 +426,9 @@ func (d *AuthenticatedGossiper) Start() error {
 }
 
 // Stop signals any active goroutines for a graceful closure.
-func (d *AuthenticatedGossiper) Stop() {
+func (d *AuthenticatedGossiper) Stop() error {
 	if !atomic.CompareAndSwapUint32(&d.stopped, 0, 1) {
-		return
+		return nil
 	}
 
 	log.Info("Authenticated Gossiper is stopping")
@@ -443,6 +443,7 @@ func (d *AuthenticatedGossiper) Stop() {
 
 	close(d.quit)
 	d.wg.Wait()
+	return nil
 }
 
 // TODO(roasbeef): need method to get current gossip timestamp?
