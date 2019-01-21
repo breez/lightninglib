@@ -12,6 +12,7 @@ import (
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/queue"
 	"github.com/breez/lightninglib/zpay32"
+
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcutil"
 	"github.com/davecgh/go-spew/spew"
@@ -79,10 +80,11 @@ func (i *invoiceRegistry) Start() error {
 }
 
 // Stop signals the registry for a graceful shutdown.
-func (i *invoiceRegistry) Stop() {
+func (i *invoiceRegistry) Stop() error {
 	close(i.quit)
 
 	i.wg.Wait()
+	return nil
 }
 
 // invoiceEvent represents a new event that has modified on invoice on disk.
