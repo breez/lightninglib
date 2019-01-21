@@ -947,6 +947,20 @@ func (s *server) Started() bool {
 	return atomic.LoadInt32(&s.started) != 0
 }
 
+type cleaner []func() error
+
+func (c cleaner) add(cleanup func() error) cleaner {
+	return append(c, cleanup)
+}
+
+func (c cleaner) run() {
+	for _, cleanup := range c {
+		if err := cleanup(); err != nil {
+			srvrLog.Infof("Cleanup failed: %v", err)
+		}
+	}
+}
+
 // Start starts the main daemon server, all requested listeners, and any helper
 // goroutines.
 // NOTE: This function is safe for concurrent access.
@@ -956,10 +970,24 @@ func (s *server) Start() error {
 		return nil
 	}
 
+	// If one sub system fails to start, the following code
+	// ensures that the  previous started ones are stopped.
+	// It also ensure a proper wallet shutdown which is important
+	// for releasing its resources (boltdb, etc...)
+	cleanup := cleaner{
+		s.cc.chainView.Stop,
+		s.cc.feeEstimator.Stop,
+		func() error {
+			return s.cc.wallet.Shutdown()
+		},
+	}
+
 	if s.torController != nil {
 		if err := s.initTorController(); err != nil {
+			cleanup.run()
 			return err
 		}
+		cleanup = cleanup.add(s.torController.Stop)
 	}
 
 	if s.natTraversal != nil {
@@ -973,43 +1001,71 @@ func (s *server) Start() error {
 	// funding transaction is spent in an attempt at an uncooperative close
 	// by the counterparty.
 	if err := s.sigPool.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.sigPool.Stop)
 	if err := s.cc.chainNotifier.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.cc.chainNotifier.Stop)
 	if err := s.sphinx.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.sphinx.Stop)
 	if err := s.htlcSwitch.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.htlcSwitch.Stop)
 	if err := s.sweeper.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.sweeper.Stop)
 	if err := s.utxoNursery.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.utxoNursery.Stop)
 	if err := s.chainArb.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.chainArb.Stop)
 	if err := s.breachArbiter.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.breachArbiter.Stop)
 	if err := s.authGossiper.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.authGossiper.Stop)
 	if err := s.chanRouter.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.chanRouter.Stop)
 	if err := s.fundingMgr.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.fundingMgr.Stop)
 	s.connMgr.Start()
+	cleanup = cleanup.add(func() error {
+		s.connMgr.Stop()
+		return nil
+	})
 
 	if err := s.invoices.Start(); err != nil {
+		cleanup.run()
 		return err
 	}
+	cleanup = cleanup.add(s.invoices.Stop)
 
 	// With all the relevant sub-systems started, we'll now attempt to
 	// establish persistent connections to our direct channel collaborators
@@ -1017,9 +1073,11 @@ func (s *server) Start() error {
 	// link nodes found within the database to ensure we don't reconnect to
 	// any nodes we no longer have open channels with.
 	if err := s.chanDB.PruneLinkNodes(); err != nil {
+		cleanup.run()
 		return err
 	}
 	if err := s.establishPersistentConnections(); err != nil {
+		cleanup.run()
 		return err
 	}
 
@@ -1031,6 +1089,7 @@ func (s *server) Start() error {
 
 		bootstrappers, err := initNetworkBootstrappers(s)
 		if err != nil {
+			cleanup.run()
 			return err
 		}
 
