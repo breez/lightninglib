@@ -14,6 +14,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"net"
@@ -49,6 +50,7 @@ import (
 	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/go-errors/errors"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/lightninglabs/neutrino"
 )
 
 const (
@@ -97,10 +99,25 @@ var (
 	}
 )
 
+/*
+Dependencies is used when LND is running inside another process as library.
+The caller then can use this interface to "inject" his own dependencies instead
+of letting LND creates them. It is usefull for example in logging, chain service, or
+any other dependency that is used outside LND and needs to be shared.
+*/
+type Dependencies interface {
+	ReadyChan() chan interface{}
+	LogPipeWriter() *io.PipeWriter
+	ChainService() *neutrino.ChainService
+}
+
 // LndMain is the true entry point for lnd. This function is required since
 // defers created in the top-level scope of a main method aren't executed if
 // os.Exit() is called.
-func LndMain(args []string, readyChan chan interface{}) error {
+func LndMain(args []string, deps Dependencies) error {
+
+	readyChan := deps.ReadyChan()
+	logWriter.RotatorPipe = deps.LogPipeWriter()
 
 	//Start the signal that is responsible for shutdown
 	if err := signal.Start(); err != nil {

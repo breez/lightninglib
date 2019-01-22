@@ -822,11 +822,14 @@ func loadConfig(args []string) (*config, error) {
 		os.Exit(0)
 	}
 
-	// Initialize logging at the default logging level.
-	initLogRotator(
-		filepath.Join(cfg.LogDir, defaultLogFilename),
-		cfg.MaxLogFileSize, cfg.MaxLogFiles,
-	)
+	// Check if we haven't got any injected io.PipeWriter for logging
+	if logWriter.RotatorPipe == nil {
+		// Initialize logging at the default logging level.
+		initLogRotator(
+			filepath.Join(cfg.LogDir, defaultLogFilename),
+			cfg.MaxLogFileSize, cfg.MaxLogFiles,
+		)
+	}
 
 	// Parse, validate, and set debug log level(s).
 	if err := parseAndSetDebugLevels(cfg.DebugLevel); err != nil {
