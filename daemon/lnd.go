@@ -117,6 +117,7 @@ type Dependencies interface {
 func LndMain(args []string, deps Dependencies) error {
 
 	readyChan := deps.ReadyChan()
+	chainService := deps.ChainService()
 	logWriter.RotatorPipe = deps.LogPipeWriter()
 
 	//Start the signal that is responsible for shutdown
@@ -302,7 +303,7 @@ func LndMain(args []string, deps Dependencies) error {
 	// Lightning Network Daemon.
 	activeChainControl, chainCleanUp, err := newChainControlFromConfig(
 		cfg, chanDB, privateWalletPw, publicWalletPw, birthday,
-		recoveryWindow, unlockedWallet,
+		recoveryWindow, unlockedWallet, chainService,
 	)
 	if err != nil {
 		fmt.Printf("unable to create chain control: %v\n", err)

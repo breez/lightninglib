@@ -125,7 +125,8 @@ type chainControl struct {
 func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 	privateWalletPw, publicWalletPw []byte, birthday time.Time,
 	recoveryWindow uint32,
-	wallet *wallet.Wallet) (*chainControl, func(), error) {
+	wallet *wallet.Wallet,
+	chainService *neutrino.ChainService) (*chainControl, func(), error) {
 
 	// Set the RPC config from the "home" chain. Multi-chain isn't yet
 	// active, so we'll restrict usage to a particular chain for now.
@@ -193,65 +194,71 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 	// of the selected chain.
 	switch homeChainConfig.Node {
 	case "neutrino":
-		// First we'll open the database file for neutrino, creating
-		// the database if needed. We append the normalized network name
-		// here to match the behavior of btcwallet.
-		neutrinoDbPath := filepath.Join(homeChainConfig.ChainDir,
-			normalizeNetwork(activeNetParams.Name))
+		svc := chainService
+		if svc != nil {
+			cleanUp = func() {}
+			svc.Start()
+		} else {
+			// First we'll open the database file for neutrino, creating
+			// the database if needed. We append the normalized network name
+			// here to match the behavior of btcwallet.
+			neutrinoDbPath := filepath.Join(homeChainConfig.ChainDir,
+				normalizeNetwork(activeNetParams.Name))
 
-		// Ensure that the neutrino db path exists.
-		if err := os.MkdirAll(neutrinoDbPath, 0700); err != nil {
-			return nil, nil, err
-		}
+			// Ensure that the neutrino db path exists.
+			if err := os.MkdirAll(neutrinoDbPath, 0700); err != nil {
+				return nil, nil, err
+			}
 
-		dbName := filepath.Join(neutrinoDbPath, "neutrino.db")
-		nodeDatabase, err := walletdb.Create("bdb", dbName)
-		if err != nil {
-			return nil, nil, err
-		}
+			dbName := filepath.Join(neutrinoDbPath, "neutrino.db")
+			nodeDatabase, err := walletdb.Create("bdb", dbName)
+			if err != nil {
+				return nil, nil, err
+			}
 
-		// With the database open, we can now create an instance of the
-		// neutrino light client. We pass in relevant configuration
-		// parameters required.
-		config := neutrino.Config{
-			DataDir:      neutrinoDbPath,
-			Database:     nodeDatabase,
-			ChainParams:  *activeNetParams.Params,
-			AddPeers:     cfg.NeutrinoMode.AddPeers,
-			ConnectPeers: cfg.NeutrinoMode.ConnectPeers,
-			Dialer: func(addr net.Addr) (net.Conn, error) {
-				return cfg.net.Dial(addr.Network(), addr.String())
-			},
-			NameResolver: func(host string) ([]net.IP, error) {
-				addrs, err := cfg.net.LookupHost(host)
-				if err != nil {
-					return nil, err
-				}
-
-				ips := make([]net.IP, 0, len(addrs))
-				for _, strIP := range addrs {
-					ip := net.ParseIP(strIP)
-					if ip == nil {
-						continue
+			// With the database open, we can now create an instance of the
+			// neutrino light client. We pass in relevant configuration
+			// parameters required.
+			config := neutrino.Config{
+				DataDir:      neutrinoDbPath,
+				Database:     nodeDatabase,
+				ChainParams:  *activeNetParams.Params,
+				AddPeers:     cfg.NeutrinoMode.AddPeers,
+				ConnectPeers: cfg.NeutrinoMode.ConnectPeers,
+				Dialer: func(addr net.Addr) (net.Conn, error) {
+					return cfg.net.Dial(addr.Network(), addr.String())
+				},
+				NameResolver: func(host string) ([]net.IP, error) {
+					addrs, err := cfg.net.LookupHost(host)
+					if err != nil {
+						return nil, err
 					}
 
-					ips = append(ips, ip)
-				}
+					ips := make([]net.IP, 0, len(addrs))
+					for _, strIP := range addrs {
+						ip := net.ParseIP(strIP)
+						if ip == nil {
+							continue
+						}
 
-				return ips, nil
-			},
-		}
-		neutrino.MaxPeers = 8
-		neutrino.BanDuration = 5 * time.Second
-		svc, err := neutrino.NewChainService(config)
-		if err != nil {
-			nodeDatabase.Close()
-			return nil, nil, fmt.Errorf("unable to create neutrino: %v", err)
-		}
-		svc.Start()
-		cleanUp = func() {
-			svc.Stop()
-			nodeDatabase.Close()
+						ips = append(ips, ip)
+					}
+
+					return ips, nil
+				},
+			}
+			neutrino.MaxPeers = 8
+			neutrino.BanDuration = 5 * time.Second
+			svc, err = neutrino.NewChainService(config)
+			if err != nil {
+				nodeDatabase.Close()
+				return nil, nil, fmt.Errorf("unable to create neutrino: %v", err)
+			}
+			svc.Start()
+			cleanUp = func() {
+				svc.Stop()
+				nodeDatabase.Close()
+			}
 		}
 
 		// Next we'll create the instances of the ChainNotifier and
