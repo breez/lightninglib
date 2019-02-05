@@ -44,7 +44,7 @@ func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB wall
 	}
 
 	walletdbPath := filepath.Join(dir, "wallet.db")
-	err = boltCopy(walletCopy, walletdbPath)
+	err = boltCopy(walletCopy, walletdbPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -132,12 +132,23 @@ func channeldbCopy(channelDB *channeldb.DB, destfile string) error {
 	}
 	defer dst.Close()
 
+	graphBuckets := map[string]interface{}{
+		"graph-edge": true,
+		"graph-meta": true,
+		"graph-node": true,
+	}
+
 	// Run compaction.
-	err = compact(dst, channelDB.DB)
+	err = compact(dst, channelDB.DB, func(keys [][]byte, k, v []byte) bool {
+		if len(keys) == 0 && v == nil && graphBuckets[string(k)] != nil {
+			return true
+		}
+		return false
+	})
 	return err
 }
 
-func boltCopy(srcfile, destfile string) error {
+func boltCopy(srcfile, destfile string, skip skipFunc) error {
 	// Open source database.
 	src, err := bolt.Open(srcfile, 0444, nil)
 	if err != nil {
@@ -153,11 +164,11 @@ func boltCopy(srcfile, destfile string) error {
 	defer dst.Close()
 
 	// Run compaction.
-	err = compact(dst, src)
+	err = compact(dst, src, skip)
 	return err
 }
 
-func compact(dst, src *bolt.DB) error {
+func compact(dst, src *bolt.DB, skip skipFunc) error {
 	// commit regularly, or we'll run out of memory for large datasets if using one transaction.
 	var size int64
 	tx, err := dst.Begin(true)
@@ -222,7 +233,7 @@ func compact(dst, src *bolt.DB) error {
 
 		// Otherwise treat it as a key/value pair.
 		return b.Put(k, v)
-	}); err != nil {
+	}, skip); err != nil {
 		return err
 	}
 
@@ -234,16 +245,23 @@ func compact(dst, src *bolt.DB) error {
 // owning the discovered key/value pair k/v.
 type walkFunc func(keys [][]byte, k, v []byte, seq uint64) error
 
+type skipFunc func(keys [][]byte, k, v []byte) bool
+
 // walk walks recursively the bolt database db, calling walkFn for each key it finds.
-func walk(db *bolt.DB, walkFn walkFunc) error {
+func walk(db *bolt.DB, walkFn walkFunc, skipFn skipFunc) error {
 	return db.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
-			return walkBucket(b, nil, name, nil, b.Sequence(), walkFn)
+			return walkBucket(b, nil, name, nil, b.Sequence(), walkFn, skipFn)
 		})
 	})
 }
 
-func walkBucket(b *bolt.Bucket, keypath [][]byte, k, v []byte, seq uint64, fn walkFunc) error {
+func walkBucket(b *bolt.Bucket, keypath [][]byte, k, v []byte, seq uint64, fn walkFunc, skip skipFunc) error {
+
+	if skip != nil && skip(keypath, k, v) {
+		return nil
+	}
+
 	// Execute callback.
 	if err := fn(keypath, k, v, seq); err != nil {
 		return err
@@ -259,8 +277,8 @@ func walkBucket(b *bolt.Bucket, keypath [][]byte, k, v []byte, seq uint64, fn wa
 	return b.ForEach(func(k, v []byte) error {
 		if v == nil {
 			bkt := b.Bucket(k)
-			return walkBucket(bkt, keypath, k, nil, bkt.Sequence(), fn)
+			return walkBucket(bkt, keypath, k, nil, bkt.Sequence(), fn, skip)
 		}
-		return walkBucket(b, keypath, k, v, b.Sequence(), fn)
+		return walkBucket(b, keypath, k, v, b.Sequence(), fn, skip)
 	})
 }
