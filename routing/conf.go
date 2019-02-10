@@ -10,3 +10,8 @@ type Conf struct{}
 func (c *Conf) UseAssumeChannelValid() bool {
 	return false
 }
+
+// UseUpdateGraphOnStartup always returns true when not in experimental builds.
+func (c *Conf) UseUpdateGraphOnStartup() bool {
+	return true
+}
