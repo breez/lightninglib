@@ -192,6 +192,10 @@ type Config struct {
 	// from blocking initial usage of the wallet. This should only be
 	// enabled on testnet.
 	AssumeChannelValid bool
+
+	// UpdateGraphOnStartup toggles whether or not the router will update
+	// and check the channel graph on startup
+	UpdateGraphOnStartup bool
 }
 
 // routeTuple is an entry within the ChannelRouter's route cache. We cache
@@ -397,28 +401,23 @@ func (r *ChannelRouter) Start() error {
 		}
 	}
 
-	// Before we begin normal operation of the router, we first need to
-	// synchronize the channel graph to the latest state of the UTXO set.
+	if r.cfg.UpdateGraphOnStartup {
+		// Before we begin normal operation of the router, we first need to
+		// synchronize the channel graph to the latest state of the UTXO set.
 
-	//This is the missing logic that we need from syncGraphWithChain that
-	// that we commented out.
-	r.bestHeight = uint32(bestHeight)
+		if err := r.syncGraphWithChain(); err != nil {
+			return err
+		}
 
-	/* Skip syncGraphWithChain
-	if err := r.syncGraphWithChain(); err != nil {
-		return err
-	}*/
-
-	// Finally, before we proceed, we'll prune any unconnected nodes from
-	// the graph in order to ensure we maintain a tight graph of "useful"
-	// nodes.
-
-	//Skip Prune, we need to optimize this function before it can be used
-	//in startup
-
-	/*if err := r.cfg.Graph.PruneGraphNodes(); err != nil {
-		return err
-	}*/
+		// Finally, before we proceed, we'll prune any unconnected nodes from
+		// the graph in order to ensure we maintain a tight graph of "useful"
+		// nodes.
+		if err := r.cfg.Graph.PruneGraphNodes(); err != nil {
+			return err
+		}
+	} else {
+		r.bestHeight = uint32(bestHeight)
+	}
 
 	r.wg.Add(1)
 	go r.networkHandler()
