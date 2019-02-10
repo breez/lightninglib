@@ -5,7 +5,7 @@ package routing
 // Conf exposes the experimental command line routing configurations.
 type Conf struct {
 	AssumeChannelValid   bool `long:"assumechanvalid" description:"Skip checking channel spentness during graph validation. (default: false)"`
-	UpdateGraphOnStartup bool `long:"updategraphonstratup" description "Update the graph on startup. (default: true)"`
+	UpdateGraphOnStartup bool `long:"updategraphonstartup" description "Update the graph on startup. (default: true)"`
 }
 
 // UseAssumeChannelValid returns true if the router should skip checking for
