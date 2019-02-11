@@ -193,9 +193,9 @@ type Config struct {
 	// enabled on testnet.
 	AssumeChannelValid bool
 
-	// UpdateGraphOnStartup toggles whether or not the router will update
+	// NoGraphUpdatingOnStartup toggles whether or not the router will update
 	// and check the channel graph on startup
-	UpdateGraphOnStartup bool
+	NoGraphUpdatingOnStartup bool
 }
 
 // routeTuple is an entry within the ChannelRouter's route cache. We cache
@@ -401,7 +401,9 @@ func (r *ChannelRouter) Start() error {
 		}
 	}
 
-	if r.cfg.UpdateGraphOnStartup {
+	if r.cfg.NoGraphUpdatingOnStartup {
+		r.bestHeight = uint32(bestHeight)
+	} else {
 		// Before we begin normal operation of the router, we first need to
 		// synchronize the channel graph to the latest state of the UTXO set.
 
@@ -415,8 +417,6 @@ func (r *ChannelRouter) Start() error {
 		if err := r.cfg.Graph.PruneGraphNodes(); err != nil {
 			return err
 		}
-	} else {
-		r.bestHeight = uint32(bestHeight)
 	}
 
 	r.wg.Add(1)

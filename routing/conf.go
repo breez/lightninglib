@@ -11,7 +11,7 @@ func (c *Conf) UseAssumeChannelValid() bool {
 	return false
 }
 
-// UseUpdateGraphOnStartup always returns true when not in experimental builds.
-func (c *Conf) UseUpdateGraphOnStartup() bool {
-	return true
+// UseNoGraphUpdatingOnStartup always returns false when not in experimental builds.
+func (c *Conf) UseNoGraphUpdatingOnStartup() bool {
+	return false
 }
