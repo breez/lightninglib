@@ -116,9 +116,14 @@ type Dependencies interface {
 // os.Exit() is called.
 func LndMain(args []string, deps Dependencies) error {
 
-	readyChan := deps.ReadyChan()
-	chainService := deps.ChainService()
-	logWriter.RotatorPipe = deps.LogPipeWriter()
+	var readyChan chan interface{}
+	var chainService *neutrino.ChainService
+
+	if deps != nil {
+		readyChan = deps.ReadyChan()
+		chainService = deps.ChainService()
+		logWriter.RotatorPipe = deps.LogPipeWriter()
+	}
 
 	//Start the signal that is responsible for shutdown
 	if err := signal.Start(); err != nil {
