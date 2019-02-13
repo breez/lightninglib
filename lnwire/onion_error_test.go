@@ -20,7 +20,8 @@ var (
 		Signature:      sig,
 		ShortChannelID: NewShortChanIDFromInt(1),
 		Timestamp:      1,
-		Flags:          1,
+		MessageFlags:   0,
+		ChannelFlags:   1,
 	}
 )
 
@@ -32,10 +33,10 @@ var onionFailures = []FailureMessage{
 	&FailPermanentChannelFailure{},
 	&FailRequiredChannelFeatureMissing{},
 	&FailUnknownNextPeer{},
-	&FailUnknownPaymentHash{},
 	&FailIncorrectPaymentAmount{},
 	&FailFinalExpiryTooSoon{},
 
+	NewFailUnknownPaymentHash(99),
 	NewInvalidOnionVersion(testOnionHash),
 	NewInvalidOnionHmac(testOnionHash),
 	NewInvalidOnionKey(testOnionHash),
@@ -129,5 +130,67 @@ func TestChannelUpdateCompatabilityParsing(t *testing.T) {
 
 	if !reflect.DeepEqual(newChanUpdate2, newChanUpdate) {
 		t.Fatalf("mismatched channel updates: %v", err)
+	}
+}
+
+// TestWriteOnionErrorChanUpdate tests that we write an exact size for the
+// channel update in order to be more compliant with the parsers of other
+// implementations.
+func TestWriteOnionErrorChanUpdate(t *testing.T) {
+	t.Parallel()
+
+	// First, we'll write out the raw channel update so we can obtain the
+	// raw serialized length.
+	var b bytes.Buffer
+	update := testChannelUpdate
+	if err := update.Encode(&b, 0); err != nil {
+		t.Fatalf("unable to write update: %v", err)
+	}
+	trueUpdateLength := b.Len()
+
+	// Next, we'll use the function to encode the update as we would in a
+	// onion error message.
+	var errorBuf bytes.Buffer
+	err := writeOnionErrorChanUpdate(&errorBuf, &update, 0)
+	if err != nil {
+		t.Fatalf("unable to encode onion error: %v", err)
+	}
+
+	// Finally, read the length encoded and ensure that it matches the raw
+	// length.
+	var encodedLen uint16
+	if err := readElement(&errorBuf, &encodedLen); err != nil {
+		t.Fatalf("unable to read len: %v", err)
+	}
+	if uint16(trueUpdateLength) != encodedLen {
+		t.Fatalf("wrong length written: expected %v, got %v",
+			trueUpdateLength, encodedLen)
+	}
+}
+
+// TestFailUnknownPaymentHashOptionalAmount tests that we're able to decode an
+// UnknownPaymentHash error that doesn't have the optional amount. This ensures
+// we're able to decode FailUnknownPaymentHash messages from older nodes.
+func TestFailUnknownPaymentHashOptionalAmount(t *testing.T) {
+	t.Parallel()
+
+	// Creation an error that is a non-pointer will allow us to skip the
+	// type assertion for the Serializable interface. As a result, the
+	// amount body won't be written.
+	onionError := FailUnknownPaymentHash{}
+
+	var b bytes.Buffer
+	if err := EncodeFailure(&b, onionError, 0); err != nil {
+		t.Fatalf("unable to encode failure: %v", err)
+	}
+
+	onionError2, err := DecodeFailure(bytes.NewReader(b.Bytes()), 0)
+	if err != nil {
+		t.Fatalf("unable to decode error: %v", err)
+	}
+
+	if !reflect.DeepEqual(onionError, onionError) {
+		t.Fatalf("expected %v, got %v", spew.Sdump(onionError),
+			spew.Sdump(onionError2))
 	}
 }

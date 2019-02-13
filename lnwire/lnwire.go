@@ -76,6 +76,11 @@ func (a addressType) AddrLen() uint16 {
 // serialization.
 func writeElement(w io.Writer, element interface{}) error {
 	switch e := element.(type) {
+	case NodeAlias:
+		if _, err := w.Write(e[:]); err != nil {
+			return err
+		}
+
 	case ShortChanIDEncoding:
 		var b [1]byte
 		b[0] = uint8(e)
@@ -100,9 +105,15 @@ func writeElement(w io.Writer, element interface{}) error {
 		if _, err := w.Write(b[:]); err != nil {
 			return err
 		}
-	case ChanUpdateFlag:
-		var b [2]byte
-		binary.BigEndian.PutUint16(b[:], uint16(e))
+	case ChanUpdateMsgFlags:
+		var b [1]byte
+		b[0] = uint8(e)
+		if _, err := w.Write(b[:]); err != nil {
+			return err
+		}
+	case ChanUpdateChanFlags:
+		var b [1]byte
+		b[0] = uint8(e)
 		if _, err := w.Write(b[:]); err != nil {
 			return err
 		}
@@ -429,6 +440,18 @@ func writeElements(w io.Writer, elements ...interface{}) error {
 func readElement(r io.Reader, element interface{}) error {
 	var err error
 	switch e := element.(type) {
+	case *NodeAlias:
+		var a [32]byte
+		if _, err := io.ReadFull(r, a[:]); err != nil {
+			return err
+		}
+
+		alias, err := NewNodeAlias(string(a[:]))
+		if err != nil {
+			return err
+		}
+
+		*e = alias
 	case *ShortChanIDEncoding:
 		var b [1]uint8
 		if _, err := r.Read(b[:]); err != nil {
@@ -453,12 +476,18 @@ func readElement(r io.Reader, element interface{}) error {
 			return err
 		}
 		*e = binary.BigEndian.Uint16(b[:])
-	case *ChanUpdateFlag:
-		var b [2]byte
-		if _, err := io.ReadFull(r, b[:]); err != nil {
+	case *ChanUpdateMsgFlags:
+		var b [1]uint8
+		if _, err := r.Read(b[:]); err != nil {
 			return err
 		}
-		*e = ChanUpdateFlag(binary.BigEndian.Uint16(b[:]))
+		*e = ChanUpdateMsgFlags(b[0])
+	case *ChanUpdateChanFlags:
+		var b [1]uint8
+		if _, err := r.Read(b[:]); err != nil {
+			return err
+		}
+		*e = ChanUpdateChanFlags(b[0])
 	case *ErrorCode:
 		var b [2]byte
 		if _, err := io.ReadFull(r, b[:]); err != nil {

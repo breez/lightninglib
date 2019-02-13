@@ -144,8 +144,8 @@ func CreateTestChannels() (*LightningChannel, *LightningChannel, func(), error) 
 			ChanReserve:      channelCapacity / 100,
 			MinHTLC:          0,
 			MaxAcceptedHtlcs: MaxHTLCNumber / 2,
+			CsvDelay:         uint16(csvTimeoutAlice),
 		},
-		CsvDelay: uint16(csvTimeoutAlice),
 		MultiSigKey: keychain.KeyDescriptor{
 			PubKey: aliceKeys[0].PubKey(),
 		},
@@ -169,8 +169,8 @@ func CreateTestChannels() (*LightningChannel, *LightningChannel, func(), error) 
 			ChanReserve:      channelCapacity / 100,
 			MinHTLC:          0,
 			MaxAcceptedHtlcs: MaxHTLCNumber / 2,
+			CsvDelay:         uint16(csvTimeoutBob),
 		},
-		CsvDelay: uint16(csvTimeoutBob),
 		MultiSigKey: keychain.KeyDescriptor{
 			PubKey: bobKeys[0].PubKey(),
 		},
@@ -309,18 +309,24 @@ func CreateTestChannels() (*LightningChannel, *LightningChannel, func(), error) 
 	}
 
 	// TODO(roasbeef): make mock version of pre-image store
+
+	alicePool := NewSigPool(1, aliceSigner)
 	channelAlice, err := NewLightningChannel(
-		aliceSigner, pCache, aliceChannelState,
+		aliceSigner, pCache, aliceChannelState, alicePool,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	alicePool.Start()
+
+	bobPool := NewSigPool(1, bobSigner)
 	channelBob, err := NewLightningChannel(
-		bobSigner, pCache, bobChannelState,
+		bobSigner, pCache, bobChannelState, bobPool,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	bobPool.Start()
 
 	err = SetStateNumHint(
 		aliceCommitTx, 0, channelAlice.stateHintObfuscator,
@@ -346,8 +352,8 @@ func CreateTestChannels() (*LightningChannel, *LightningChannel, func(), error) 
 		os.RemoveAll(bobPath)
 		os.RemoveAll(alicePath)
 
-		channelAlice.Stop()
-		channelBob.Stop()
+		alicePool.Stop()
+		bobPool.Stop()
 	}
 
 	// Now that the channel are open, simulate the start of a session by

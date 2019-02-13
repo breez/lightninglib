@@ -586,11 +586,11 @@ func TestExitNodeAmountPayloadMismatch(t *testing.T) {
 	).Wait(30 * time.Second)
 	if err == nil {
 		t.Fatalf("payment should have failed but didn't")
-	} else if err.Error() != lnwire.CodeIncorrectPaymentAmount.String() {
+	} else if !strings.Contains(err.Error(), lnwire.CodeUnknownPaymentHash.String()) {
 		// TODO(roasbeef): use proper error after error propagation is
 		// in
-		t.Fatalf("incorrect error, expected insufficient value, "+
-			"instead have: %v", err)
+		t.Fatalf("expected %v got %v", err,
+			lnwire.CodeUnknownPaymentHash)
 	}
 }
 
@@ -1016,8 +1016,9 @@ func TestChannelLinkMultiHopUnknownPaymentHash(t *testing.T) {
 		n.firstBobChannelLink.ShortChanID(), htlc,
 		newMockDeobfuscator(),
 	)
-	if err.Error() != lnwire.CodeUnknownPaymentHash.String() {
-		t.Fatal("error haven't been received")
+	if !strings.Contains(err.Error(), lnwire.CodeUnknownPaymentHash.String()) {
+		t.Fatalf("expected %v got %v", err,
+			lnwire.CodeUnknownPaymentHash)
 	}
 
 	// Wait for Alice to receive the revocation.
@@ -1591,8 +1592,6 @@ func newSingleLinkTestHarness(chanAmt, chanReserve btcutil.Amount) (
 	cleanUp := func() {
 		close(alicePeer.quit)
 		defer fCleanUp()
-		defer aliceLink.Stop()
-		defer bobChannel.Stop()
 	}
 
 	return aliceLink, bobChannel, bticker.Force, start, cleanUp, restore, nil
@@ -4797,32 +4796,32 @@ type mockPackager struct {
 	failLoadFwdPkgs bool
 }
 
-func (*mockPackager) AddFwdPkg(tx *bolt.Tx, fwdPkg *channeldb.FwdPkg) error {
+func (*mockPackager) AddFwdPkg(tx *bbolt.Tx, fwdPkg *channeldb.FwdPkg) error {
 	return nil
 }
 
-func (*mockPackager) SetFwdFilter(tx *bolt.Tx, height uint64,
+func (*mockPackager) SetFwdFilter(tx *bbolt.Tx, height uint64,
 	fwdFilter *channeldb.PkgFilter) error {
 	return nil
 }
 
-func (*mockPackager) AckAddHtlcs(tx *bolt.Tx,
+func (*mockPackager) AckAddHtlcs(tx *bbolt.Tx,
 	addRefs ...channeldb.AddRef) error {
 	return nil
 }
 
-func (m *mockPackager) LoadFwdPkgs(tx *bolt.Tx) ([]*channeldb.FwdPkg, error) {
+func (m *mockPackager) LoadFwdPkgs(tx *bbolt.Tx) ([]*channeldb.FwdPkg, error) {
 	if m.failLoadFwdPkgs {
 		return nil, fmt.Errorf("failing LoadFwdPkgs")
 	}
 	return nil, nil
 }
 
-func (*mockPackager) RemovePkg(tx *bolt.Tx, height uint64) error {
+func (*mockPackager) RemovePkg(tx *bbolt.Tx, height uint64) error {
 	return nil
 }
 
-func (*mockPackager) AckSettleFails(tx *bolt.Tx,
+func (*mockPackager) AckSettleFails(tx *bbolt.Tx,
 	settleFailRefs ...channeldb.SettleFailRef) error {
 	return nil
 }

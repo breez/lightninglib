@@ -382,6 +382,7 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 	for _, dbChan := range chans {
 		lnChan, err := lnwallet.NewLightningChannel(
 			p.server.cc.signer, p.server.witnessBeacon, dbChan,
+			p.server.sigPool,
 		)
 		if err != nil {
 			return err
@@ -399,7 +400,6 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 		if dbChan.ChanStatus() != channeldb.Default {
 			peerLog.Warnf("ChannelPoint(%v) has status %v, won't "+
 				"start.", chanPoint, dbChan.ChanStatus())
-			lnChan.Stop()
 			continue
 		}
 
@@ -408,13 +408,11 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 		if _, ok := p.failedChannels[chanID]; ok {
 			peerLog.Warnf("ChannelPoint(%v) is failed, won't "+
 				"start.", chanPoint)
-			lnChan.Stop()
 			continue
 		}
 
 		_, currentHeight, err := p.server.cc.chainIO.GetBestBlock()
 		if err != nil {
-			lnChan.Stop()
 			return err
 		}
 
@@ -424,7 +422,6 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 		graph := p.server.chanDB.ChannelGraph()
 		info, p1, p2, err := graph.FetchChannelEdgesByOutpoint(chanPoint)
 		if err != nil && err != channeldb.ErrEdgeNotFound {
-			lnChan.Stop()
 			return err
 		}
 
@@ -472,7 +469,6 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 			*chanPoint,
 		)
 		if err != nil {
-			lnChan.Stop()
 			return err
 		}
 
@@ -482,7 +478,6 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) error {
 			currentHeight, true,
 		)
 		if err != nil {
-			lnChan.Stop()
 			return fmt.Errorf("unable to add link %v to switch: %v",
 				chanPoint, err)
 		}
@@ -990,6 +985,13 @@ out:
 				idleTimer.Reset(idleTimeout)
 				continue
 
+			// If the NodeAnnouncement has an invalid alias, then
+			// we'll log that error above and continue so we can
+			// continue to read messges from the peer.
+			case *lnwire.ErrInvalidNodeAlias:
+				idleTimer.Reset(idleTimeout)
+				continue
+
 			// If the error we encountered wasn't just a message we
 			// didn't recognize, then we'll stop all processing s
 			// this is a fatal error.
@@ -1222,10 +1224,10 @@ func messageSummary(msg lnwire.Message) string {
 			msg.ChainHash, msg.ShortChannelID.ToUint64())
 
 	case *lnwire.ChannelUpdate:
-		return fmt.Sprintf("chain_hash=%v, short_chan_id=%v, flag=%v, "+
-			"update_time=%v", msg.ChainHash,
-			msg.ShortChannelID.ToUint64(), msg.Flags,
-			time.Unix(int64(msg.Timestamp), 0))
+		return fmt.Sprintf("chain_hash=%v, short_chan_id=%v, "+
+			"mflags=%v, cflags=%v, update_time=%v", msg.ChainHash,
+			msg.ShortChannelID.ToUint64(), msg.MessageFlags,
+			msg.ChannelFlags, time.Unix(int64(msg.Timestamp), 0))
 
 	case *lnwire.NodeAnnouncement:
 		return fmt.Sprintf("node=%x, update_time=%v",
@@ -1596,7 +1598,7 @@ out:
 			// easily according to its channel ID.
 			lnChan, err := lnwallet.NewLightningChannel(
 				p.server.cc.signer, p.server.witnessBeacon,
-				newChan,
+				newChan, p.server.sigPool,
 			)
 			if err != nil {
 				p.activeChanMtx.Unlock()
@@ -1624,7 +1626,6 @@ out:
 					"block: %v", err)
 				peerLog.Errorf(err.Error())
 
-				lnChan.Stop()
 				newChanReq.err <- err
 				continue
 			}
@@ -1636,7 +1637,6 @@ out:
 					"chain events: %v", err)
 				peerLog.Errorf(err.Error())
 
-				lnChan.Stop()
 				newChanReq.err <- err
 				continue
 			}
@@ -1666,7 +1666,6 @@ out:
 					p.PubKey())
 				peerLog.Errorf(err.Error())
 
-				lnChan.Stop()
 				newChanReq.err <- err
 				continue
 			}
@@ -2019,8 +2018,6 @@ func (p *peer) finalizeChanClosure(chanCloser *channelCloser) {
 		}
 	}
 
-	chanCloser.cfg.channel.Stop()
-
 	// Next, we'll launch a goroutine which will request to be notified by
 	// the ChainNotifier once the closure transaction obtains a single
 	// confirmation.
@@ -2121,10 +2118,7 @@ func (p *peer) WipeChannel(chanPoint *wire.OutPoint) error {
 	chanID := lnwire.NewChanIDFromOutPoint(chanPoint)
 
 	p.activeChanMtx.Lock()
-	if channel, ok := p.activeChannels[chanID]; ok {
-		channel.Stop()
-		delete(p.activeChannels, chanID)
-	}
+	delete(p.activeChannels, chanID)
 	p.activeChanMtx.Unlock()
 
 	// Instruct the HtlcSwitch to close this link as the channel is no

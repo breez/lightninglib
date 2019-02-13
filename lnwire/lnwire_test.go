@@ -41,6 +41,17 @@ var (
 	_, _ = testSig.S.SetString("18801056069249825825291287104931333862866033135609736119018462340006816851118", 10)
 )
 
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func randAlias(r *rand.Rand) NodeAlias {
+	var a NodeAlias
+	for i := range a {
+		a[i] = letterBytes[r.Intn(len(letterBytes))]
+	}
+
+	return a
+}
+
 func randPubKey() (*btcec.PublicKey, error) {
 	priv, err := btcec.NewPrivateKey(btcec.S256())
 	if err != nil {
@@ -165,6 +176,50 @@ func randAddrs(r *rand.Rand) ([]net.Addr, error) {
 	}
 
 	return []net.Addr{tcp4Addr, tcp6Addr, v2OnionAddr, v3OnionAddr}, nil
+}
+
+// TestChanUpdateChanFlags ensures that converting the ChanUpdateChanFlags and
+// ChanUpdateMsgFlags bitfields to a string behaves as expected.
+func TestChanUpdateChanFlags(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		flags    uint8
+		expected string
+	}{
+		{
+			flags:    0,
+			expected: "00000000",
+		},
+		{
+			flags:    1,
+			expected: "00000001",
+		},
+		{
+			flags:    3,
+			expected: "00000011",
+		},
+		{
+			flags:    255,
+			expected: "11111111",
+		},
+	}
+
+	for _, test := range testCases {
+		chanFlag := ChanUpdateChanFlags(test.flags)
+		toStr := chanFlag.String()
+		if toStr != test.expected {
+			t.Fatalf("expected %v, got %v",
+				test.expected, toStr)
+		}
+
+		msgFlag := ChanUpdateMsgFlags(test.flags)
+		toStr = msgFlag.String()
+		if toStr != test.expected {
+			t.Fatalf("expected %v, got %v",
+				test.expected, toStr)
+		}
+	}
 }
 
 func TestMaxOutPointIndex(t *testing.T) {
@@ -551,17 +606,11 @@ func TestLightningWireProtocol(t *testing.T) {
 			v[0] = reflect.ValueOf(req)
 		},
 		MsgNodeAnnouncement: func(v []reflect.Value, r *rand.Rand) {
-			var a [32]byte
-			if _, err := r.Read(a[:]); err != nil {
-				t.Fatalf("unable to generate alias: %v", err)
-				return
-			}
-
 			var err error
 			req := NodeAnnouncement{
 				Features:  randRawFeatureVector(r),
 				Timestamp: uint32(r.Int31()),
-				Alias:     a,
+				Alias:     randAlias(r),
 				RGBColor: color.RGBA{
 					R: uint8(r.Int31()),
 					G: uint8(r.Int31()),
@@ -600,12 +649,26 @@ func TestLightningWireProtocol(t *testing.T) {
 		},
 		MsgChannelUpdate: func(v []reflect.Value, r *rand.Rand) {
 			var err error
+
+			msgFlags := ChanUpdateMsgFlags(r.Int31())
+			maxHtlc := MilliSatoshi(r.Int63())
+
+			// We make the max_htlc field zero if it is not flagged
+			// as being part of the ChannelUpdate, to pass
+			// serialization tests, as it will be ignored if the bit
+			// is not set.
+			if msgFlags&ChanUpdateOptionMaxHtlc == 0 {
+				maxHtlc = 0
+			}
+
 			req := ChannelUpdate{
 				ShortChannelID:  NewShortChanIDFromInt(uint64(r.Int63())),
 				Timestamp:       uint32(r.Int31()),
-				Flags:           ChanUpdateFlag(r.Int31()),
+				MessageFlags:    msgFlags,
+				ChannelFlags:    ChanUpdateChanFlags(r.Int31()),
 				TimeLockDelta:   uint16(r.Int31()),
 				HtlcMinimumMsat: MilliSatoshi(r.Int63()),
+				HtlcMaximumMsat: maxHtlc,
 				BaseFee:         uint32(r.Int31()),
 				FeeRate:         uint32(r.Int31()),
 			}

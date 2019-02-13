@@ -170,10 +170,10 @@ func TestFindRoutesFeeSorting(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight, basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// In this test we'd like to ensure proper integration of the various
 	// functions that are involved in path finding, and also route
@@ -225,10 +225,10 @@ func TestFindRoutesWithFeeLimit(t *testing.T) {
 	ctx, cleanUp, err := createTestCtxFromFile(
 		startingBlockHeight, basicGraphFilePath,
 	)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// This test will attempt to find routes from roasbeef to sophon for 100
 	// satoshis with a fee limit of 10 satoshis. There are two routes from
@@ -280,10 +280,10 @@ func TestSendPaymentRouteFailureFallback(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight, basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// Craft a LightningPayment struct that'll send a payment from roasbeef
 	// to luo ji for 1000 satoshis, with a maximum of 1000 satoshis in fees.
@@ -421,8 +421,12 @@ func TestChannelUpdateValidation(t *testing.T) {
 		},
 	}
 
-	route := &Route{
-		Hops: hops,
+	route, err := NewRouteFromHops(
+		lnwire.MilliSatoshi(10000), 100,
+		NewVertex(ctx.aliases["a"]), hops,
+	)
+	if err != nil {
+		t.Fatalf("unable to create route: %v", err)
 	}
 
 	// Set up a channel update message with an invalid signature to be
@@ -515,10 +519,10 @@ func TestSendPaymentErrorRepeatedFeeInsufficient(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight, basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// Craft a LightningPayment struct that'll send a payment from roasbeef
 	// to luo ji for 100 satoshis.
@@ -546,7 +550,8 @@ func TestSendPaymentErrorRepeatedFeeInsufficient(t *testing.T) {
 	errChanUpdate := lnwire.ChannelUpdate{
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(chanID),
 		Timestamp:       uint32(edgeUpateToFail.LastUpdate.Unix()),
-		Flags:           edgeUpateToFail.Flags,
+		MessageFlags:    edgeUpateToFail.MessageFlags,
+		ChannelFlags:    edgeUpateToFail.ChannelFlags,
 		TimeLockDelta:   edgeUpateToFail.TimeLockDelta,
 		HtlcMinimumMsat: edgeUpateToFail.MinHTLC,
 		BaseFee:         uint32(edgeUpateToFail.FeeBaseMSat),
@@ -619,10 +624,10 @@ func TestSendPaymentErrorNonFinalTimeLockErrors(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight, basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// Craft a LightningPayment struct that'll send a payment from roasbeef
 	// to sophon for 1k satoshis.
@@ -652,7 +657,8 @@ func TestSendPaymentErrorNonFinalTimeLockErrors(t *testing.T) {
 	errChanUpdate := lnwire.ChannelUpdate{
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(chanID),
 		Timestamp:       uint32(edgeUpateToFail.LastUpdate.Unix()),
-		Flags:           edgeUpateToFail.Flags,
+		MessageFlags:    edgeUpateToFail.MessageFlags,
+		ChannelFlags:    edgeUpateToFail.ChannelFlags,
 		TimeLockDelta:   edgeUpateToFail.TimeLockDelta,
 		HtlcMinimumMsat: edgeUpateToFail.MinHTLC,
 		BaseFee:         uint32(edgeUpateToFail.FeeBaseMSat),
@@ -754,10 +760,10 @@ func TestSendPaymentErrorPathPruning(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight, basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// Craft a LightningPayment struct that'll send a payment from roasbeef
 	// to luo ji for 1000 satoshis, with a maximum of 1000 satoshis in fees.
@@ -996,10 +1002,10 @@ func TestIgnoreNodeAnnouncement(t *testing.T) {
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight,
 		basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	pub := priv1.PubKey()
 	node := &channeldb.LightningNode{
@@ -1029,10 +1035,10 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight,
 		basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	var pub1 [33]byte
 	copy(pub1[:], priv1.PubKey().SerializeCompressed())
@@ -1094,7 +1100,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
-	edgePolicy.Flags = 0
+	edgePolicy.ChannelFlags = 0
 
 	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
 		t.Fatalf("unable to update edge policy: %v", err)
@@ -1110,7 +1116,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
-	edgePolicy.Flags = 1
+	edgePolicy.ChannelFlags = 1
 
 	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
 		t.Fatalf("unable to update edge policy: %v", err)
@@ -1190,7 +1196,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
-	edgePolicy.Flags = 0
+	edgePolicy.ChannelFlags = 0
 
 	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
 		t.Fatalf("unable to update edge policy: %v", err)
@@ -1205,7 +1211,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
-	edgePolicy.Flags = 1
+	edgePolicy.ChannelFlags = 1
 
 	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
 		t.Fatalf("unable to update edge policy: %v", err)
@@ -1298,10 +1304,10 @@ func TestWakeUpOnStaleBranch(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxSingleNode(startingBlockHeight)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	const chanValue = 10000
 
@@ -1501,10 +1507,10 @@ func TestDisconnectedBlocks(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxSingleNode(startingBlockHeight)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	const chanValue = 10000
 
@@ -1691,10 +1697,10 @@ func TestRouterChansClosedOfflinePruneGraph(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxSingleNode(startingBlockHeight)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	const chanValue = 10000
 
@@ -1844,10 +1850,10 @@ func TestFindPathFeeWeighting(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight, basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	var preImage [32]byte
 	copy(preImage[:], bytes.Repeat([]byte{9}, 32))
@@ -1871,8 +1877,15 @@ func TestFindPathFeeWeighting(t *testing.T) {
 	// the edge weighting, we should select the direct path over the 2 hop
 	// path even though the direct path has a higher potential time lock.
 	path, err := findPath(
-		nil, ctx.graph, nil, sourceNode, target, ignoreVertex,
-		ignoreEdge, amt, noFeeLimit, nil,
+		&graphParams{
+			graph: ctx.graph,
+		},
+		&restrictParams{
+			ignoredNodes: ignoreVertex,
+			ignoredEdges: ignoreEdge,
+			feeLimit:     noFeeLimit,
+		},
+		sourceNode, target, amt,
 	)
 	if err != nil {
 		t.Fatalf("unable to find path: %v", err)
@@ -1895,10 +1908,10 @@ func TestIsStaleNode(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxSingleNode(startingBlockHeight)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// Before we can insert a node in to the database, we need to create a
 	// channel that it's linked to.
@@ -1977,10 +1990,10 @@ func TestIsKnownEdge(t *testing.T) {
 
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxSingleNode(startingBlockHeight)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// First, we'll create a new channel edge (just the info) and insert it
 	// into the database.
@@ -2030,10 +2043,10 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 	const startingBlockHeight = 101
 	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight,
 		basicGraphFilePath)
-	defer cleanUp()
 	if err != nil {
 		t.Fatalf("unable to create router: %v", err)
 	}
+	defer cleanUp()
 
 	// First, we'll create a new channel edge (just the info) and insert it
 	// into the database.
@@ -2088,7 +2101,7 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
-	edgePolicy.Flags = 0
+	edgePolicy.ChannelFlags = 0
 	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
 		t.Fatalf("unable to update edge policy: %v", err)
 	}
@@ -2102,7 +2115,7 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
-	edgePolicy.Flags = 1
+	edgePolicy.ChannelFlags = 1
 	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
 		t.Fatalf("unable to update edge policy: %v", err)
 	}

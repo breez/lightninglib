@@ -561,7 +561,7 @@ func (d *AuthenticatedGossiper) ProcessLocalAnnouncement(msg lnwire.Message,
 }
 
 // channelUpdateID is a unique identifier for ChannelUpdate messages, as
-// channel updates can be identified by the (ShortChannelID, Flags)
+// channel updates can be identified by the (ShortChannelID, ChannelFlags)
 // tuple.
 type channelUpdateID struct {
 	// channelID represents the set of data which is needed to
@@ -571,7 +571,7 @@ type channelUpdateID struct {
 	// Flags least-significant bit must be set to 0 if the creating node
 	// corresponds to the first node in the previously sent channel
 	// announcement and 1 otherwise.
-	flags lnwire.ChanUpdateFlag
+	flags lnwire.ChanUpdateChanFlags
 }
 
 // msgWithSenders is a wrapper struct around a message, and the set of peers
@@ -670,13 +670,13 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 		mws.senders[sender] = struct{}{}
 		d.channelAnnouncements[deDupKey] = mws
 
-	// Channel updates are identified by the (short channel id, flags)
-	// tuple.
+	// Channel updates are identified by the (short channel id,
+	// channelflags) tuple.
 	case *lnwire.ChannelUpdate:
 		sender := routing.NewVertex(message.source)
 		deDupKey := channelUpdateID{
 			msg.ShortChannelID,
-			msg.Flags,
+			msg.ChannelFlags,
 		}
 
 		oldTimestamp := uint32(0)
@@ -827,7 +827,7 @@ func (d *AuthenticatedGossiper) resendAnnounceSignatures() error {
 	// TODO(halseth): database access should be abstracted
 	// behind interface.
 	var msgsResend []msgTuple
-	if err := d.cfg.DB.View(func(tx *bolt.Tx) error {
+	if err := d.cfg.DB.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(messageStoreKey)
 		if bucket == nil {
 			return nil
@@ -873,7 +873,7 @@ func (d *AuthenticatedGossiper) resendAnnounceSignatures() error {
 	deleteMsg := func(t msgTuple) error {
 		log.Debugf("Deleting message for chanID=%v from "+
 			"messageStore", t.msg.ChannelID)
-		if err := d.cfg.DB.Update(func(tx *bolt.Tx) error {
+		if err := d.cfg.DB.Update(func(tx *bbolt.Tx) error {
 			bucket := tx.Bucket(messageStoreKey)
 			if bucket == nil {
 				return fmt.Errorf("bucket " +
@@ -1322,6 +1322,17 @@ func (d *AuthenticatedGossiper) retransmitStaleChannels() error {
 			return nil
 		}
 
+		// If this edge has a ChannelUpdate that was created before the
+		// introduction of the MaxHTLC field, then we'll update this
+		// edge to propagate this information in the network.
+		if !edge.MessageFlags.HasMaxHtlc() {
+			edgesToUpdate = append(edgesToUpdate, updateTuple{
+				info: info,
+				edge: edge,
+			})
+			return nil
+		}
+
 		const broadcastInterval = time.Hour * 24
 
 		timeElapsed := time.Since(edge.LastUpdate)
@@ -1578,22 +1589,20 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 	case *lnwire.NodeAnnouncement:
 		timestamp := time.Unix(int64(msg.Timestamp), 0)
 
-		if nMsg.isRemote {
-			// We'll quickly ask the router if it already has a
-			// newer update for this node so we can skip validating
-			// signatures if not required.
-			if d.cfg.Router.IsStaleNode(msg.NodeID, timestamp) {
-				nMsg.err <- nil
-				return nil
-			}
+		// We'll quickly ask the router if it already has a
+		// newer update for this node so we can skip validating
+		// signatures if not required.
+		if d.cfg.Router.IsStaleNode(msg.NodeID, timestamp) {
+			nMsg.err <- nil
+			return nil
+		}
 
-			if err := routing.ValidateNodeAnn(msg); err != nil {
-				err := fmt.Errorf("unable to validate "+
-					"node announcement: %v", err)
-				log.Error(err)
-				nMsg.err <- err
-				return nil
-			}
+		if err := routing.ValidateNodeAnn(msg); err != nil {
+			err := fmt.Errorf("unable to validate "+
+				"node announcement: %v", err)
+			log.Error(err)
+			nMsg.err <- err
+			return nil
 		}
 
 		features := lnwire.NewFeatureVector(
@@ -1914,7 +1923,7 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 		// announcement for this edge.
 		timestamp := time.Unix(int64(msg.Timestamp), 0)
 		if d.cfg.Router.IsStaleEdgePolicy(
-			msg.ShortChannelID, timestamp, msg.Flags,
+			msg.ShortChannelID, timestamp, msg.ChannelFlags,
 		) {
 
 			nMsg.err <- nil
@@ -1989,16 +1998,17 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 		// edge is being updated.
 		var pubKey *btcec.PublicKey
 		switch {
-		case msg.Flags&lnwire.ChanUpdateDirection == 0:
+		case msg.ChannelFlags&lnwire.ChanUpdateDirection == 0:
 			pubKey, _ = chanInfo.NodeKey1()
-		case msg.Flags&lnwire.ChanUpdateDirection == 1:
+		case msg.ChannelFlags&lnwire.ChanUpdateDirection == 1:
 			pubKey, _ = chanInfo.NodeKey2()
 		}
 
-		// Validate the channel announcement with the expected public
-		// key, In the case of an invalid channel , we'll return an
-		// error to the caller and exit early.
-		if err := routing.ValidateChannelUpdateAnn(pubKey, msg); err != nil {
+		// Validate the channel announcement with the expected public key and
+		// channel capacity. In the case of an invalid channel update, we'll
+		// return an error to the caller and exit early.
+		err = routing.ValidateChannelUpdateAnn(pubKey, chanInfo.Capacity, msg)
+		if err != nil {
 			rErr := fmt.Errorf("unable to validate channel "+
 				"update announcement for short_chan_id=%v: %v",
 				spew.Sdump(msg.ShortChannelID), err)
@@ -2012,9 +2022,11 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			SigBytes:                  msg.Signature.ToSignatureBytes(),
 			ChannelID:                 shortChanID,
 			LastUpdate:                timestamp,
-			Flags:                     msg.Flags,
+			MessageFlags:              msg.MessageFlags,
+			ChannelFlags:              msg.ChannelFlags,
 			TimeLockDelta:             msg.TimeLockDelta,
 			MinHTLC:                   msg.HtlcMinimumMsat,
+			MaxHTLC:                   msg.HtlcMaximumMsat,
 			FeeBaseMSat:               lnwire.MilliSatoshi(msg.BaseFee),
 			FeeProportionalMillionths: lnwire.MilliSatoshi(msg.FeeRate),
 			ExtraOpaqueData:           msg.ExtraOpaqueData,
@@ -2044,9 +2056,9 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			// Get our peer's public key.
 			var remotePub *btcec.PublicKey
 			switch {
-			case msg.Flags&lnwire.ChanUpdateDirection == 0:
+			case msg.ChannelFlags&lnwire.ChanUpdateDirection == 0:
 				remotePub, _ = chanInfo.NodeKey2()
-			case msg.Flags&lnwire.ChanUpdateDirection == 1:
+			case msg.ChannelFlags&lnwire.ChanUpdateDirection == 1:
 				remotePub, _ = chanInfo.NodeKey1()
 			}
 
@@ -2430,7 +2442,7 @@ func (d *AuthenticatedGossiper) sendAnnSigReliably(
 	copy(key[:33], remotePeer.SerializeCompressed())
 	binary.BigEndian.PutUint64(key[33:], msg.ShortChannelID.ToUint64())
 
-	err := d.cfg.DB.Update(func(tx *bolt.Tx) error {
+	err := d.cfg.DB.Update(func(tx *bbolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(messageStoreKey)
 		if err != nil {
 			return err
@@ -2507,7 +2519,12 @@ func (d *AuthenticatedGossiper) updateChannel(info *channeldb.ChannelEdgeInfo,
 	edge *channeldb.ChannelEdgePolicy) (*lnwire.ChannelAnnouncement,
 	*lnwire.ChannelUpdate, error) {
 
-	var err error
+	// We'll make sure we support the new max_htlc field if not already
+	// present.
+	if !edge.MessageFlags.HasMaxHtlc() {
+		edge.MessageFlags |= lnwire.ChanUpdateOptionMaxHtlc
+		edge.MaxHTLC = lnwire.NewMSatFromSatoshis(info.Capacity)
+	}
 
 	// Make sure timestamp is always increased, such that our update gets
 	// propagated.
@@ -2516,17 +2533,22 @@ func (d *AuthenticatedGossiper) updateChannel(info *channeldb.ChannelEdgeInfo,
 		timestamp = edge.LastUpdate.Unix() + 1
 	}
 	edge.LastUpdate = time.Unix(timestamp, 0)
+
 	chanUpdate := &lnwire.ChannelUpdate{
 		ChainHash:       info.ChainHash,
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(edge.ChannelID),
 		Timestamp:       uint32(timestamp),
-		Flags:           edge.Flags,
+		MessageFlags:    edge.MessageFlags,
+		ChannelFlags:    edge.ChannelFlags,
 		TimeLockDelta:   edge.TimeLockDelta,
 		HtlcMinimumMsat: edge.MinHTLC,
+		HtlcMaximumMsat: edge.MaxHTLC,
 		BaseFee:         uint32(edge.FeeBaseMSat),
 		FeeRate:         uint32(edge.FeeProportionalMillionths),
 		ExtraOpaqueData: edge.ExtraOpaqueData,
 	}
+
+	var err error
 	chanUpdate.Signature, err = lnwire.NewSigFromRawSignature(edge.SigBytes)
 	if err != nil {
 		return nil, nil, err
@@ -2549,7 +2571,7 @@ func (d *AuthenticatedGossiper) updateChannel(info *channeldb.ChannelEdgeInfo,
 
 	// To ensure that our signature is valid, we'll verify it ourself
 	// before committing it to the slice returned.
-	err = routing.ValidateChannelUpdateAnn(d.selfKey, chanUpdate)
+	err = routing.ValidateChannelUpdateAnn(d.selfKey, info.Capacity, chanUpdate)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generated invalid channel "+
 			"update sig: %v", err)

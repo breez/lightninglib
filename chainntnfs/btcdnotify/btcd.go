@@ -21,11 +21,6 @@ const (
 	// notifierType uniquely identifies this concrete implementation of the
 	// ChainNotifier interface.
 	notifierType = "btcd"
-
-	// reorgSafetyLimit is assumed maximum depth of a chain reorganization.
-	// After this many confirmation, transaction confirmation info will be
-	// pruned.
-	reorgSafetyLimit = 100
 )
 
 var (
@@ -163,8 +158,8 @@ func (b *BtcdNotifier) Start() error {
 	}
 
 	b.txNotifier = chainntnfs.NewTxNotifier(
-		uint32(currentHeight), reorgSafetyLimit, b.confirmHintCache,
-		b.spendHintCache,
+		uint32(currentHeight), chainntnfs.ReorgSafetyLimit,
+		b.confirmHintCache, b.spendHintCache,
 	)
 
 	b.bestBlock = chainntnfs.BlockEpoch{
@@ -572,7 +567,7 @@ func (b *BtcdNotifier) confDetailsManually(txid *chainhash.Hash, startHeight,
 
 	// Begin scanning blocks at every height to determine where the
 	// transaction was included in.
-	for height := startHeight; height <= endHeight; height++ {
+	for height := endHeight; height >= startHeight && height > 0; height-- {
 		// Ensure we haven't been requested to shut down before
 		// processing the next height.
 		select {

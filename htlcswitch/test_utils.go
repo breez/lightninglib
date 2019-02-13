@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -168,6 +169,7 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 		ChanReserve:      aliceReserve,
 		MinHTLC:          0,
 		MaxAcceptedHtlcs: lnwallet.MaxHTLCNumber / 2,
+		CsvDelay:         uint16(csvTimeoutAlice),
 	}
 
 	bobConstraints := &channeldb.ChannelConstraints{
@@ -177,6 +179,7 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 		ChanReserve:      bobReserve,
 		MinHTLC:          0,
 		MaxAcceptedHtlcs: lnwallet.MaxHTLCNumber / 2,
+		CsvDelay:         uint16(csvTimeoutBob),
 	}
 
 	var hash [sha256.Size]byte
@@ -194,7 +197,6 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 
 	aliceCfg := channeldb.ChannelConfig{
 		ChannelConstraints: *aliceConstraints,
-		CsvDelay:           uint16(csvTimeoutAlice),
 		MultiSigKey: keychain.KeyDescriptor{
 			PubKey: aliceKeyPub,
 		},
@@ -213,7 +215,6 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 	}
 	bobCfg := channeldb.ChannelConfig{
 		ChannelConstraints: *bobConstraints,
-		CsvDelay:           uint16(csvTimeoutBob),
 		MultiSigKey: keychain.KeyDescriptor{
 			PubKey: bobKeyPub,
 		},
@@ -369,18 +370,23 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 		preimageMap: make(map[[32]byte][]byte),
 	}
 
+	alicePool := lnwallet.NewSigPool(runtime.NumCPU(), aliceSigner)
 	channelAlice, err := lnwallet.NewLightningChannel(
-		aliceSigner, pCache, aliceChannelState,
+		aliceSigner, pCache, aliceChannelState, alicePool,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	alicePool.Start()
+
+	bobPool := lnwallet.NewSigPool(runtime.NumCPU(), bobSigner)
 	channelBob, err := lnwallet.NewLightningChannel(
-		bobSigner, pCache, bobChannelState,
+		bobSigner, pCache, bobChannelState, bobPool,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	bobPool.Start()
 
 	// Now that the channel are open, simulate the start of a session by
 	// having Alice and Bob extend their revocation windows to each other.
@@ -402,10 +408,11 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 
 	restore := func() (*lnwallet.LightningChannel, *lnwallet.LightningChannel,
 		error) {
+
 		aliceStoredChannels, err := dbAlice.FetchOpenChannels(aliceKeyPub)
 		switch err {
 		case nil:
-		case bolt.ErrDatabaseNotOpen:
+		case bbolt.ErrDatabaseNotOpen:
 			dbAlice, err = channeldb.Open(dbAlice.Path())
 			if err != nil {
 				return nil, nil, errors.Errorf("unable to reopen alice "+
@@ -434,8 +441,9 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 			return nil, nil, errors.New("unable to find stored alice channel")
 		}
 
-		newAliceChannel, err := lnwallet.NewLightningChannel(aliceSigner,
-			nil, aliceStoredChannel)
+		newAliceChannel, err := lnwallet.NewLightningChannel(
+			aliceSigner, nil, aliceStoredChannel, alicePool,
+		)
 		if err != nil {
 			return nil, nil, errors.Errorf("unable to create new channel: %v",
 				err)
@@ -444,7 +452,7 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 		bobStoredChannels, err := dbBob.FetchOpenChannels(bobKeyPub)
 		switch err {
 		case nil:
-		case bolt.ErrDatabaseNotOpen:
+		case bbolt.ErrDatabaseNotOpen:
 			dbBob, err = channeldb.Open(dbBob.Path())
 			if err != nil {
 				return nil, nil, errors.Errorf("unable to reopen bob "+
@@ -473,8 +481,9 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 			return nil, nil, errors.New("unable to find stored bob channel")
 		}
 
-		newBobChannel, err := lnwallet.NewLightningChannel(bobSigner,
-			nil, bobStoredChannel)
+		newBobChannel, err := lnwallet.NewLightningChannel(
+			bobSigner, nil, bobStoredChannel, bobPool,
+		)
 		if err != nil {
 			return nil, nil, errors.Errorf("unable to create new channel: %v",
 				err)
@@ -485,7 +494,7 @@ func createTestChannel(alicePrivKey, bobPrivKey []byte,
 	return channelAlice, channelBob, cleanUpFunc, restore, nil
 }
 
-// getChanID retrieves the channel point from nwire message.
+// getChanID retrieves the channel point from an lnnwire message.
 func getChanID(msg lnwire.Message) (lnwire.ChannelID, error) {
 	var chanID lnwire.ChannelID
 	switch msg := msg.(type) {

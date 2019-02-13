@@ -443,7 +443,6 @@ func (l *channelLink) Stop() {
 	}
 
 	l.updateFeeTimer.Stop()
-	l.channel.Stop()
 	l.overflowQueue.Stop()
 
 	close(l.quit)
@@ -682,9 +681,14 @@ func (l *channelLink) resolveFwdPkg(fwdPkg *channeldb.FwdPkg) (bool, error) {
 	// If the package is fully acked but not completed, it must still have
 	// settles and fails to propagate.
 	if !fwdPkg.SettleFailFilter.IsFull() {
-		settleFails := lnwallet.PayDescsFromRemoteLogUpdates(
+		settleFails, err := lnwallet.PayDescsFromRemoteLogUpdates(
 			fwdPkg.Source, fwdPkg.Height, fwdPkg.SettleFails,
 		)
+		if err != nil {
+			l.errorf("Unable to process remote log updates: %v",
+				err)
+			return false, err
+		}
 		l.processRemoteSettleFails(fwdPkg, settleFails)
 	}
 
@@ -694,9 +698,14 @@ func (l *channelLink) resolveFwdPkg(fwdPkg *channeldb.FwdPkg) (bool, error) {
 	// batch of adds presented to the sphinx router does not ever change.
 	var needUpdate bool
 	if !fwdPkg.AckFilter.IsFull() {
-		adds := lnwallet.PayDescsFromRemoteLogUpdates(
+		adds, err := lnwallet.PayDescsFromRemoteLogUpdates(
 			fwdPkg.Source, fwdPkg.Height, fwdPkg.Adds,
 		)
+		if err != nil {
+			l.errorf("Unable to process remote log updates: %v",
+				err)
+			return false, err
+		}
 		needUpdate = l.processRemoteAdds(fwdPkg, adds)
 
 		// If the link failed during processing the adds, we must
@@ -2309,7 +2318,9 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 			if err != nil {
 				log.Errorf("unable to query invoice registry: "+
 					" %v", err)
-				failure := lnwire.FailUnknownPaymentHash{}
+				failure := lnwire.NewFailUnknownPaymentHash(
+					pd.Amount,
+				)
 				l.sendHTLCError(
 					pd.HtlcIndex, failure, obfuscator, pd.SourceRef,
 				)
@@ -2358,7 +2369,9 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 					"amount: expected %v, received %v",
 					invoice.Terms.Value, pd.Amount)
 
-				failure := lnwire.FailIncorrectPaymentAmount{}
+				failure := lnwire.NewFailUnknownPaymentHash(
+					pd.Amount,
+				)
 				l.sendHTLCError(
 					pd.HtlcIndex, failure, obfuscator, pd.SourceRef,
 				)
@@ -2385,7 +2398,9 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 					"got %v", pd.RHash, invoice.Terms.Value,
 					fwdInfo.AmountToForward)
 
-				failure := lnwire.FailIncorrectPaymentAmount{}
+				failure := lnwire.NewFailUnknownPaymentHash(
+					pd.Amount,
+				)
 				l.sendHTLCError(
 					pd.HtlcIndex, failure, obfuscator, pd.SourceRef,
 				)
@@ -2398,19 +2413,16 @@ func (l *channelLink) processRemoteAdds(fwdPkg *channeldb.FwdPkg,
 			// computed correctly.
 			expectedHeight := heightNow + minCltvDelta
 			switch {
+			case !l.cfg.DebugHTLC && pd.Timeout < expectedHeight:
+				log.Errorf("Incoming htlc(%x) has an "+
+					"expiration that is too soon: "+
+					"expected at least %v, got %v",
+					pd.RHash[:], expectedHeight, pd.Timeout)
 
-			case !l.cfg.DebugHTLC && fwdInfo.OutgoingCTLV < expectedHeight:
-				log.Errorf("Onion payload of incoming "+
-					"htlc(%x) has incorrect time-lock: "+
-					"expected %v, got %v",
-					pd.RHash[:], expectedHeight,
-					fwdInfo.OutgoingCTLV)
-
-				failure := lnwire.NewFinalIncorrectCltvExpiry(
-					fwdInfo.OutgoingCTLV,
-				)
+				failure := lnwire.FailFinalExpiryTooSoon{}
 				l.sendHTLCError(
-					pd.HtlcIndex, failure, obfuscator, pd.SourceRef,
+					pd.HtlcIndex, failure, obfuscator,
+					pd.SourceRef,
 				)
 
 				needUpdate = true

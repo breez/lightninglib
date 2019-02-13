@@ -16,7 +16,7 @@ require (
 	github.com/btcsuite/golangcrypto v0.0.0-20150304025918-53f62d9b43e8 // indirect
 	github.com/btcsuite/goleveldb v1.0.0 // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
-	github.com/coreos/bbolt v0.0.0-20180223184059-4f5275f4ebbf
+	github.com/coreos/bbolt v1.3.2
 	github.com/davecgh/go-spew v0.0.0-20180221232628-8991bc29aa16
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/go-errors/errors v1.0.1
