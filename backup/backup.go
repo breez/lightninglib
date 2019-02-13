@@ -24,6 +24,9 @@ var (
 	syncedToName   = []byte("syncedto")
 	startBlockName = []byte("startblock")
 	birthdayName   = []byte("birthday")
+
+	edgeBucket         = []byte("graph-edge")
+	channelPointBucket = []byte("chan-index")
 )
 
 func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
@@ -145,7 +148,52 @@ func channeldbCopy(channelDB *channeldb.DB, destfile string) error {
 		}
 		return false
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	return copyChanIndex(dst, channelDB.DB)
+}
+
+func copyChanIndex(dst, src *bolt.DB) error {
+	tx, err := dst.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	edges, err := tx.CreateBucketIfNotExists(edgeBucket)
+	if err != nil {
+		return err
+	}
+	chanIndex, err := edges.CreateBucketIfNotExists(channelPointBucket)
+	if err != nil {
+		return err
+	}
+	err = copyChanIndexToBucket(chanIndex, src)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func copyChanIndexToBucket(dest *bolt.Bucket, db *bolt.DB) error {
+	return db.View(func(tx *bolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return nil
+		}
+		chanIndex := edges.Bucket(channelPointBucket)
+		if chanIndex == nil {
+			return nil
+		}
+		return chanIndex.ForEach(func(k, v []byte) error {
+			if v != nil {
+				return dest.Put(k, v)
+			}
+			return nil
+		})
+	})
 }
 
 func boltCopy(srcfile, destfile string, skip skipFunc) error {
