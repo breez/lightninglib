@@ -27,6 +27,8 @@ var (
 
 	edgeBucket         = []byte("graph-edge")
 	channelPointBucket = []byte("chan-index")
+	edgeIndexBucket    = []byte("edge-index")
+	nodeBucket         = []byte("graph-node")
 )
 
 func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
@@ -169,7 +171,15 @@ func copyChanIndex(dst, src *bolt.DB) error {
 	if err != nil {
 		return err
 	}
-	err = copyChanIndexToBucket(chanIndex, src)
+	edgeIndex, err := edges.CreateBucketIfNotExists(edgeIndexBucket)
+	if err != nil {
+		return err
+	}
+	nodes, err := tx.CreateBucketIfNotExists(nodeBucket)
+	if err != nil {
+		return err
+	}
+	err = copyChanEdgeIndexToBucket(edges, chanIndex, edgeIndex, nodes, src)
 	if err != nil {
 		return err
 	}
@@ -177,7 +187,7 @@ func copyChanIndex(dst, src *bolt.DB) error {
 	return tx.Commit()
 }
 
-func copyChanIndexToBucket(dest *bolt.Bucket, db *bolt.DB) error {
+func copyChanEdgeIndexToBucket(e, ci, ei, n *bolt.Bucket, db *bolt.DB) error {
 	return db.View(func(tx *bolt.Tx) error {
 		edges := tx.Bucket(edgeBucket)
 		if edges == nil {
@@ -187,9 +197,40 @@ func copyChanIndexToBucket(dest *bolt.Bucket, db *bolt.DB) error {
 		if chanIndex == nil {
 			return nil
 		}
-		return chanIndex.ForEach(func(k, v []byte) error {
-			if v != nil {
-				return dest.Put(k, v)
+		edgeIndex := edges.Bucket(edgeIndexBucket)
+		/*if edgeIndex == nil {
+			return nil
+		}*/
+		nodes := tx.Bucket(nodeBucket)
+		/*if nodes == nil {
+			return nil
+		}*/
+		return chanIndex.ForEach(func(k, chanID []byte) error {
+			if chanID != nil {
+				err := ci.Put(k, chanID)
+				if err != nil {
+					return err
+				}
+				edgeInfo := edgeIndex.Get(chanID)
+				if edgeInfo != nil {
+					err = ei.Put(chanID, edgeInfo)
+					if err != nil {
+						return err
+					}
+					node1Pub := edgeInfo[:33]
+					var edge1Key [33 + 8]byte
+					copy(edge1Key[:], node1Pub)
+					copy(edge1Key[33:], chanID[:])
+					e.Put(edge1Key[:], edges.Get(edge1Key[:]))
+					n.Put(node1Pub, nodes.Get(node1Pub))
+
+					node2Pub := edgeInfo[33:66]
+					var edge2Key [33 + 8]byte
+					copy(edge2Key[:], node2Pub)
+					copy(edge2Key[33:], chanID[:])
+					e.Put(edge2Key[:], edges.Get(edge2Key[:]))
+					n.Put(node2Pub, nodes.Get(node2Pub))
+				}
 			}
 			return nil
 		})
