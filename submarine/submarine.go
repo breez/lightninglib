@@ -20,11 +20,11 @@ import (
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/btcsuite/btcwallet/wtxmgr"
-	"github.com/coreos/bbolt"
+	bolt "github.com/coreos/bbolt"
 )
 
 const (
-	defaultLockHeight      = 72
+	defaultLockHeight      = 144
 	redeemWitnessInputSize = 1 + 1 + 73 + 1 + 32 + 1 + 100
 	refundWitnessInputSize = 1 + 1 + 73 + 1 + 0 + 1 + 100
 )
