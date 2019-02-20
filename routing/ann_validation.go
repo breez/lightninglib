@@ -163,7 +163,7 @@ func validateOptionalFields(capacity btcutil.Amount,
 				"update %v", spew.Sdump(msg))
 		}
 		cap := lnwire.NewMSatFromSatoshis(capacity)
-		if maxHtlc > cap {
+		if cap > 0 && maxHtlc > cap {
 			return errors.Errorf("max_htlc(%v) for channel "+
 				"update greater than capacity(%v)", maxHtlc,
 				cap)
