@@ -1340,6 +1340,9 @@ message OpenChannelRequest {
 
     /// Whether unconfirmed outputs should be used as inputs for the funding transaction.
     bool spend_unconfirmed = 12 [json_name = "spend_unconfirmed"];
+
+    /// The number of satoshis we require the remote peer to reserve.
+    int64 remote_chan_reserve_sat = 13 [json_name = "remote_chan_reserve_sat"];
 }
 message OpenStatusUpdate {
     oneof update {
