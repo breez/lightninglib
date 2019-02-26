@@ -476,6 +476,11 @@ var openChannelCommand = cli.Command{
 				"transaction must satisfy",
 			Value: 1,
 		},
+		cli.Int64Flag{
+			Name: "remote_chan_reserve_sat",
+			Usage: "(optional) the minimum number of satoshis we " +
+				"require the remote node to keep as a direct payment",
+		},
 	},
 	Action: actionDecorator(openChannel),
 }
@@ -496,11 +501,12 @@ func openChannel(ctx *cli.Context) error {
 	}
 
 	req := &lnrpc.OpenChannelRequest{
-		TargetConf:     int32(ctx.Int64("conf_target")),
-		SatPerByte:     ctx.Int64("sat_per_byte"),
-		MinHtlcMsat:    ctx.Int64("min_htlc_msat"),
-		RemoteCsvDelay: uint32(ctx.Uint64("remote_csv_delay")),
-		MinConfs:       int32(ctx.Uint64("min_confs")),
+		TargetConf:           int32(ctx.Int64("conf_target")),
+		SatPerByte:           ctx.Int64("sat_per_byte"),
+		MinHtlcMsat:          ctx.Int64("min_htlc_msat"),
+		RemoteCsvDelay:       uint32(ctx.Uint64("remote_csv_delay")),
+		MinConfs:             int32(ctx.Uint64("min_confs")),
+		RemoteChanReserveSat: ctx.Int64("remote_chan_reserve_sat"),
 	}
 
 	switch {
