@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/breez/lightninglib/backup"
 	"github.com/breez/lightninglib/build"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
-	"github.com/breez/lightninglib/backup"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
@@ -2190,6 +2190,8 @@ func (r *rpcServer) ListChannels(ctx context.Context,
 			NumUpdates:            localCommit.CommitHeight,
 			PendingHtlcs:          make([]*lnrpc.HTLC, len(localCommit.Htlcs)),
 			CsvDelay:              uint32(dbChannel.LocalChanCfg.CsvDelay),
+			LocalChanReserve:      int64(dbChannel.LocalChanCfg.ChanReserve),
+			RemoteChanReserve:     int64(dbChannel.RemoteChanCfg.ChanReserve),
 		}
 
 		for i, htlc := range localCommit.Htlcs {

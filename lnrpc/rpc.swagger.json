@@ -1556,6 +1556,16 @@
           "type": "boolean",
           "format": "boolean",
           "title": "/ Whether this channel is advertised to the network or not"
+        },
+        "local_chan_reserve": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ This minimum satoshies this node is required to reseve in \n/ its balance"
+        },
+        "remote_chan_reserve": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ This minimum satoshies the other node is required to reseve in \n/ its balance"
         }
       }
     },
