@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/breez/lightninglib/backup"
 	"github.com/breez/lightninglib/build"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
-	"github.com/breez/lightninglib/backup"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
@@ -1167,6 +1167,7 @@ func (r *rpcServer) OpenChannelSync(ctx context.Context,
 	remoteInitialBalance := btcutil.Amount(in.PushSat)
 	minHtlc := lnwire.MilliSatoshi(in.MinHtlcMsat)
 	remoteCsvDelay := uint16(in.RemoteCsvDelay)
+	remoteChanReserve := btcutil.Amount(in.RemoteChanReserveSat)
 
 	// Ensure that the initial balance of the remote party (if pushing
 	// satoshis) does not exceed the amount the local party has requested
@@ -1201,19 +1202,25 @@ func (r *rpcServer) OpenChannelSync(ctx context.Context,
 		return nil, err
 	}
 
+	if remoteChanReserve >= localFundingAmt {
+		return nil, fmt.Errorf("remote channel reservation is too high, " +
+			"must be less than channel capacity")
+	}
+
 	rpcsLog.Tracef("[openchannel] target sat/kw for funding tx: %v",
 		int64(feeRate))
 
 	req := &openChanReq{
-		targetPubkey:    nodepubKey,
-		chainHash:       *activeNetParams.GenesisHash,
-		localFundingAmt: localFundingAmt,
-		pushAmt:         lnwire.NewMSatFromSatoshis(remoteInitialBalance),
-		minHtlc:         minHtlc,
-		fundingFeePerKw: feeRate,
-		private:         in.Private,
-		remoteCsvDelay:  remoteCsvDelay,
-		minConfs:        minConfs,
+		targetPubkey:      nodepubKey,
+		chainHash:         *activeNetParams.GenesisHash,
+		localFundingAmt:   localFundingAmt,
+		pushAmt:           lnwire.NewMSatFromSatoshis(remoteInitialBalance),
+		minHtlc:           minHtlc,
+		fundingFeePerKw:   feeRate,
+		private:           in.Private,
+		remoteCsvDelay:    remoteCsvDelay,
+		minConfs:          minConfs,
+		remoteChanReserve: remoteChanReserve,
 	}
 
 	updateChan, errChan := r.server.OpenChannel(req)
