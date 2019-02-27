@@ -103,8 +103,9 @@ type reservationWithCtx struct {
 	chanAmt btcutil.Amount
 
 	// Constraints we require for the remote.
-	remoteCsvDelay uint16
-	remoteMinHtlc  lnwire.MilliSatoshi
+	remoteCsvDelay    uint16
+	remoteMinHtlc     lnwire.MilliSatoshi
+	remoteChanReserve btcutil.Amount
 
 	updateMtx   sync.RWMutex
 	lastUpdated time.Time
@@ -1116,12 +1117,13 @@ func (f *fundingManager) handleFundingOpen(fmsg *fundingOpenMsg) {
 		f.activeReservations[peerIDKey] = make(pendingChannels)
 	}
 	resCtx := &reservationWithCtx{
-		reservation:    reservation,
-		chanAmt:        amt,
-		remoteCsvDelay: remoteCsvDelay,
-		remoteMinHtlc:  minHtlc,
-		err:            make(chan error, 1),
-		peer:           fmsg.peer,
+		reservation:       reservation,
+		chanAmt:           amt,
+		remoteCsvDelay:    remoteCsvDelay,
+		remoteMinHtlc:     minHtlc,
+		remoteChanReserve: chanReserve,
+		err:               make(chan error, 1),
+		peer:              fmsg.peer,
 	}
 	f.activeReservations[peerIDKey][msg.PendingChannelID] = resCtx
 	f.resMtx.Unlock()
@@ -1264,7 +1266,6 @@ func (f *fundingManager) handleFundingAccept(fmsg *fundingAcceptMsg) {
 	// As they've accepted our channel constraints, we'll regenerate them
 	// here so we can properly commit their accepted constraints to the
 	// reservation.
-	chanReserve := f.cfg.RequiredRemoteChanReserve(resCtx.chanAmt, msg.DustLimit)
 	maxValue := f.cfg.RequiredRemoteMaxValue(resCtx.chanAmt)
 	maxHtlcs := f.cfg.RequiredRemoteMaxHTLCs(resCtx.chanAmt)
 
@@ -1278,7 +1279,7 @@ func (f *fundingManager) handleFundingAccept(fmsg *fundingAcceptMsg) {
 			ChannelConstraints: channeldb.ChannelConstraints{
 				DustLimit:        msg.DustLimit,
 				MaxPendingAmount: maxValue,
-				ChanReserve:      chanReserve,
+				ChanReserve:      resCtx.remoteChanReserve,
 				MinHTLC:          resCtx.remoteMinHtlc,
 				MaxAcceptedHtlcs: maxHtlcs,
 				CsvDelay:         resCtx.remoteCsvDelay,
@@ -2778,6 +2779,11 @@ func (f *fundingManager) handleInitFundingMsg(msg *initFundingMsg) {
 		minHtlc = f.cfg.DefaultRoutingPolicy.MinHTLC
 	}
 
+	chanReserve := f.cfg.RequiredRemoteChanReserve(capacity, ourDustLimit)
+	if msg.openChanReq.remoteChanReserve >= ourDustLimit {
+		chanReserve = msg.openChanReq.remoteChanReserve
+	}
+	fndgLog.Infof("Setting remote channel reserve to %v", chanReserve)
 	// If a pending channel map for this peer isn't already created, then
 	// we create one, ultimately allowing us to track this pending
 	// reservation within the target peer.
@@ -2788,13 +2794,14 @@ func (f *fundingManager) handleInitFundingMsg(msg *initFundingMsg) {
 	}
 
 	resCtx := &reservationWithCtx{
-		chanAmt:        capacity,
-		remoteCsvDelay: remoteCsvDelay,
-		remoteMinHtlc:  minHtlc,
-		reservation:    reservation,
-		peer:           msg.peer,
-		updates:        msg.updates,
-		err:            msg.err,
+		chanAmt:           capacity,
+		remoteCsvDelay:    remoteCsvDelay,
+		remoteMinHtlc:     minHtlc,
+		remoteChanReserve: chanReserve,
+		reservation:       reservation,
+		peer:              msg.peer,
+		updates:           msg.updates,
+		err:               msg.err,
 	}
 	f.activeReservations[peerIDKey][chanID] = resCtx
 	f.resMtx.Unlock()
@@ -2809,7 +2816,6 @@ func (f *fundingManager) handleInitFundingMsg(msg *initFundingMsg) {
 	// Finally, we'll use the current value of the channels and our default
 	// policy to determine of required commitment constraints for the
 	// remote party.
-	chanReserve := f.cfg.RequiredRemoteChanReserve(capacity, ourDustLimit)
 	maxValue := f.cfg.RequiredRemoteMaxValue(capacity)
 	maxHtlcs := f.cfg.RequiredRemoteMaxHTLCs(capacity)
 

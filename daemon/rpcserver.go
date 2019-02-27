@@ -976,6 +976,7 @@ func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
 	remoteInitialBalance := btcutil.Amount(in.PushSat)
 	minHtlc := lnwire.MilliSatoshi(in.MinHtlcMsat)
 	remoteCsvDelay := uint16(in.RemoteCsvDelay)
+	remoteChanReserve := btcutil.Amount(in.RemoteChanReserveSat)
 
 	// Ensure that the initial balance of the remote party (if pushing
 	// satoshis) does not exceed the amount the local party has requested
@@ -1047,6 +1048,11 @@ func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
 		return err
 	}
 
+	if remoteChanReserve >= localFundingAmt {
+		return fmt.Errorf("remote channel reservation is too high, must be " +
+			"less than channel capacity")
+	}
+
 	rpcsLog.Debugf("[openchannel]: using fee of %v sat/kw for funding tx",
 		int64(feeRate))
 
@@ -1054,15 +1060,16 @@ func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
 	// open a new channel. A stream is returned in place, this stream will
 	// be used to consume updates of the state of the pending channel.
 	req := &openChanReq{
-		targetPubkey:    nodePubKey,
-		chainHash:       *activeNetParams.GenesisHash,
-		localFundingAmt: localFundingAmt,
-		pushAmt:         lnwire.NewMSatFromSatoshis(remoteInitialBalance),
-		minHtlc:         minHtlc,
-		fundingFeePerKw: feeRate,
-		private:         in.Private,
-		remoteCsvDelay:  remoteCsvDelay,
-		minConfs:        minConfs,
+		targetPubkey:      nodePubKey,
+		chainHash:         *activeNetParams.GenesisHash,
+		localFundingAmt:   localFundingAmt,
+		pushAmt:           lnwire.NewMSatFromSatoshis(remoteInitialBalance),
+		minHtlc:           minHtlc,
+		fundingFeePerKw:   feeRate,
+		private:           in.Private,
+		remoteCsvDelay:    remoteCsvDelay,
+		minConfs:          minConfs,
+		remoteChanReserve: remoteChanReserve,
 	}
 
 	updateChan, errChan := r.server.OpenChannel(req)
