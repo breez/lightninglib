@@ -559,8 +559,9 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 			// for the available bandwidth for the link.
 			return link.Bandwidth()
 		},
-		AssumeChannelValid: cfg.Routing.UseAssumeChannelValid(),
+		AssumeChannelValid:       cfg.Routing.UseAssumeChannelValid(),
 		NoGraphUpdatingOnStartup: cfg.Routing.UseNoGraphUpdatingOnStartup(),
+		SavePrunedChannels:       cfg.Routing.UseSavePrunedChannels(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("can't create router: %v", err)

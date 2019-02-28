@@ -196,6 +196,10 @@ type Config struct {
 	// NoGraphUpdatingOnStartup toggles whether or not the router will update
 	// and check the channel graph on startup
 	NoGraphUpdatingOnStartup bool
+
+	// ClosedChannelsDirectory toggles whether or not pruned channels are saved
+	// in the database.
+	SavePrunedChannels bool
 }
 
 // routeTuple is an entry within the ChannelRouter's route cache. We cache
@@ -372,7 +376,7 @@ func (r *ChannelRouter) Start() error {
 			// the prune height to the current best height of the
 			// chain backend.
 			_, err = r.cfg.Graph.PruneGraph(
-				nil, bestHash, uint32(bestHeight),
+				nil, bestHash, uint32(bestHeight), r.cfg.SavePrunedChannels,
 			)
 			if err != nil {
 				return err
@@ -563,7 +567,8 @@ func (r *ChannelRouter) syncGraphWithChain() error {
 		// being pruned so the prune tip can be updated.
 		closedChans, err := r.cfg.Graph.PruneGraph(spentOutputs,
 			nextHash,
-			nextHeight)
+			nextHeight,
+			r.cfg.SavePrunedChannels)
 		if err != nil {
 			return err
 		}
@@ -825,7 +830,7 @@ func (r *ChannelRouter) networkHandler() {
 			// of the block being pruned so the prune tip can be
 			// updated.
 			chansClosed, err := r.cfg.Graph.PruneGraph(spentOutputs,
-				&chainUpdate.Hash, chainUpdate.Height)
+				&chainUpdate.Hash, chainUpdate.Height, r.cfg.SavePrunedChannels)
 			if err != nil {
 				log.Errorf("unable to prune routing table: %v", err)
 				continue

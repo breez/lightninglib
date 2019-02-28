@@ -458,14 +458,14 @@ func TestDisconnectBlockAtHeight(t *testing.T) {
 
 	// Prune the graph a few times to make sure we have entries in the
 	// prune log.
-	_, err = graph.PruneGraph(spendOutputs, &blockHash, 155)
+	_, err = graph.PruneGraph(spendOutputs, &blockHash, 155, false)
 	if err != nil {
 		t.Fatalf("unable to prune graph: %v", err)
 	}
 	var blockHash2 chainhash.Hash
 	copy(blockHash2[:], bytes.Repeat([]byte{2}, 32))
 
-	_, err = graph.PruneGraph(spendOutputs, &blockHash2, 156)
+	_, err = graph.PruneGraph(spendOutputs, &blockHash2, 156, false)
 	if err != nil {
 		t.Fatalf("unable to prune graph: %v", err)
 	}
@@ -1197,7 +1197,7 @@ func TestGraphPruning(t *testing.T) {
 	copy(blockHash[:], bytes.Repeat([]byte{1}, 32))
 	blockHeight := uint32(1)
 	block := channelPoints[:2]
-	prunedChans, err := graph.PruneGraph(block, &blockHash, blockHeight)
+	prunedChans, err := graph.PruneGraph(block, &blockHash, blockHeight, false)
 	if err != nil {
 		t.Fatalf("unable to prune graph: %v", err)
 	}
@@ -1230,7 +1230,7 @@ func TestGraphPruning(t *testing.T) {
 	blockHash = sha256.Sum256(blockHash[:])
 	blockHeight = 2
 	prunedChans, err = graph.PruneGraph(
-		[]*wire.OutPoint{nonChannel}, &blockHash, blockHeight,
+		[]*wire.OutPoint{nonChannel}, &blockHash, blockHeight, false,
 	)
 	if err != nil {
 		t.Fatalf("unable to prune graph: %v", err)
@@ -1252,7 +1252,7 @@ func TestGraphPruning(t *testing.T) {
 	blockHash = sha256.Sum256(blockHash[:])
 	blockHeight = 3
 	prunedChans, err = graph.PruneGraph(
-		channelPoints[2:], &blockHash, blockHeight,
+		channelPoints[2:], &blockHash, blockHeight, false,
 	)
 	if err != nil {
 		t.Fatalf("unable to prune graph: %v", err)
@@ -2230,7 +2230,7 @@ func TestChannelEdgePruningUpdateIndexDeletion(t *testing.T) {
 	var blockHash chainhash.Hash
 	copy(blockHash[:], bytes.Repeat([]byte{2}, 32))
 	_, err = graph.PruneGraph(
-		[]*wire.OutPoint{&edgeInfo.ChannelPoint}, &blockHash, 101,
+		[]*wire.OutPoint{&edgeInfo.ChannelPoint}, &blockHash, 101, false,
 	)
 	if err != nil {
 		t.Fatalf("unable to prune graph: %v", err)

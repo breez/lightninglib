@@ -15,3 +15,8 @@ func (c *Conf) UseAssumeChannelValid() bool {
 func (c *Conf) UseNoGraphUpdatingOnStartup() bool {
 	return false
 }
+
+// UseUseSavePrunedChannels always returns false when not in experimental builds.
+func (c *Conf) UseSavePrunedChannels() bool {
+	return false
+}
