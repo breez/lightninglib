@@ -686,6 +686,59 @@ const (
 	pruneTipBytes = 32
 )
 
+func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (map[uint32][]*ChannelEdgeInfo, error) {
+	chansClosed := make(map[uint32][]*ChannelEdgeInfo)
+	var b1, b2 bytes.Buffer
+	if err := binary.Write(&b1, byteOrder, beginHeight); err != nil {
+		return nil, err
+	}
+	if endHeight == 0 {
+		endHeight = math.MaxUint32
+	}
+	if err := binary.Write(&b2, byteOrder, endHeight); err != nil {
+		return nil, err
+	}
+	beginIndex := b1.Bytes()
+	endIndex := b2.Bytes()
+
+	err := c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return ErrGraphNotFound
+		}
+		prunedEdgeIndex := edges.Bucket(prunedEdgeIndexBucket)
+		if prunedEdgeIndex == nil {
+			return ErrChannelNotFound
+		}
+		c := prunedEdgeIndex.Cursor()
+		for blockIndex, v1 := c.Seek(beginIndex); blockIndex != nil && bytes.Compare(blockIndex, endIndex) <= 0; blockIndex, v1 = c.Next() {
+			if v1 == nil {
+				prunedEdgeIndexSub := prunedEdgeIndex.Bucket(blockIndex)
+				buf := bytes.NewReader(blockIndex)
+				var bi uint32
+				err := binary.Read(buf, byteOrder, &bi)
+				if err != nil {
+					return err
+				}
+				var closed []*ChannelEdgeInfo
+				c2 := prunedEdgeIndexSub.Cursor()
+				for chanID, edgeInfoBytes := c2.First(); chanID != nil; chanID, edgeInfoBytes = c2.Next() {
+					edgeInfoReader := bytes.NewReader(edgeInfoBytes)
+					edgeInfo, err := deserializeChanEdgeInfo(edgeInfoReader)
+					if err != nil {
+						return err
+					}
+
+					closed = append(closed, &edgeInfo)
+				}
+				chansClosed[bi] = closed
+			}
+		}
+		return nil
+	})
+	return chansClosed, err
+}
+
 // PruneGraph prunes newly closed channels from the channel graph in response
 // to a new block being solved on the network. Any transactions which spend the
 // funding output of any known channels within he graph will be deleted.

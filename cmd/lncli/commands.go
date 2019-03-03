@@ -1750,6 +1750,43 @@ func closedChannels(ctx *cli.Context) error {
 	return nil
 }
 
+var prunedChannelsCommand = cli.Command{
+	Name:     "prunedchannels",
+	Category: "Channels",
+	Usage:    "List pruned channels.",
+	Flags: []cli.Flag{
+		cli.UintFlag{
+			Name:  "begin_height",
+			Usage: "Only list channels pruned since this block height",
+		},
+		cli.UintFlag{
+			Name:  "end_height",
+			Usage: "Only list channels pruned up to this block height",
+		},
+	},
+	Action: actionDecorator(prunedChannels),
+}
+
+func prunedChannels(ctx *cli.Context) error {
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.PrunedChannelsRequest{
+		BeginHeight: uint32(ctx.Uint("begin_height")),
+		EndHeight:   uint32(ctx.Uint("end_bend_heightlock")),
+	}
+
+	resp, err := client.PrunedChannels(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
+
+	return nil
+}
+
 var sendPaymentCommand = cli.Command{
 	Name:     "sendpayment",
 	Category: "Payments",

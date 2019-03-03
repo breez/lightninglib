@@ -410,6 +410,14 @@ service Lightning {
         };
     }
 
+    /** lncli: `prunedchannels`
+    PrunedChannels returns the list of pruned channel from the LN graph.
+    */
+    rpc PrunedChannels (PrunedChannelsRequest) returns (PrunedChannelsResponse) {
+        option (google.api.http) = {
+            get: "/v1/prunedchannels"
+        };
+    }
 
     /**
     OpenChannelSync is a synchronous version of the OpenChannel RPC call. This
@@ -1152,6 +1160,21 @@ message ChannelCloseSummary {
 
     /// Details on how the channel was closed.
     ClosureType close_type = 10 [json_name = "close_type"];
+}
+
+message PrunedChannelsRequest {
+    uint32 begin_height = 1;
+    uint32 end_height = 2;
+}
+
+message PrunedChannel {
+    uint32 closed_height = 1;
+    uint64 chan_id = 2;
+    int64 capacity = 3;
+    string channel_point = 4;
+}
+message PrunedChannelsResponse {
+    repeated PrunedChannel channels = 1;
 }
 
 message ClosedChannelsRequest {

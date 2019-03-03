@@ -305,6 +305,10 @@ var (
 			Entity: "info",
 			Action: "read",
 		}},
+		"/lnrpc.Lightning/PrunedChannels": {{
+			Entity: "info",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/GetChanInfo": {{
 			Entity: "info",
 			Action: "read",
@@ -2083,6 +2087,27 @@ func (r *rpcServer) ClosedChannels(ctx context.Context,
 	}
 
 	return resp, nil
+}
+
+func (r *rpcServer) PrunedChannels(ctx context.Context,
+	in *lnrpc.PrunedChannelsRequest) (*lnrpc.PrunedChannelsResponse, error) {
+	graph := r.server.chanDB.ChannelGraph()
+	cei, err := graph.PrunedEdges(in.BeginHeight, in.EndHeight)
+	if err != nil {
+		return &lnrpc.PrunedChannelsResponse{}, err
+	}
+	var resp lnrpc.PrunedChannelsResponse
+	for bi, ces := range cei {
+		for _, ce := range ces {
+			resp.Channels = append(resp.Channels, &lnrpc.PrunedChannel{
+				ClosedHeight: bi,
+				ChanId:       ce.ChannelID,
+				Capacity:     int64(ce.Capacity),
+				ChannelPoint: ce.ChannelPoint.String(),
+			})
+		}
+	}
+	return &resp, nil
 }
 
 // ListChannels returns a description of all the open channels that this node
