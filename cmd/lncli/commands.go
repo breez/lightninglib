@@ -1774,7 +1774,7 @@ func prunedChannels(ctx *cli.Context) error {
 
 	req := &lnrpc.PrunedChannelsRequest{
 		BeginHeight: uint32(ctx.Uint("begin_height")),
-		EndHeight:   uint32(ctx.Uint("end_bend_heightlock")),
+		EndHeight:   uint32(ctx.Uint("end_height")),
 	}
 
 	resp, err := client.PrunedChannels(ctxb, req)
