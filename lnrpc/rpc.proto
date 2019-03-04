@@ -1163,15 +1163,15 @@ message ChannelCloseSummary {
 }
 
 message PrunedChannelsRequest {
-    uint32 begin_height = 1;
-    uint32 end_height = 2;
+    uint32 begin_height = 1 [json_name = "begin_height"];
+    uint32 end_height = 2 [json_name = "end_height"];
 }
 
 message PrunedChannel {
-    uint32 closed_height = 1;
-    uint64 chan_id = 2;
-    int64 capacity = 3;
-    string channel_point = 4;
+    uint32 closed_height = 1 [json_name = "closed_height"];
+    uint64 chan_id = 2 [json_name = "channel_id"];
+    int64 capacity = 3 [json_name = "capacity"];
+    string channel_point = 4 [json_name = "channel_point"];
 }
 message PrunedChannelsResponse {
     repeated PrunedChannel channels = 1;
