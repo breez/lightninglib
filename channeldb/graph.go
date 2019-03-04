@@ -686,22 +686,26 @@ const (
 	pruneTipBytes = 32
 )
 
-func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (map[uint32][]*ChannelEdgeInfo, error) {
-	chansClosed := make(map[uint32][]*ChannelEdgeInfo)
+func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (
+	chansClosed []struct {
+		Height uint32
+		Edge   *ChannelEdgeInfo
+	},
+	err error) {
 	var b1, b2 bytes.Buffer
-	if err := binary.Write(&b1, byteOrder, beginHeight); err != nil {
-		return nil, err
+	if err = binary.Write(&b1, byteOrder, beginHeight); err != nil {
+		return
 	}
 	if endHeight == 0 {
 		endHeight = math.MaxUint32
 	}
-	if err := binary.Write(&b2, byteOrder, endHeight); err != nil {
-		return nil, err
+	if err = binary.Write(&b2, byteOrder, endHeight); err != nil {
+		return
 	}
 	beginIndex := b1.Bytes()
 	endIndex := b2.Bytes()
 
-	err := c.db.View(func(tx *bbolt.Tx) error {
+	err = c.db.View(func(tx *bbolt.Tx) error {
 		edges := tx.Bucket(edgeBucket)
 		if edges == nil {
 			return ErrGraphNotFound
@@ -720,7 +724,7 @@ func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (map[uint32][]
 				if err != nil {
 					return err
 				}
-				var closed []*ChannelEdgeInfo
+				//var closed []*ChannelEdgeInfo
 				c2 := prunedEdgeIndexSub.Cursor()
 				for chanID, edgeInfoBytes := c2.First(); chanID != nil; chanID, edgeInfoBytes = c2.Next() {
 					edgeInfoReader := bytes.NewReader(edgeInfoBytes)
@@ -729,9 +733,11 @@ func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (map[uint32][]
 						return err
 					}
 
-					closed = append(closed, &edgeInfo)
+					chansClosed = append(chansClosed, struct {
+						Height uint32
+						Edge   *ChannelEdgeInfo
+					}{Height: bi, Edge: &edgeInfo})
 				}
-				chansClosed[bi] = closed
 			}
 		}
 		return nil

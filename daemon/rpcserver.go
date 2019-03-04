@@ -2091,21 +2091,21 @@ func (r *rpcServer) ClosedChannels(ctx context.Context,
 
 func (r *rpcServer) PrunedChannels(ctx context.Context,
 	in *lnrpc.PrunedChannelsRequest) (*lnrpc.PrunedChannelsResponse, error) {
+	rpcsLog.Infof("PrunedChannels from: %d to %d", in.BeginHeight, in.EndHeight)
 	graph := r.server.chanDB.ChannelGraph()
-	cei, err := graph.PrunedEdges(in.BeginHeight, in.EndHeight)
+	ces, err := graph.PrunedEdges(in.BeginHeight, in.EndHeight)
 	if err != nil {
 		return &lnrpc.PrunedChannelsResponse{}, err
 	}
 	var resp lnrpc.PrunedChannelsResponse
-	for bi, ces := range cei {
-		for _, ce := range ces {
-			resp.Channels = append(resp.Channels, &lnrpc.PrunedChannel{
-				ClosedHeight: bi,
-				ChanId:       ce.ChannelID,
-				Capacity:     int64(ce.Capacity),
-				ChannelPoint: ce.ChannelPoint.String(),
-			})
-		}
+
+	for _, ce := range ces {
+		resp.Channels = append(resp.Channels, &lnrpc.PrunedChannel{
+			ClosedHeight: ce.Height,
+			ChanId:       ce.Edge.ChannelID,
+			Capacity:     int64(ce.Edge.Capacity),
+			ChannelPoint: ce.Edge.ChannelPoint.String(),
+		})
 	}
 	return &resp, nil
 }
