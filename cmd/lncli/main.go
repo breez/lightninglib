@@ -14,10 +14,10 @@ import (
 
 	macaroon "gopkg.in/macaroon.v2"
 
+	"github.com/breez/lightninglib/build"
 	"github.com/breez/lightninglib/lncfg"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/macaroons"
-	"github.com/breez/lightninglib/build"
 	"github.com/btcsuite/btcutil"
 	"github.com/urfave/cli"
 
@@ -285,6 +285,7 @@ func main() {
 		listInvoicesCommand,
 		listChannelsCommand,
 		closedChannelsCommand,
+		prunedChannelsCommand,
 		listPaymentsCommand,
 		describeGraphCommand,
 		getChanInfoCommand,

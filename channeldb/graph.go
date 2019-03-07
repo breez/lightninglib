@@ -91,6 +91,11 @@ var (
 	// maps: chanID -> pubKey1 || pubKey2 || restofEdgeInfo
 	edgeIndexBucket = []byte("edge-index")
 
+	// prunedEdgeIndexBucket has the same format as edgeIndexBucket.
+	// When an edged is pruned from edgeIndexBucket, it's written in
+	// prunedEdgeIndexBucket if the corresponding flag is set.
+	prunedEdgeIndexBucket = []byte("pruned-edge-index")
+
 	// edgeUpdateIndexBucket is a sub-bucket of the main edgeBucket. This
 	// bucket contains an index which allows us to gauge the "freshness" of
 	// a channel's last updates.
@@ -681,6 +686,65 @@ const (
 	pruneTipBytes = 32
 )
 
+func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (
+	chansClosed []struct {
+		Height uint32
+		Edge   *ChannelEdgeInfo
+	},
+	err error) {
+	var b1, b2 bytes.Buffer
+	if err = binary.Write(&b1, byteOrder, beginHeight); err != nil {
+		return
+	}
+	if endHeight == 0 {
+		endHeight = math.MaxUint32
+	}
+	if err = binary.Write(&b2, byteOrder, endHeight); err != nil {
+		return
+	}
+	beginIndex := b1.Bytes()
+	endIndex := b2.Bytes()
+
+	err = c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return ErrGraphNotFound
+		}
+		prunedEdgeIndex := edges.Bucket(prunedEdgeIndexBucket)
+		if prunedEdgeIndex == nil {
+			return ErrChannelNotFound
+		}
+		c := prunedEdgeIndex.Cursor()
+		for blockIndex, v1 := c.Seek(beginIndex); blockIndex != nil && bytes.Compare(blockIndex, endIndex) <= 0; blockIndex, v1 = c.Next() {
+			if v1 == nil {
+				prunedEdgeIndexSub := prunedEdgeIndex.Bucket(blockIndex)
+				buf := bytes.NewReader(blockIndex)
+				var bi uint32
+				err := binary.Read(buf, byteOrder, &bi)
+				if err != nil {
+					return err
+				}
+				//var closed []*ChannelEdgeInfo
+				c2 := prunedEdgeIndexSub.Cursor()
+				for chanID, edgeInfoBytes := c2.First(); chanID != nil; chanID, edgeInfoBytes = c2.Next() {
+					edgeInfoReader := bytes.NewReader(edgeInfoBytes)
+					edgeInfo, err := deserializeChanEdgeInfo(edgeInfoReader)
+					if err != nil {
+						return err
+					}
+
+					chansClosed = append(chansClosed, struct {
+						Height uint32
+						Edge   *ChannelEdgeInfo
+					}{Height: bi, Edge: &edgeInfo})
+				}
+			}
+		}
+		return nil
+	})
+	return chansClosed, err
+}
+
 // PruneGraph prunes newly closed channels from the channel graph in response
 // to a new block being solved on the network. Any transactions which spend the
 // funding output of any known channels within he graph will be deleted.
@@ -689,7 +753,7 @@ const (
 // with the current UTXO state. A slice of channels that have been closed by
 // the target block are returned if the function succeeds without error.
 func (c *ChannelGraph) PruneGraph(spentOutputs []*wire.OutPoint,
-	blockHash *chainhash.Hash, blockHeight uint32) ([]*ChannelEdgeInfo, error) {
+	blockHash *chainhash.Hash, blockHeight uint32, savePruned bool) ([]*ChannelEdgeInfo, error) {
 
 	var chansClosed []*ChannelEdgeInfo
 
@@ -710,6 +774,22 @@ func (c *ChannelGraph) PruneGraph(spentOutputs []*wire.OutPoint,
 		if err != nil {
 			return err
 		}
+		var prunedEdgeIndexSub *bbolt.Bucket
+		if savePruned {
+			prunedEdgeIndex, err := edges.CreateBucketIfNotExists(prunedEdgeIndexBucket)
+			if err != nil {
+				return err
+			}
+			var b bytes.Buffer
+			if err := binary.Write(&b, byteOrder, blockHeight); err != nil {
+				return err
+			}
+			prunedEdgeIndexSub, err = prunedEdgeIndex.CreateBucketIfNotExists(b.Bytes())
+			if err != nil {
+				return err
+			}
+		}
+
 		nodes := tx.Bucket(nodeBucket)
 		if nodes == nil {
 			return ErrSourceNodeNotSet
@@ -737,7 +817,18 @@ func (c *ChannelGraph) PruneGraph(spentOutputs []*wire.OutPoint,
 			// However, if it does, then we'll read out the full
 			// version so we can add it to the set of deleted
 			// channels.
-			edgeInfo, err := fetchChanEdgeInfo(edgeIndex, chanID)
+			edgeInfoBytes := edgeIndex.Get(chanID)
+			if edgeInfoBytes == nil {
+				return ErrEdgeNotFound
+			}
+			if savePruned {
+				err = prunedEdgeIndexSub.Put(chanID, edgeInfoBytes)
+				if err != nil {
+					return err
+				}
+			}
+			edgeInfoReader := bytes.NewReader(edgeInfoBytes)
+			edgeInfo, err := deserializeChanEdgeInfo(edgeInfoReader)
 			if err != nil {
 				return err
 			}
