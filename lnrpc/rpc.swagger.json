@@ -959,6 +959,39 @@
         ]
       }
     },
+    "/v1/prunedchannels": {
+      "get": {
+        "summary": "* lncli: `prunedchannels`\nPrunedChannels returns the list of pruned channel from the LN graph.",
+        "operationId": "PrunedChannels",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/lnrpcPrunedChannelsResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "begin_height",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int64"
+          },
+          {
+            "name": "end_height",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/subswapclientinit": {
       "get": {
         "summary": "* lncli: `subswapclientinit`",
@@ -1450,6 +1483,9 @@
           "description": "*\nThe \"add\" index of this invoice. Each newly created invoice will increment\nthis index making it monotonically increasing. Callers to the\nSubscribeInvoices call can use this to instantly get notified of all added\ninvoices with an add_index greater than this one."
         }
       }
+    },
+    "lnrpcBackupEventUpdate": {
+      "type": "object"
     },
     "lnrpcChangePasswordRequest": {
       "type": "object",
@@ -2876,6 +2912,37 @@
     },
     "lnrpcPolicyUpdateResponse": {
       "type": "object"
+    },
+    "lnrpcPrunedChannel": {
+      "type": "object",
+      "properties": {
+        "closed_height": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "chan_id": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "capacity": {
+          "type": "string",
+          "format": "int64"
+        },
+        "channel_point": {
+          "type": "string"
+        }
+      }
+    },
+    "lnrpcPrunedChannelsResponse": {
+      "type": "object",
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/lnrpcPrunedChannel"
+          }
+        }
+      }
     },
     "lnrpcQueryRoutesResponse": {
       "type": "object",
