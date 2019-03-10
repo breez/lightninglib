@@ -31,6 +31,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lightninglabs/neutrino v0.0.0-20190115022559-351f5f06c6af
 	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
+	github.com/lightningnetwork/lnd/queue v1.0.0
 	github.com/ltcsuite/ltcd v0.0.0-20190101042124-f37f8bf35796
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
 	github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af // indirect

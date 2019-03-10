@@ -261,6 +261,10 @@ var (
 			Entity: "offchain",
 			Action: "read",
 		}},
+		"/lnrpc.Lightning/SubscribeBackupEvents": {{
+			Entity: "offchain",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/SendPayment": {{
 			Entity: "offchain",
 			Action: "write",
@@ -4663,4 +4667,31 @@ func (r *rpcServer) ForwardingHistory(ctx context.Context,
 	}
 
 	return resp, nil
+}
+
+// SubscribeChannelEvents returns a uni-directional stream (server -> client)
+// for notifying the client of newly active, inactive or closed channels.
+func (r *rpcServer) SubscribeBackupEvents(req *lnrpc.BackupEventSubscription,
+	updateStream lnrpc.Lightning_SubscribeBackupEventsServer) error {
+
+	backupEventSub, err := r.server.backupNotifier.SubscribeBackupEvents()
+	if err != nil {
+		return err
+	}
+
+	// Ensure that the resources for the client is cleaned up once either
+	// the server, or client exits.
+	defer backupEventSub.Cancel()
+
+	for {
+		select {
+		// A new backup event was sent
+		case _ = <-backupEventSub.Updates():
+			if err := updateStream.Send(&lnrpc.BackupEventUpdate{}); err != nil {
+				return err
+			}
+		case <-r.quit:
+			return nil
+		}
+	}
 }

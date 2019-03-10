@@ -112,6 +112,8 @@ type server struct {
 	mu         sync.RWMutex
 	peersByPub map[string]*peer
 
+	backupNotifier *BackupNotifier
+
 	inboundPeers  map[string]*peer
 	outboundPeers map[string]*peer
 
@@ -275,6 +277,8 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 		// TODO(roasbeef): derive proper onion key based on rotation
 		// schedule
 		sphinx: htlcswitch.NewOnionProcessor(sphinxRouter),
+
+		backupNotifier: NewBackupNotifier(),
 
 		persistentPeers:         make(map[string]struct{}),
 		persistentPeersBackoff:  make(map[string]time.Duration),
@@ -990,6 +994,11 @@ func (s *server) Start() error {
 		return err
 	}
 	cleanup = cleanup.add(s.cc.chainNotifier.Stop)
+	if err := s.backupNotifier.Start(); err != nil {
+		cleanup.run()
+		return err
+	}
+	cleanup = cleanup.add(s.backupNotifier.Stop)
 	if err := s.sphinx.Start(); err != nil {
 		cleanup.run()
 		return err
@@ -1100,6 +1109,7 @@ func (s *server) Stop() error {
 	// Shutdown the wallet, funding manager, and the rpc server.
 	s.sigPool.Stop()
 	s.cc.chainNotifier.Stop()
+	s.backupNotifier.Stop()
 	s.chanRouter.Stop()
 	s.htlcSwitch.Stop()
 	s.sphinx.Stop()
