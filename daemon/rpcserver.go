@@ -261,6 +261,10 @@ var (
 			Entity: "offchain",
 			Action: "read",
 		}},
+		"/lnrpc.Lightning/SubscribeBackupEvents": {{
+			Entity: "offchain",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/SendPayment": {{
 			Entity: "offchain",
 			Action: "write",
