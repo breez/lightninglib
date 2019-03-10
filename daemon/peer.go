@@ -562,6 +562,9 @@ func (p *peer) addLink(chanPoint *wire.OutPoint,
 				*chanPoint, signals,
 			)
 		},
+		OnCommitmentRevoked: func() {
+			p.server.backupNotifier.NotifyBackupEvent()
+		},
 		OnChannelFailure:    onChannelFailure,
 		SyncStates:          syncStates,
 		BatchTicker:         ticker.New(50 * time.Millisecond),
