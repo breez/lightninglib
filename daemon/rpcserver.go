@@ -1845,11 +1845,13 @@ func (r *rpcServer) PendingChannels(ctx context.Context,
 
 		resp.PendingOpenChannels[i] = &lnrpc.PendingChannelsResponse_PendingOpenChannel{
 			Channel: &lnrpc.PendingChannelsResponse_PendingChannel{
-				RemoteNodePub: hex.EncodeToString(pub),
-				ChannelPoint:  pendingChan.FundingOutpoint.String(),
-				Capacity:      int64(pendingChan.Capacity),
-				LocalBalance:  int64(localCommitment.LocalBalance.ToSatoshis()),
-				RemoteBalance: int64(localCommitment.RemoteBalance.ToSatoshis()),
+				RemoteNodePub:     hex.EncodeToString(pub),
+				ChannelPoint:      pendingChan.FundingOutpoint.String(),
+				Capacity:          int64(pendingChan.Capacity),
+				LocalBalance:      int64(localCommitment.LocalBalance.ToSatoshis()),
+				RemoteBalance:     int64(localCommitment.RemoteBalance.ToSatoshis()),
+				LocalChanReserve:  int64(pendingChan.LocalChanCfg.ChanReserve),
+				RemoteChanReserve: int64(pendingChan.RemoteChanCfg.ChanReserve),
 			},
 			CommitWeight: commitWeight,
 			CommitFee:    int64(localCommitment.CommitFee),

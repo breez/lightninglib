@@ -1424,6 +1424,14 @@ message PendingChannelsResponse {
 
         int64 local_balance = 4 [ json_name = "local_balance" ];
         int64 remote_balance = 5 [ json_name = "remote_balance" ];
+
+        /// This minimum satoshies this node is required to reseve in 
+        /// its balance
+        int64 local_chan_reserve = 6 [json_name = "local_chan_reserve"];
+
+        /// This minimum satoshies the other node is required to reseve in 
+        /// its balance
+        int64 remote_chan_reserve = 7 [json_name = "remote_chan_reserve"];
     }
 
     message PendingOpenChannel {
