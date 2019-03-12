@@ -749,6 +749,28 @@ func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (
 	return chansClosed, err
 }
 
+func (c *ChannelGraph) LastImportedClosedChanIDs() (uint, error) {
+	var last uint
+	err := c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return nil
+		}
+		closed := edges.Bucket(closedBucket)
+		if closed == nil {
+			return nil
+		}
+		lastB := closed.Get(lastImportedKey)
+		if lastB == nil {
+			return nil
+		}
+		r := bytes.NewReader(lastB)
+		err := binary.Read(r, byteOrder, &last)
+		return err
+	})
+	return last, err
+}
+
 func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 	file uint) ([]*ChannelEdgeInfo, error) {
 
