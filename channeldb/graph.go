@@ -824,11 +824,7 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 			return err
 		}
 		closed.Put(lastImportedKey, b.Bytes())
-
-		// Now that the graph has been pruned, we'll also attempt to
-		// prune any nodes that have had a channel closed within the
-		// latest block.
-		return c.pruneGraphNodes(nodes, edgeIndex)
+		return nil
 	})
 	if err != nil {
 		return nil, err
