@@ -131,6 +131,10 @@ var (
 
 	edgeBloomKey = []byte("edge-bloom")
 	nodeBloomKey = []byte("node-bloom")
+
+	closedBucket      = []byte("closed")
+	lastImportedKey   = []byte("last-imported-file")
+	closedIndexBucket = []byte("closed-index")
 )
 
 const (
@@ -743,6 +747,94 @@ func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (
 		return nil
 	})
 	return chansClosed, err
+}
+
+func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
+	file uint) ([]*ChannelEdgeInfo, error) {
+
+	if len(chanIDs)%8 != 0 {
+		return nil, fmt.Errorf("Bad file")
+	}
+
+	var chansClosed []*ChannelEdgeInfo
+
+	err := c.db.Update(func(tx *bbolt.Tx) error {
+
+		// First grab the edges bucket which houses the information
+		// we'd like to delete
+		edges, err := tx.CreateBucketIfNotExists(edgeBucket)
+		if err != nil {
+			return err
+		}
+
+		// Next grab the two edge indexes which will also need to be updated.
+		edgeIndex, err := edges.CreateBucketIfNotExists(edgeIndexBucket)
+		if err != nil {
+			return err
+		}
+		chanIndex, err := edges.CreateBucketIfNotExists(channelPointBucket)
+		if err != nil {
+			return err
+		}
+		closed, err := edges.CreateBucketIfNotExists(closedBucket)
+		if err != nil {
+			return err
+		}
+		closedIndex, err := closed.CreateBucketIfNotExists(closedIndexBucket)
+		if err != nil {
+			return err
+		}
+		nodes := tx.Bucket(nodeBucket)
+		if nodes == nil {
+			return ErrSourceNodeNotSet
+		}
+
+		for i := 0; i < len(chanIDs); i += 8 {
+			chanID := chanIDs[i : i+8]
+
+			closedIndex.Put(chanID, []byte{})
+
+			edgeInfoBytes := edgeIndex.Get(chanID)
+			if edgeInfoBytes == nil {
+				return ErrEdgeNotFound
+			}
+
+			edgeInfoReader := bytes.NewReader(edgeInfoBytes)
+			edgeInfo, err := deserializeChanEdgeInfo(edgeInfoReader)
+			if err != nil {
+				return err
+			}
+
+			// Attempt to delete the channel, an ErrEdgeNotFound
+			// will be returned if that outpoint isn't known to be
+			// a channel. If no error is returned, then a channel
+			// was successfully pruned.
+			err = delChannelByEdge(
+				edges, edgeIndex, chanIndex, nodes, &edgeInfo.ChannelPoint,
+			)
+			if err != nil && err != ErrEdgeNotFound {
+				return err
+			}
+
+			chansClosed = append(chansClosed, &edgeInfo)
+		}
+
+		var b bytes.Buffer
+		if err := binary.Write(&b, byteOrder, file); err != nil {
+			return err
+		}
+		closed.Put(lastImportedKey, b.Bytes())
+
+		// Now that the graph has been pruned, we'll also attempt to
+		// prune any nodes that have had a channel closed within the
+		// latest block.
+		return c.pruneGraphNodes(nodes, edgeIndex)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return chansClosed, nil
 }
 
 // PruneGraph prunes newly closed channels from the channel graph in response
