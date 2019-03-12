@@ -796,7 +796,7 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 
 			edgeInfoBytes := edgeIndex.Get(chanID)
 			if edgeInfoBytes == nil {
-				return ErrEdgeNotFound
+				continue
 			}
 
 			edgeInfoReader := bytes.NewReader(edgeInfoBytes)
