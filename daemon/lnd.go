@@ -109,6 +109,7 @@ type Dependencies interface {
 	ReadyChan() chan interface{}
 	LogPipeWriter() *io.PipeWriter
 	ChainService() *neutrino.ChainService
+	ChanDB() *channeldb.DB
 }
 
 // LndMain is the true entry point for lnd. This function is required since
@@ -118,11 +119,13 @@ func LndMain(args []string, deps Dependencies) error {
 
 	var readyChan chan interface{}
 	var chainService *neutrino.ChainService
+	var chanDB *channeldb.DB
 
 	if deps != nil {
 		readyChan = deps.ReadyChan()
 		chainService = deps.ChainService()
 		logWriter.RotatorPipe = deps.LogPipeWriter()
+		chanDB = deps.ChanDB()
 	}
 
 	//Start the signal that is responsible for shutdown
@@ -197,14 +200,16 @@ func LndMain(args []string, deps Dependencies) error {
 		defaultGraphSubDirname,
 		normalizeNetwork(activeNetParams.Name))
 
-	// Open the channeldb, which is dedicated to storing channel, and
-	// network related metadata.
-	chanDB, err := channeldb.Open(graphDir)
-	if err != nil {
-		ltndLog.Errorf("unable to open channeldb: %v", err)
-		return err
+	if chanDB == nil {
+		// Open the channeldb, which is dedicated to storing channel, and
+		// network related metadata.
+		chanDB, err = channeldb.Open(graphDir)
+		if err != nil {
+			ltndLog.Errorf("unable to open channeldb: %v", err)
+			return err
+		}
+		defer chanDB.Close()
 	}
-	defer chanDB.Close()
 
 	// Only process macaroons if --no-macaroons isn't set.
 	ctx := context.Background()
