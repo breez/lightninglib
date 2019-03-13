@@ -749,8 +749,8 @@ func (c *ChannelGraph) PrunedEdges(beginHeight, endHeight uint32) (
 	return chansClosed, err
 }
 
-func (c *ChannelGraph) LastImportedClosedChanIDs() (uint, error) {
-	var last uint
+func (c *ChannelGraph) LastImportedClosedChanIDs() (uint64, error) {
+	var last uint64
 	err := c.db.View(func(tx *bbolt.Tx) error {
 		edges := tx.Bucket(edgeBucket)
 		if edges == nil {
@@ -772,7 +772,7 @@ func (c *ChannelGraph) LastImportedClosedChanIDs() (uint, error) {
 }
 
 func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
-	file uint) ([]*ChannelEdgeInfo, error) {
+	file uint64) ([]*ChannelEdgeInfo, error) {
 
 	if len(chanIDs)%8 != 0 {
 		return nil, fmt.Errorf("Bad file")
@@ -841,6 +841,7 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 			chansClosed = append(chansClosed, &edgeInfo)
 		}
 
+		log.Infof("Closed %v channels", len(chansClosed))
 		var b bytes.Buffer
 		if err := binary.Write(&b, byteOrder, file); err != nil {
 			return err
