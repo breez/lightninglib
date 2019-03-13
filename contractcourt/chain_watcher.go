@@ -405,7 +405,7 @@ func (c *chainWatcher) closeObserver(spendNtfn *chainntnfs.SpendEvent) {
 		// actually greater than even one beyond our best known state
 		// number. This should ONLY happen in case we experienced some
 		// sort of data loss.
-		case broadcastStateNum > remoteStateNum+1:
+		case broadcastStateNum > remoteStateNum:
 			log.Warnf("Remote node broadcast state #%v, "+
 				"which is more than 1 beyond best known "+
 				"state #%v!!! Attempting recovery...",
