@@ -771,6 +771,32 @@ func (c *ChannelGraph) LastImportedClosedChanIDs() (uint64, error) {
 	return last, err
 }
 
+func (c *ChannelGraph) IsClosedChannel(chanID uint64) (bool, error) {
+	isClosed := false
+	var b bytes.Buffer
+	binary.Write(&b, byteOrder, chanID)
+	cid := b.Bytes()
+	err := c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return nil
+		}
+		closed := edges.Bucket(closedBucket)
+		if closed == nil {
+			return nil
+		}
+		closedIndex := closed.Bucket(closedIndexBucket)
+		if closedIndex == nil {
+			return nil
+		}
+		if closedIndex.Get(cid) != nil {
+			isClosed = true
+		}
+		return nil
+	})
+	return isClosed, err
+}
+
 func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 	file uint64) ([]*ChannelEdgeInfo, error) {
 

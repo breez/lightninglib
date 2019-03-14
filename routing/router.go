@@ -981,6 +981,14 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		}
 		r.rejectMtx.RUnlock()
 
+		if r.cfg.AssumeChannelValid && r.cfg.Graph.IsClosedChannel(msg.ChannelID) {
+			r.rejectMtx.Lock()
+			r.rejectCache[msg.ChannelID] = struct{}{}
+			r.rejectMtx.Unlock()
+			return newErrf(ErrIgnored, "Ignoring msg for closed "+
+				"chan_id=%v", msg.ChannelID)
+		}
+
 		// Prior to processing the announcement we first check if we
 		// already know of this channel, if so, then we can exit early.
 		_, _, exists, err := r.cfg.Graph.HasChannelEdge(msg.ChannelID)
