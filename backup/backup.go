@@ -1,9 +1,12 @@
 package backup
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -31,40 +34,64 @@ var (
 	nodeBucket         = []byte("graph-node")
 )
 
+type backupResult struct {
+	path string
+	err  error
+}
+
 func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
 
+	fmt.Println("Backup started at: ", time.Now())
 	dir, err := ioutil.TempDir("", "backup")
 	if err != nil {
 		return nil, err
 	}
+	channeldbPath, walletdbPath := filepath.Join(dir, "channel.db"), filepath.Join(dir, "wallet.db")
+	var walletdbErr, channeldbErr error
 
-	walletCopy, err := walletdbCopy(dir, walletDB)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		channeldbErr = backupChanneldb(channelDB, channeldbPath)
+	}()
+
+	go func() {
+		defer wg.Done()
+		walletdbErr = backupWalletdb(chainParams, walletDB, walletdbPath)
+	}()
+	wg.Wait()
+
+	fmt.Println("Backup completed at: ", time.Now())
+	err = walletdbErr
+	if channeldbErr != nil {
+		err = channeldbErr
+	}
+	return []string{channeldbPath, walletdbPath}, err
+}
+
+func backupWalletdb(chainParams *chaincfg.Params, walletDB walletdb.DB, destFile string) error {
+	walletCopy, err := walletdbCopy(filepath.Dir(destFile), walletDB)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = dropSyncedBlock(chainParams, walletCopy)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	walletdbPath := filepath.Join(dir, "wallet.db")
-	err = boltCopy(walletCopy, walletdbPath, nil)
+	err = boltCopy(walletCopy, destFile, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
+
 	err = os.Remove(walletCopy)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	channeldbPath := filepath.Join(dir, "channel.db")
-	err = channeldbCopy(channelDB, channeldbPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return []string{walletdbPath, channeldbPath}, nil
+	return nil
 }
 
 func dropSyncedBlock(chainParams *chaincfg.Params, wallet string) error {
@@ -129,7 +156,7 @@ func walletdbCopy(dir string, walletDB walletdb.DB) (string, error) {
 	return walletCopy, nil
 }
 
-func channeldbCopy(channelDB *channeldb.DB, destfile string) error {
+func backupChanneldb(channelDB *channeldb.DB, destfile string) error {
 	// Open destination database.
 	dst, err := bolt.Open(destfile, 0600, nil)
 	if err != nil {
