@@ -838,13 +838,15 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 
 			closedIndex.Put(chanID, []byte{})
 
-			err = delChannelByChanID(
-				edges, edgeIndex, nodes, chanID,
-			)
-			if err != nil && err != ErrEdgeNotFound {
-				return err
+			if e := edgeIndex.Get(chanID); e != nil {
+				err = delChannelByChanID(
+					edges, edgeIndex, nodes, chanID,
+				)
+				if err != nil && err != ErrEdgeNotFound {
+					return err
+				}
+				pruned++
 			}
-			pruned++
 		}
 
 		log.Infof("Closed %v channels", pruned)
