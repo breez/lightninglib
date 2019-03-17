@@ -798,13 +798,13 @@ func (c *ChannelGraph) IsClosedChannel(chanID uint64) (bool, error) {
 }
 
 func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
-	file uint64) ([]*ChannelEdgeInfo, error) {
+	file uint64) (int, error) {
 
 	if len(chanIDs)%8 != 0 {
-		return nil, fmt.Errorf("Bad file")
+		return 0, fmt.Errorf("Bad file")
 	}
 
-	var chansClosed []*ChannelEdgeInfo
+	pruned := 0
 
 	err := c.db.Update(func(tx *bbolt.Tx) error {
 
@@ -817,10 +817,6 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 
 		// Next grab the two edge indexes which will also need to be updated.
 		edgeIndex, err := edges.CreateBucketIfNotExists(edgeIndexBucket)
-		if err != nil {
-			return err
-		}
-		chanIndex, err := edges.CreateBucketIfNotExists(channelPointBucket)
 		if err != nil {
 			return err
 		}
@@ -842,32 +838,16 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 
 			closedIndex.Put(chanID, []byte{})
 
-			edgeInfoBytes := edgeIndex.Get(chanID)
-			if edgeInfoBytes == nil {
-				continue
-			}
-
-			edgeInfoReader := bytes.NewReader(edgeInfoBytes)
-			edgeInfo, err := deserializeChanEdgeInfo(edgeInfoReader)
-			if err != nil {
-				return err
-			}
-
-			// Attempt to delete the channel, an ErrEdgeNotFound
-			// will be returned if that outpoint isn't known to be
-			// a channel. If no error is returned, then a channel
-			// was successfully pruned.
-			err = delChannelByEdge(
-				edges, edgeIndex, chanIndex, nodes, &edgeInfo.ChannelPoint,
+			err = delChannelByChanID(
+				edges, edgeIndex, nodes, chanID,
 			)
 			if err != nil && err != ErrEdgeNotFound {
 				return err
 			}
-
-			chansClosed = append(chansClosed, &edgeInfo)
+			pruned++
 		}
 
-		log.Infof("Closed %v channels", len(chansClosed))
+		log.Infof("Closed %v channels", pruned)
 		var b bytes.Buffer
 		if err := binary.Write(&b, byteOrder, file); err != nil {
 			return err
@@ -876,10 +856,10 @@ func (c *ChannelGraph) PruneClosedChannels(chanIDs []byte,
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return chansClosed, nil
+	return pruned, nil
 }
 
 // PruneGraph prunes newly closed channels from the channel graph in response
@@ -1791,7 +1771,7 @@ func delEdgeUpdateIndexEntry(edgesBucket *bbolt.Bucket, chanID uint64,
 	return nil
 }
 
-func delChannelByEdge(edges *bbolt.Bucket, edgeIndex *bbolt.Bucket,
+func delChannelByEdge(edges *bbolt.Bucket, edgesIndex *bbolt.Bucket,
 	chanIndex *bbolt.Bucket, nodes *bbolt.Bucket, chanPoint *wire.OutPoint) error {
 	var b bytes.Buffer
 	if err := writeOutpoint(&b, chanPoint); err != nil {
@@ -1804,8 +1784,17 @@ func delChannelByEdge(edges *bbolt.Bucket, edgeIndex *bbolt.Bucket,
 	if chanID == nil {
 		return ErrEdgeNotFound
 	}
+	if err := delChannelByChanID(edges, edges, nodes, chanID); err != nil {
+		return err
+	}
 
-	// Otherwise we obtain the two public keys from the mapping: chanID ->
+	return chanIndex.Delete(b.Bytes())
+}
+
+func delChannelByChanID(edges *bbolt.Bucket, edgeIndex *bbolt.Bucket,
+	nodes *bbolt.Bucket, chanID []byte) error {
+
+	// We obtain the two public keys from the mapping: chanID ->
 	// pubKey1 || pubKey2. With this, we can construct the keys which house
 	// both of the directed edges for this channel.
 	nodeKeys := edgeIndex.Get(chanID)
@@ -1852,10 +1841,7 @@ func delChannelByEdge(edges *bbolt.Bucket, edgeIndex *bbolt.Bucket,
 
 	// Finally, with the edge data deleted, we can purge the information
 	// from the two edge indexes.
-	if err := edgeIndex.Delete(chanID); err != nil {
-		return err
-	}
-	return chanIndex.Delete(b.Bytes())
+	return edgeIndex.Delete(chanID)
 }
 
 // UpdateEdgePolicy updates the edge routing policy for a single directed edge
