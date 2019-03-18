@@ -1786,7 +1786,7 @@ func delChannelByEdge(edges *bbolt.Bucket, edgesIndex *bbolt.Bucket,
 	if chanID == nil {
 		return ErrEdgeNotFound
 	}
-	if err := delChannelByChanID(edges, edges, nodes, chanID); err != nil {
+	if err := delChannelByChanID(edges, edgesIndex, nodes, chanID); err != nil {
 		return err
 	}
 
