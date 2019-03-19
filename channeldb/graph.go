@@ -1307,6 +1307,48 @@ func (c *ChannelGraph) DeleteChannelEdge(chanPoint *wire.OutPoint) error {
 	})
 }
 
+// DeleteChannelEdgeByID removes an edge from the database as identified by its
+// channel id. If the edge does not exist within the database, then
+// ErrEdgeNotFound will be returned.
+func (c *ChannelGraph) DeleteChannelEdgeByID(chanID uint64) error {
+	// TODO(roasbeef): possibly delete from node bucket if node has no more
+	// channels
+	// TODO(roasbeef): don't delete both edges?
+
+	var chanIDBytes [8]byte
+	byteOrder.PutUint64(chanIDBytes[:], chanID)
+
+	return c.db.Update(func(tx *bbolt.Tx) error {
+		// First grab the edges bucket which houses the information
+		// we'd like to delete
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return ErrEdgeNotFound
+		}
+
+		// Next grab the two edge indexes which will also need to be
+		// updated.
+		edgeIndex := edges.Bucket(edgeIndexBucket)
+		if edgeIndex == nil {
+			return ErrEdgeNotFound
+		}
+
+		chanIndex := edges.Bucket(channelPointBucket)
+		if chanIndex == nil {
+			return ErrEdgeNotFound
+		}
+
+		nodes := tx.Bucket(nodeBucket)
+		if nodes == nil {
+			return ErrGraphNodeNotFound
+		}
+
+		return delChannelByChanID(
+			edges, edgeIndex, nodes, chanIDBytes[:],
+		)
+	})
+}
+
 // ChannelID attempt to lookup the 8-byte compact channel ID which maps to the
 // passed channel point (outpoint). If the passed channel doesn't exist within
 // the database, then ErrEdgeNotFound is returned.
