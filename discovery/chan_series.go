@@ -16,6 +16,14 @@ import (
 // this interface to determine if we're already in sync, or need to request
 // some new information from them.
 type ChannelGraphTimeSeries interface {
+
+	// LastUpdateTimestamp returns the timestamp of the most recent channel
+	// update message that was received.
+	// we will use this to set the start time of the gossip timestamp range
+	// in order to make sure we do our best effort to pick up messages from
+	// the point we stopped.
+	LastUpdateTimestamp() time.Time
+
 	// HighestChanID should return the channel ID of the channel we know of
 	// that's furthest in the target chain. This channel will have a block
 	// height that's close to the current tip of the main chain as we
@@ -74,6 +82,15 @@ func NewChanSeries(graph *channeldb.ChannelGraph) *ChanSeries {
 	return &ChanSeries{
 		graph: graph,
 	}
+}
+
+// LastUpdateTimestamp returns the timestamp of the most recent channel
+// update message that was received.
+// we will use this to set the start time of the gossip timestamp range
+// in order to make sure we do our best effort to pick up messages from
+// the point we stopped.
+func (c *ChanSeries) LastUpdateTimestamp() time.Time {
+	return c.graph.LastChanUpdateTimestamp()
 }
 
 // HighestChanID should return is the channel ID of the channel we know of
