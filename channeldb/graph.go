@@ -1443,6 +1443,37 @@ type ChannelEdge struct {
 	Policy2 *ChannelEdgePolicy
 }
 
+// LastChanUpdateTimestamp returns the timestamp of the last channel updated
+func (c *ChannelGraph) LastChanUpdateTimestamp() time.Time {
+	lastUpdateTime := time.Unix(0, 0)
+	c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return nil
+		}
+		edgeIndex := edges.Bucket(edgeIndexBucket)
+		if edgeIndex == nil {
+			return nil
+		}
+		edgeUpdateIndex := edges.Bucket(edgeUpdateIndexBucket)
+		if edgeUpdateIndex == nil {
+			return nil
+		}
+
+		updateCursor := edgeUpdateIndex.Cursor()
+
+		k, _ := updateCursor.Last()
+		if k == nil {
+			return nil
+		}
+
+		lastUpdateTime = time.Unix(int64(byteOrder.Uint64(k[:8])), 0)
+
+		return nil
+	})
+	return lastUpdateTime
+}
+
 // ChanUpdatesInHorizon returns all the known channel edges which have at least
 // one edge that has an update timestamp within the specified horizon.
 func (c *ChannelGraph) ChanUpdatesInHorizon(startTime, endTime time.Time) ([]ChannelEdge, error) {
