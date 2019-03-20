@@ -425,6 +425,12 @@ func (r *ChannelRouter) Start() error {
 	}
 
 	r.wg.Add(1)
+
+	// prune zombie chans before start
+	if err = r.pruneZombieChans(); err != nil {
+		return err
+	}
+
 	go r.networkHandler()
 
 	return nil
@@ -590,7 +596,7 @@ func (r *ChannelRouter) syncGraphWithChain() error {
 // been updated since our zombie horizon. We do this periodically to keep a
 // health, lively routing table.
 func (r *ChannelRouter) pruneZombieChans() error {
-	var chansToPrune []wire.OutPoint
+	var chansToPrune []*channeldb.ChannelEdgeInfo
 	chanExpiry := r.cfg.ChannelPruneExpiry
 
 	log.Infof("Examining Channel Graph for zombie channels")
@@ -635,7 +641,7 @@ func (r *ChannelRouter) pruneZombieChans() error {
 
 			// TODO(roasbeef): add ability to delete single
 			// directional edge
-			chansToPrune = append(chansToPrune, info.ChannelPoint)
+			chansToPrune = append(chansToPrune, info)
 
 			// As we're detecting this as a zombie channel, we'll
 			// add this to the set of recently rejected items so we
@@ -649,10 +655,15 @@ func (r *ChannelRouter) pruneZombieChans() error {
 	r.rejectMtx.Lock()
 	defer r.rejectMtx.Unlock()
 
-	err := r.cfg.Graph.ForEachChannel(filterPruneChans)
+	startTime := time.Unix(0, 0)
+	endTime := time.Now().Add(-1 * chanExpiry)
+	updates, err := r.cfg.Graph.ChanUpdatesInHorizon(startTime, endTime)
 	if err != nil {
 		return fmt.Errorf("Unable to filter local zombie "+
 			"chans: %v", err)
+	}
+	for _, u := range updates {
+		filterPruneChans(u.Info, u.Policy1, u.Policy2)
 	}
 
 	log.Infof("Pruning %v Zombie Channels", len(chansToPrune))
@@ -662,12 +673,20 @@ func (r *ChannelRouter) pruneZombieChans() error {
 	for _, chanToPrune := range chansToPrune {
 		log.Tracef("Pruning zombie chan ChannelPoint(%v)", chanToPrune)
 
-		err := r.cfg.Graph.DeleteChannelEdge(&chanToPrune)
+		var err error
+		if r.cfg.AssumeChannelValid {
+			err = r.cfg.Graph.DeleteChannelEdgeByID(chanToPrune.ChannelID)
+		} else {
+			err = r.cfg.Graph.DeleteChannelEdge(&chanToPrune.ChannelPoint)
+		}
+
 		if err != nil {
 			return fmt.Errorf("Unable to prune zombie "+
 				"chans: %v", err)
 		}
 	}
+
+	log.Infof("Pruning %v Zombie Channels finished", len(chansToPrune))
 
 	return nil
 }
