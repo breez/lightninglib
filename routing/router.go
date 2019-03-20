@@ -597,7 +597,8 @@ func (r *ChannelRouter) syncGraphWithChain() error {
 // health, lively routing table.
 func (r *ChannelRouter) pruneZombieChans() error {
 	var chansToPrune []*channeldb.ChannelEdgeInfo
-	chanExpiry := r.cfg.ChannelPruneExpiry
+	//chanExpiry := r.cfg.ChannelPruneExpiry
+	pruneTime := time.Date(2019, time.March, 6, 0, 0, 0, 0, time.UTC)
 
 	log.Infof("Examining Channel Graph for zombie channels")
 
@@ -620,7 +621,8 @@ func (r *ChannelRouter) pruneZombieChans() error {
 		// for graph pruning.
 		e1Zombie, e2Zombie := true, true
 		if e1 != nil {
-			e1Zombie = time.Since(e1.LastUpdate) >= chanExpiry
+			e1Zombie = e1.LastUpdate.Before(pruneTime)
+			//e1Zombie = time.Since(e1.LastUpdate) >= chanExpiry
 			if e1Zombie {
 				log.Tracef("Edge #1 of ChannelPoint(%v) "+
 					"last update: %v",
@@ -628,7 +630,8 @@ func (r *ChannelRouter) pruneZombieChans() error {
 			}
 		}
 		if e2 != nil {
-			e2Zombie = time.Since(e2.LastUpdate) >= chanExpiry
+			e2Zombie = e2.LastUpdate.Before(pruneTime)
+			//e2Zombie = time.Since(e2.LastUpdate) >= chanExpiry
 			if e2Zombie {
 				log.Tracef("Edge #2 of ChannelPoint(%v) "+
 					"last update: %v",
@@ -656,8 +659,8 @@ func (r *ChannelRouter) pruneZombieChans() error {
 	defer r.rejectMtx.Unlock()
 
 	startTime := time.Unix(0, 0)
-	endTime := time.Now().Add(-1 * chanExpiry)
-	updates, err := r.cfg.Graph.ChanUpdatesInHorizon(startTime, endTime)
+	//endTime := time.Now().Add(-1 * chanExpiry)
+	updates, err := r.cfg.Graph.ChanUpdatesInHorizon(startTime, pruneTime)
 	if err != nil {
 		return fmt.Errorf("Unable to filter local zombie "+
 			"chans: %v", err)
@@ -687,7 +690,6 @@ func (r *ChannelRouter) pruneZombieChans() error {
 	}
 
 	log.Infof("Pruning %v Zombie Channels finished", len(chansToPrune))
-
 	return nil
 }
 
