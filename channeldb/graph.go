@@ -1462,12 +1462,13 @@ func (c *ChannelGraph) LastChanUpdateTimestamp() time.Time {
 
 		updateCursor := edgeUpdateIndex.Cursor()
 
-		k, _ := updateCursor.Last()
-		if k == nil {
-			return nil
+		var nowBytes [8]byte
+		byteOrder.PutUint64(nowBytes[:], uint64(time.Now().Unix()))
+		updateCursor.Seek(nowBytes[:])
+		index, _ := updateCursor.Prev()
+		if index != nil {
+			lastUpdateTime = time.Unix(int64(byteOrder.Uint64(index[:8])), 0)
 		}
-
-		lastUpdateTime = time.Unix(int64(byteOrder.Uint64(k[:8])), 0)
 
 		return nil
 	})

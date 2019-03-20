@@ -20,11 +20,12 @@ import (
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/coreos/bbolt"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/coreos/bbolt"
 )
 
 var (
+	ii = 0
 	// messageStoreKey is a key used to create a top level bucket in
 	// the gossiper database, used for storing messages that are to
 	// be sent to peers. Currently this is used for reliably sending
@@ -1880,6 +1881,10 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 	// that the directional information for an already known channel has
 	// been updated.
 	case *lnwire.ChannelUpdate:
+		ii++
+		if ii%1000 == 0 {
+			fmt.Println("got %v chanupdates ", time.Now() ," - ", ii)
+		}
 		// We'll ignore any channel announcements that target any chain
 		// other than the set of chains we know of.
 		if !bytes.Equal(msg.ChainHash[:], d.cfg.ChainHash[:]) {
