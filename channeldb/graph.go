@@ -135,6 +135,8 @@ var (
 	closedBucket      = []byte("closed")
 	lastImportedKey   = []byte("last-imported-file")
 	closedIndexBucket = []byte("closed-index")
+
+	zeroChannelPoint [36]byte
 )
 
 const (
@@ -585,7 +587,11 @@ func (c *ChannelGraph) AddChannelEdge(edge *ChannelEdgeInfo) error {
 		if err := writeOutpoint(&b, &edge.ChannelPoint); err != nil {
 			return err
 		}
-		return chanIndex.Put(b.Bytes(), chanKey[:])
+		outBytes := b.Bytes()
+		if bytes.Compare(outBytes, zeroChannelPoint[:]) != 0 {
+			return chanIndex.Put(b.Bytes(), chanKey[:])
+		}
+		return nil
 	})
 }
 
@@ -2995,6 +3001,10 @@ func (c *ChannelGraph) ChannelView() ([]EdgePoint, error) {
 		// (which is the channel point for the channel) and decode it,
 		// accumulating each entry.
 		return chanIndex.ForEach(func(chanPointBytes, chanID []byte) error {
+			if bytes.Compare(zeroChannelPoint[:], chanPointBytes) == 0 {
+				return nil
+			}
+
 			chanPointReader := bytes.NewReader(chanPointBytes)
 
 			var chanPoint wire.OutPoint
