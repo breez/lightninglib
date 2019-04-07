@@ -3003,6 +3003,17 @@
       },
       "description": "*\nA path through the channel graph which runs over one or more channels in\nsuccession. This struct carries all the information required to craft the\nSphinx onion packet, and send the payment along the first hop in the path. A\nroute is only selected as valid if all the channels have sufficient capacity to\ncarry the initial payment amount after fees are accounted for."
     },
+    "lnrpcRouteError": {
+      "type": "object",
+      "properties": {
+        "payment_route": {
+          "$ref": "#/definitions/lnrpcRoute"
+        },
+        "payment_error": {
+          "type": "string"
+        }
+      }
+    },
     "lnrpcRouteHint": {
       "type": "object",
       "properties": {
@@ -3135,6 +3146,12 @@
         },
         "payment_route": {
           "$ref": "#/definitions/lnrpcRoute"
+        },
+        "failed_routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/lnrpcRouteError"
+          }
         }
       }
     },
