@@ -2047,13 +2047,15 @@ func sendPaymentRequest(client lnrpc.LightningClient, req *lnrpc.SendRequest) er
 	paymentStream.CloseSend()
 
 	printJSON(struct {
-		E string       `json:"payment_error"`
-		P string       `json:"payment_preimage"`
-		R *lnrpc.Route `json:"payment_route"`
+		E string              `json:"payment_error"`
+		P string              `json:"payment_preimage"`
+		R *lnrpc.Route        `json:"payment_route"`
+		F []*lnrpc.RouteError `json:"failed_routes"`
 	}{
 		E: resp.PaymentError,
 		P: hex.EncodeToString(resp.PaymentPreimage),
 		R: resp.PaymentRoute,
+		F: resp.FailedRoutes,
 	})
 
 	return nil
@@ -2259,13 +2261,15 @@ func sendToRouteRequest(ctx *cli.Context, req *lnrpc.SendToRouteRequest) error {
 	}
 
 	printJSON(struct {
-		E string       `json:"payment_error"`
-		P string       `json:"payment_preimage"`
-		R *lnrpc.Route `json:"payment_route"`
+		E string              `json:"payment_error"`
+		P string              `json:"payment_preimage"`
+		R *lnrpc.Route        `json:"payment_route"`
+		F []*lnrpc.RouteError `json:"failed_routes"`
 	}{
 		E: resp.PaymentError,
 		P: hex.EncodeToString(resp.PaymentPreimage),
 		R: resp.PaymentRoute,
+		F: resp.FailedRoutes,
 	})
 
 	return nil

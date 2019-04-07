@@ -2569,9 +2569,10 @@ func extractPaymentIntent(rpcPayReq *rpcPaymentRequest) (rpcPaymentIntent, error
 }
 
 type paymentIntentResponse struct {
-	Route    *routing.Route
-	Preimage [32]byte
-	Err      error
+	Route          *routing.Route
+	Preimage       [32]byte
+	FailedAttempts []*routing.FailedPaymentAttempt
+	Err            error
 }
 
 // dispatchPaymentIntent attempts to fully dispatch an RPC payment intent.
@@ -2586,9 +2587,10 @@ func (r *rpcServer) dispatchPaymentIntent(
 	// payment is successful, the route chosen will be returned. Otherwise,
 	// we'll get a non-nil error.
 	var (
-		preImage  [32]byte
-		route     *routing.Route
-		routerErr error
+		preImage     [32]byte
+		route        *routing.Route
+		routerErr    error
+		failedRoutes []*routing.FailedPaymentAttempt
 	)
 
 	// If a route was specified, then we'll pass the route directly to the
@@ -2608,7 +2610,7 @@ func (r *rpcServer) dispatchPaymentIntent(
 			payment.FinalCLTVDelta = &payIntent.cltvDelta
 		}
 
-		preImage, route, routerErr = r.server.chanRouter.SendPayment(
+		preImage, route, failedRoutes, routerErr = r.server.chanRouter.SendPayment(
 			payment,
 		)
 	} else {
@@ -2616,7 +2618,7 @@ func (r *rpcServer) dispatchPaymentIntent(
 			PaymentHash: payIntent.rHash,
 		}
 
-		preImage, route, routerErr = r.server.chanRouter.SendToRoute(
+		preImage, route, failedRoutes, routerErr = r.server.chanRouter.SendToRoute(
 			payIntent.routes, payment,
 		)
 	}
@@ -2625,7 +2627,8 @@ func (r *rpcServer) dispatchPaymentIntent(
 	// routing err.
 	if routerErr != nil {
 		return &paymentIntentResponse{
-			Err: routerErr,
+			FailedAttempts: failedRoutes,
+			Err:            routerErr,
 		}, nil
 	}
 
@@ -2651,6 +2654,14 @@ func (r *rpcServer) dispatchPaymentIntent(
 		Route:    route,
 		Preimage: preImage,
 	}, nil
+}
+
+func (r *rpcServer) marshalFaileRoutes(failedAttempts []*routing.FailedPaymentAttempt) []*lnrpc.RouteError {
+	failedRoutes := make([]*lnrpc.RouteError, len(failedAttempts))
+	for i, v := range failedAttempts {
+		failedRoutes[i] = &lnrpc.RouteError{PaymentRoute: r.marshallRoute(v.PaymentRoute), PaymentError: v.PaymentError.Error()}
+	}
+	return failedRoutes
 }
 
 // sendPayment takes a paymentStream (a source of pre-built routes or payment
@@ -2785,6 +2796,7 @@ func (r *rpcServer) sendPayment(stream *paymentStream) error {
 				case resp.Err != nil:
 					err := stream.send(&lnrpc.SendResponse{
 						PaymentError: resp.Err.Error(),
+						FailedRoutes: r.marshalFaileRoutes(resp.FailedAttempts),
 					})
 					if err != nil {
 						errChan <- err
@@ -2878,6 +2890,7 @@ func (r *rpcServer) sendPaymentSync(ctx context.Context,
 	case resp.Err != nil:
 		return &lnrpc.SendResponse{
 			PaymentError: resp.Err.Error(),
+			FailedRoutes: r.marshalFaileRoutes(resp.FailedAttempts),
 		}, nil
 	}
 
