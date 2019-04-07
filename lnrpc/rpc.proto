@@ -804,10 +804,17 @@ message SendRequest {
     */
     FeeLimit fee_limit = 8;
 }
+
+message RouteError {
+    Route payment_route = 1;
+    string payment_error = 2;
+}
+
 message SendResponse {
     string payment_error = 1 [json_name = "payment_error"];
     bytes payment_preimage = 2 [json_name = "payment_preimage"];
     Route payment_route = 3 [json_name = "payment_route"];
+    repeated RouteError failed_routes = 4 [json_name = "failed_routes"];
 }
 
 message SendToRouteRequest {

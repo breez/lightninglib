@@ -221,6 +221,13 @@ func newRouteTuple(amt lnwire.MilliSatoshi, dest []byte) routeTuple {
 	return r
 }
 
+// FailedPaymentAttempt reflects a failure attempt to send a payment through
+// a specific route. It is usefull to debug payment failures.
+type FailedPaymentAttempt struct {
+	PaymentRoute *Route
+	PaymentError error
+}
+
 // ChannelRouter is the layer 3 router within the Lightning stack. Below the
 // ChannelRouter is the HtlcSwitch, and below that is the Bitcoin blockchain
 // itself. The primary role of the ChannelRouter is to respond to queries for
@@ -1625,7 +1632,7 @@ type LightningPayment struct {
 // will be returned which describes the path the successful payment traversed
 // within the network to reach the destination. Additionally, the payment
 // preimage will also be returned.
-func (r *ChannelRouter) SendPayment(payment *LightningPayment) ([32]byte, *Route, error) {
+func (r *ChannelRouter) SendPayment(payment *LightningPayment) ([32]byte, *Route, []*FailedPaymentAttempt, error) {
 	// Before starting the HTLC routing attempt, we'll create a fresh
 	// payment session which will report our errors back to mission
 	// control.
@@ -1633,7 +1640,7 @@ func (r *ChannelRouter) SendPayment(payment *LightningPayment) ([32]byte, *Route
 		payment.RouteHints, payment.Target,
 	)
 	if err != nil {
-		return [32]byte{}, nil, err
+		return [32]byte{}, nil, nil, err
 	}
 
 	return r.sendPayment(payment, paySession)
@@ -1647,7 +1654,7 @@ func (r *ChannelRouter) SendPayment(payment *LightningPayment) ([32]byte, *Route
 // path the successful payment traversed within the network to reach the
 // destination. Additionally, the payment preimage will also be returned.
 func (r *ChannelRouter) SendToRoute(routes []*Route,
-	payment *LightningPayment) ([32]byte, *Route, error) {
+	payment *LightningPayment) ([32]byte, *Route, []*FailedPaymentAttempt, error) {
 
 	paySession := r.missionControl.NewPaymentSessionFromRoutes(
 		routes,
@@ -1664,7 +1671,7 @@ func (r *ChannelRouter) SendToRoute(routes []*Route,
 // within the network to reach the destination. Additionally, the payment
 // preimage will also be returned.
 func (r *ChannelRouter) sendPayment(payment *LightningPayment,
-	paySession *paymentSession) ([32]byte, *Route, error) {
+	paySession *paymentSession) ([32]byte, *Route, []*FailedPaymentAttempt, error) {
 
 	log.Tracef("Dispatching route for lightning payment: %v",
 		newLogClosure(func() string {
@@ -1692,7 +1699,7 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 	// calculate the required HTLC time locks within the route.
 	_, currentHeight, err := r.cfg.Chain.GetBestBlock()
 	if err != nil {
-		return [32]byte{}, nil, err
+		return [32]byte{}, nil, nil, err
 	}
 
 	var finalCLTVDelta uint16
@@ -1711,6 +1718,7 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 
 	timeoutChan := time.After(payAttemptTimeout)
 
+	var failedRoutes []*FailedPaymentAttempt
 	// We'll continue until either our payment succeeds, or we encounter a
 	// critical error during path finding.
 	for {
@@ -1723,12 +1731,12 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			errStr := fmt.Sprintf("payment attempt not completed "+
 				"before timeout of %v", payAttemptTimeout)
 
-			return preImage, nil, newErr(
+			return preImage, nil, nil, newErr(
 				ErrPaymentAttemptTimeout, errStr,
 			)
 
 		case <-r.quit:
-			return preImage, nil, fmt.Errorf("router shutting down")
+			return preImage, nil, nil, fmt.Errorf("router shutting down")
 
 		default:
 			// Fall through if we haven't hit our time limit, or
@@ -1742,12 +1750,12 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			// If we're unable to successfully make a payment using
 			// any of the routes we've found, then return an error.
 			if sendError != nil {
-				return [32]byte{}, nil, fmt.Errorf("unable to "+
+				return [32]byte{}, nil, failedRoutes, fmt.Errorf("unable to "+
 					"route payment to destination: %v",
 					sendError)
 			}
 
-			return preImage, nil, err
+			return preImage, nil, nil, err
 		}
 
 		log.Tracef("Attempting to send payment %x, using route: %v",
@@ -1763,7 +1771,7 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			route, payment.PaymentHash[:],
 		)
 		if err != nil {
-			return preImage, nil, err
+			return preImage, nil, failedRoutes, err
 		}
 
 		// Craft an HTLC packet to send to the layer 2 switch. The
@@ -1795,7 +1803,7 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 
 			fErr, ok := sendError.(*htlcswitch.ForwardingError)
 			if !ok {
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 			}
 
 			errSource := fErr.ErrorSource
@@ -1809,8 +1817,14 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			// update with id may not be available.
 			failedChanID, err := getFailedChannelID(route, errSource)
 			if err != nil {
-				return preImage, nil, err
+				return preImage, nil, failedRoutes, err
 			}
+			failedRoutes = append(failedRoutes, &FailedPaymentAttempt{
+				PaymentRoute: route,
+				PaymentError: fmt.Errorf(
+					"send htlc failed, channel id=%v, error=%v",
+					failedChanID,
+					sendError)})
 
 			// processChannelUpdateAndRetry is a closure that
 			// handles a failure message containing a channel
@@ -1853,22 +1867,22 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			// hash or we sent the wrong payment amount to the
 			// destination, then we'll terminate immediately.
 			case *lnwire.FailUnknownPaymentHash:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// If we sent the wrong amount to the destination, then
 			// we'll exit early.
 			case *lnwire.FailIncorrectPaymentAmount:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// If the time-lock that was extended to the final node
 			// was incorrect, then we can't proceed.
 			case *lnwire.FailFinalIncorrectCltvExpiry:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// If we crafted an invalid onion payload for the final
 			// node, then we'll exit early.
 			case *lnwire.FailFinalIncorrectHtlcAmount:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// Similarly, if the HTLC expiry that we extended to
 			// the final hop expires too soon, then will fail the
@@ -1877,12 +1891,12 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			// TODO(roasbeef): can happen to to race condition, try
 			// again with recent block height
 			case *lnwire.FailFinalExpiryTooSoon:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// If we erroneously attempted to cross a chain border,
 			// then we'll cancel the payment.
 			case *lnwire.FailInvalidRealm:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// If we get a notice that the expiry was too soon for
 			// an intermediate node, then we'll prune out the node
@@ -1897,11 +1911,11 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 			// an invalid version, then we'll exit early as this
 			// shouldn't happen in the typical case.
 			case *lnwire.FailInvalidOnionVersion:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 			case *lnwire.FailInvalidOnionHmac:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 			case *lnwire.FailInvalidOnionKey:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 
 			// If we get a failure due to violating the minimum
 			// amount, we'll apply the new minimum amount and retry
@@ -2003,11 +2017,11 @@ func (r *ChannelRouter) sendPayment(payment *LightningPayment,
 				continue
 
 			default:
-				return preImage, nil, sendError
+				return preImage, nil, failedRoutes, sendError
 			}
 		}
 
-		return preImage, route, nil
+		return preImage, route, failedRoutes, nil
 	}
 }
 
