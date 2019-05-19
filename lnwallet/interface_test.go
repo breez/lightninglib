@@ -23,6 +23,7 @@ import (
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/chainntnfs/btcdnotify"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
@@ -354,7 +355,7 @@ func loadTestCredits(miner *rpctest.Harness, w *lnwallet.LightningWallet,
 func createTestWallet(tempTestDir string, miningNode *rpctest.Harness,
 	netParams *chaincfg.Params, notifier chainntnfs.ChainNotifier,
 	wc lnwallet.WalletController, keyRing keychain.SecretKeyRing,
-	signer lnwallet.Signer, bio lnwallet.BlockChainIO) (*lnwallet.LightningWallet, error) {
+	signer input.Signer, bio lnwallet.BlockChainIO) (*lnwallet.LightningWallet, error) {
 
 	dbDir := filepath.Join(tempTestDir, "cdb")
 	cdb, err := channeldb.Open(dbDir)
@@ -369,7 +370,7 @@ func createTestWallet(tempTestDir string, miningNode *rpctest.Harness,
 		WalletController: wc,
 		Signer:           signer,
 		ChainIO:          bio,
-		FeeEstimator:     lnwallet.StaticFeeEstimator{FeePerKW: 2500},
+		FeeEstimator:     lnwallet.NewStaticFeeEstimator(2500, 0),
 		DefaultConstraints: channeldb.ChannelConstraints{
 			DustLimit:        500,
 			MaxPendingAmount: lnwire.NewMSatFromSatoshis(btcutil.SatoshiPerBitcoin) * 100,
@@ -435,7 +436,7 @@ func testDualFundingReservationWorkflow(miner *rpctest.Harness,
 		ChanReserve:      fundingAmount / 100,
 		MaxPendingAmount: lnwire.NewMSatFromSatoshis(fundingAmount),
 		MinHTLC:          1,
-		MaxAcceptedHtlcs: lnwallet.MaxHTLCNumber / 2,
+		MaxAcceptedHtlcs: input.MaxHTLCNumber / 2,
 		CsvDelay:         csvDelay,
 	}
 	err = aliceChanReservation.CommitConstraints(channelConstraints)
@@ -867,7 +868,7 @@ func testSingleFunderReservationWorkflow(miner *rpctest.Harness,
 		ChanReserve:      fundingAmt / 100,
 		MaxPendingAmount: lnwire.NewMSatFromSatoshis(fundingAmt),
 		MinHTLC:          1,
-		MaxAcceptedHtlcs: lnwallet.MaxHTLCNumber / 2,
+		MaxAcceptedHtlcs: input.MaxHTLCNumber / 2,
 		CsvDelay:         csvDelay,
 	}
 	err = aliceChanReservation.CommitConstraints(channelConstraints)
@@ -1529,7 +1530,7 @@ func testPublishTransaction(r *rpctest.Harness,
 
 		// Now we can populate the sign descriptor which we'll use to
 		// generate the signature.
-		signDesc := &lnwallet.SignDescriptor{
+		signDesc := &input.SignDescriptor{
 			KeyDesc: keychain.KeyDescriptor{
 				PubKey: pubKey.PubKey,
 			},
@@ -1784,10 +1785,10 @@ func testSignOutputUsingTweaks(r *rpctest.Harness,
 	commitSecret, commitPoint := btcec.PrivKeyFromBytes(btcec.S256(),
 		commitPreimage)
 
-	revocationKey := lnwallet.DeriveRevocationPubkey(pubKey.PubKey, commitPoint)
-	commitTweak := lnwallet.SingleTweakBytes(commitPoint, pubKey.PubKey)
+	revocationKey := input.DeriveRevocationPubkey(pubKey.PubKey, commitPoint)
+	commitTweak := input.SingleTweakBytes(commitPoint, pubKey.PubKey)
 
-	tweakedPub := lnwallet.TweakPubKey(pubKey.PubKey, commitPoint)
+	tweakedPub := input.TweakPubKey(pubKey.PubKey, commitPoint)
 
 	// As we'd like to test both single and double tweaks, we'll repeat
 	// the same set up twice. The first will use a regular single tweak,
@@ -1857,7 +1858,7 @@ func testSignOutputUsingTweaks(r *rpctest.Harness,
 		// private tweak value as the key in the script is derived
 		// based on this tweak value and the key we originally
 		// generated above.
-		signDesc := &lnwallet.SignDescriptor{
+		signDesc := &input.SignDescriptor{
 			KeyDesc: keychain.KeyDescriptor{
 				PubKey: baseKey.PubKey,
 			},
@@ -2165,6 +2166,243 @@ func testChangeOutputSpendConfirmation(r *rpctest.Harness,
 	}
 }
 
+// testLastUnusedAddr tests that the LastUnusedAddress returns the address if
+// it isn't used, and also that once the address becomes used, then it's
+// properly rotated.
+func testLastUnusedAddr(miner *rpctest.Harness,
+	alice, bob *lnwallet.LightningWallet, t *testing.T) {
+
+	if _, err := miner.Node.Generate(1); err != nil {
+		t.Fatalf("unable to generate block: %v", err)
+	}
+
+	// We'll repeat this test for each address type to ensure they're all
+	// rotated properly.
+	addrTypes := []lnwallet.AddressType{
+		lnwallet.WitnessPubKey, lnwallet.NestedWitnessPubKey,
+	}
+	for _, addrType := range addrTypes {
+		addr1, err := alice.LastUnusedAddress(addrType)
+		if err != nil {
+			t.Fatalf("unable to get addr: %v", err)
+		}
+		addr2, err := alice.LastUnusedAddress(addrType)
+		if err != nil {
+			t.Fatalf("unable to get addr: %v", err)
+		}
+
+		// If we generate two addresses back to back, then we should
+		// get the same addr, as none of them have been used yet.
+		if addr1.String() != addr2.String() {
+			t.Fatalf("addresses changed w/o use: %v vs %v", addr1, addr2)
+		}
+
+		// Next, we'll have Bob pay to Alice's new address. This should
+		// trigger address rotation at the backend wallet.
+		addrScript, err := txscript.PayToAddrScript(addr1)
+		if err != nil {
+			t.Fatalf("unable to convert addr to script: %v", err)
+		}
+		feeRate := lnwallet.SatPerKWeight(2500)
+		output := &wire.TxOut{
+			Value:    1000000,
+			PkScript: addrScript,
+		}
+		sendCoins(t, miner, bob, alice, output, feeRate)
+
+		// If we make a new address, then it should be brand new, as
+		// the prior address has been used.
+		addr3, err := alice.LastUnusedAddress(addrType)
+		if err != nil {
+			t.Fatalf("unable to get addr: %v", err)
+		}
+		if addr1.String() == addr3.String() {
+			t.Fatalf("address should have changed but didn't")
+		}
+	}
+}
+
+// testCreateSimpleTx checks that a call to CreateSimpleTx will return a
+// transaction that is equal to the one that is being created by SendOutputs in
+// a subsequent call.
+func testCreateSimpleTx(r *rpctest.Harness, w *lnwallet.LightningWallet,
+	_ *lnwallet.LightningWallet, t *testing.T) {
+
+	// Send some money from the miner to the wallet
+	err := loadTestCredits(r, w, 20, 4)
+	if err != nil {
+		t.Fatalf("unable to send money to lnwallet: %v", err)
+	}
+
+	// The test cases we will run through for all backends.
+	testCases := []struct {
+		outVals []int64
+		feeRate lnwallet.SatPerKWeight
+		valid   bool
+	}{
+		{
+			outVals: []int64{},
+			feeRate: 2500,
+			valid:   false, // No outputs.
+		},
+
+		{
+			outVals: []int64{1e3},
+			feeRate: 2500,
+			valid:   false, // Dust output.
+		},
+
+		{
+			outVals: []int64{1e8},
+			feeRate: 2500,
+			valid:   true,
+		},
+		{
+			outVals: []int64{1e8, 2e8, 1e8, 2e7, 3e5},
+			feeRate: 2500,
+			valid:   true,
+		},
+		{
+			outVals: []int64{1e8, 2e8, 1e8, 2e7, 3e5},
+			feeRate: 12500,
+			valid:   true,
+		},
+		{
+			outVals: []int64{1e8, 2e8, 1e8, 2e7, 3e5},
+			feeRate: 50000,
+			valid:   true,
+		},
+		{
+			outVals: []int64{1e8, 2e8, 1e8, 2e7, 3e5, 1e8, 2e8,
+				1e8, 2e7, 3e5},
+			feeRate: 44250,
+			valid:   true,
+		},
+	}
+
+	for _, test := range testCases {
+		feeRate := test.feeRate
+
+		// Grab some fresh addresses from the miner that we will send
+		// to.
+		outputs := make([]*wire.TxOut, len(test.outVals))
+		for i, outVal := range test.outVals {
+			minerAddr, err := r.NewAddress()
+			if err != nil {
+				t.Fatalf("unable to generate address for "+
+					"miner: %v", err)
+			}
+			script, err := txscript.PayToAddrScript(minerAddr)
+			if err != nil {
+				t.Fatalf("unable to create pay to addr "+
+					"script: %v", err)
+			}
+			output := &wire.TxOut{
+				Value:    outVal,
+				PkScript: script,
+			}
+
+			outputs[i] = output
+		}
+
+		// Now try creating a tx spending to these outputs.
+		createTx, createErr := w.CreateSimpleTx(
+			outputs, feeRate, true,
+		)
+		if test.valid == (createErr != nil) {
+			fmt.Println(spew.Sdump(createTx.Tx))
+			t.Fatalf("got unexpected error when creating tx: %v",
+				createErr)
+		}
+
+		// Also send to these outputs. This should result in a tx
+		// _very_ similar to the one we just created being sent. The
+		// only difference is that the dry run tx is not signed, and
+		// that the change output position might be different.
+		tx, sendErr := w.SendOutputs(outputs, feeRate)
+		if test.valid == (sendErr != nil) {
+			t.Fatalf("got unexpected error when sending tx: %v",
+				sendErr)
+		}
+
+		// We expected either both to not fail, or both to fail with
+		// the same error.
+		if createErr != sendErr {
+			t.Fatalf("error creating tx (%v) different "+
+				"from error sending outputs (%v)",
+				createErr, sendErr)
+		}
+
+		// If we expected the creation to fail, then this test is over.
+		if !test.valid {
+			continue
+		}
+
+		txid := tx.TxHash()
+		err = waitForMempoolTx(r, &txid)
+		if err != nil {
+			t.Fatalf("tx not relayed to miner: %v", err)
+		}
+
+		// Helper method to check that the two txs are similar.
+		assertSimilarTx := func(a, b *wire.MsgTx) error {
+			if a.Version != b.Version {
+				return fmt.Errorf("different versions: "+
+					"%v vs %v", a.Version, b.Version)
+			}
+			if a.LockTime != b.LockTime {
+				return fmt.Errorf("different locktimes: "+
+					"%v vs %v", a.LockTime, b.LockTime)
+			}
+			if len(a.TxIn) != len(b.TxIn) {
+				return fmt.Errorf("different number of "+
+					"inputs: %v vs %v", len(a.TxIn),
+					len(b.TxIn))
+			}
+			if len(a.TxOut) != len(b.TxOut) {
+				return fmt.Errorf("different number of "+
+					"outputs: %v vs %v", len(a.TxOut),
+					len(b.TxOut))
+			}
+
+			// They should be spending the same inputs.
+			for i := range a.TxIn {
+				prevA := a.TxIn[i].PreviousOutPoint
+				prevB := b.TxIn[i].PreviousOutPoint
+				if prevA != prevB {
+					return fmt.Errorf("different inputs: "+
+						"%v vs %v", spew.Sdump(prevA),
+						spew.Sdump(prevB))
+				}
+			}
+
+			// They should have the same outputs. Since the change
+			// output position gets randomized, they are not
+			// guaranteed to be in the same order.
+			for _, outA := range a.TxOut {
+				found := false
+				for _, outB := range b.TxOut {
+					if reflect.DeepEqual(outA, outB) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("did not find "+
+						"output %v", spew.Sdump(outA))
+				}
+			}
+			return nil
+		}
+
+		// Assert that our "template tx" was similar to the one that
+		// ended up being sent.
+		if err := assertSimilarTx(createTx.Tx, tx); err != nil {
+			t.Fatalf("transactions not similar: %v", err)
+		}
+	}
+}
+
 type walletTestCase struct {
 	name string
 	test func(miner *rpctest.Harness, alice, bob *lnwallet.LightningWallet,
@@ -2220,8 +2458,16 @@ var walletTests = []walletTestCase{
 		test: testCancelNonExistentReservation,
 	},
 	{
+		name: "last unused addr",
+		test: testLastUnusedAddr,
+	},
+	{
 		name: "reorg wallet balance",
 		test: testReorgWalletBalance,
+	},
+	{
+		name: "create simple tx",
+		test: testCreateSimpleTx,
 	},
 }
 
@@ -2363,7 +2609,9 @@ func TestLightningWallet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create height hint cache: %v", err)
 	}
-	chainNotifier, err := btcdnotify.New(&rpcConfig, hintCache, hintCache)
+	chainNotifier, err := btcdnotify.New(
+		&rpcConfig, netParams, hintCache, hintCache,
+	)
 	if err != nil {
 		t.Fatalf("unable to create notifier: %v", err)
 	}
@@ -2391,8 +2639,8 @@ func runTests(t *testing.T, walletDriver *lnwallet.WalletDriver,
 	var (
 		bio lnwallet.BlockChainIO
 
-		aliceSigner lnwallet.Signer
-		bobSigner   lnwallet.Signer
+		aliceSigner input.Signer
+		bobSigner   input.Signer
 
 		aliceKeyRing keychain.SecretKeyRing
 		bobKeyRing   keychain.SecretKeyRing
@@ -2441,7 +2689,7 @@ func runTests(t *testing.T, walletDriver *lnwallet.WalletDriver,
 			}
 
 		case "neutrino":
-			feeEstimator = lnwallet.StaticFeeEstimator{FeePerKW: 62500}
+			feeEstimator = lnwallet.NewStaticFeeEstimator(62500, 0)
 
 			// Set some package-level variable to speed up
 			// operation for tests.

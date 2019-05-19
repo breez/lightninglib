@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/coreos/bbolt"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-errors/errors"
-	"github.com/breez/lightninglib/channeldb"
-	"github.com/breez/lightninglib/lnwire"
 )
 
 var (

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/breez/lightninglib/routing"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -53,7 +52,7 @@ var (
 	testHopHintPubkeyBytes2, _ = hex.DecodeString("039e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255")
 	testHopHintPubkey2, _      = btcec.ParsePubKey(testHopHintPubkeyBytes2, btcec.S256())
 
-	testSingleHop = []routing.HopHint{
+	testSingleHop = []HopHint{
 		{
 			NodeID:                    testHopHintPubkey1,
 			ChannelID:                 0x0102030405060708,
@@ -62,7 +61,7 @@ var (
 			CLTVExpiryDelta:           3,
 		},
 	}
-	testDoubleHop = []routing.HopHint{
+	testDoubleHop = []HopHint{
 		{
 			NodeID:                    testHopHintPubkey1,
 			ChannelID:                 0x0102030405060708,
@@ -414,7 +413,7 @@ func TestDecodeEncode(t *testing.T) {
 					DescriptionHash: &testDescriptionHash,
 					Destination:     testPubKey,
 					FallbackAddr:    testRustyAddr,
-					RouteHints:      [][]routing.HopHint{testSingleHop},
+					RouteHints:      [][]HopHint{testSingleHop},
 				}
 			},
 			beforeEncoding: func(i *Invoice) {
@@ -437,7 +436,7 @@ func TestDecodeEncode(t *testing.T) {
 					DescriptionHash: &testDescriptionHash,
 					Destination:     testPubKey,
 					FallbackAddr:    testRustyAddr,
-					RouteHints:      [][]routing.HopHint{testDoubleHop},
+					RouteHints:      [][]HopHint{testDoubleHop},
 				}
 			},
 			beforeEncoding: func(i *Invoice) {
@@ -844,7 +843,7 @@ func compareHashes(a, b *[32]byte) bool {
 	return bytes.Equal(a[:], b[:])
 }
 
-func compareRouteHints(a, b []routing.HopHint) error {
+func compareRouteHints(a, b []HopHint) error {
 	if len(a) != len(b) {
 		return fmt.Errorf("expected len routingInfo %d, got %d",
 			len(a), len(b))

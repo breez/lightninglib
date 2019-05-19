@@ -128,7 +128,7 @@ var _ Message = (*ChannelUpdate)(nil)
 //
 // This is part of the lnwire.Message interface.
 func (a *ChannelUpdate) Decode(r io.Reader, pver uint32) error {
-	err := readElements(r,
+	err := ReadElements(r,
 		&a.Signature,
 		a.ChainHash[:],
 		&a.ShortChannelID,
@@ -146,7 +146,7 @@ func (a *ChannelUpdate) Decode(r io.Reader, pver uint32) error {
 
 	// Now check whether the max HTLC field is present and read it if so.
 	if a.MessageFlags.HasMaxHtlc() {
-		if err := readElements(r, &a.HtlcMaximumMsat); err != nil {
+		if err := ReadElements(r, &a.HtlcMaximumMsat); err != nil {
 			return err
 		}
 	}
@@ -171,7 +171,7 @@ func (a *ChannelUpdate) Decode(r io.Reader, pver uint32) error {
 //
 // This is part of the lnwire.Message interface.
 func (a *ChannelUpdate) Encode(w io.Writer, pver uint32) error {
-	err := writeElements(w,
+	err := WriteElements(w,
 		a.Signature,
 		a.ChainHash[:],
 		a.ShortChannelID,
@@ -190,13 +190,13 @@ func (a *ChannelUpdate) Encode(w io.Writer, pver uint32) error {
 	// Now append optional fields if they are set. Currently, the only
 	// optional field is max HTLC.
 	if a.MessageFlags.HasMaxHtlc() {
-		if err := writeElements(w, a.HtlcMaximumMsat); err != nil {
+		if err := WriteElements(w, a.HtlcMaximumMsat); err != nil {
 			return err
 		}
 	}
 
 	// Finally, append any extra opaque data.
-	return writeElements(w, a.ExtraOpaqueData)
+	return WriteElements(w, a.ExtraOpaqueData)
 }
 
 // MsgType returns the integer uniquely identifying this message type on the
@@ -221,7 +221,7 @@ func (a *ChannelUpdate) DataToSign() ([]byte, error) {
 
 	// We should not include the signatures itself.
 	var w bytes.Buffer
-	err := writeElements(&w,
+	err := WriteElements(&w,
 		a.ChainHash[:],
 		a.ShortChannelID,
 		a.Timestamp,
@@ -239,13 +239,13 @@ func (a *ChannelUpdate) DataToSign() ([]byte, error) {
 	// Now append optional fields if they are set. Currently, the only
 	// optional field is max HTLC.
 	if a.MessageFlags.HasMaxHtlc() {
-		if err := writeElements(&w, a.HtlcMaximumMsat); err != nil {
+		if err := WriteElements(&w, a.HtlcMaximumMsat); err != nil {
 			return nil, err
 		}
 	}
 
 	// Finally, append any extra opaque data.
-	if err := writeElements(&w, a.ExtraOpaqueData); err != nil {
+	if err := WriteElements(&w, a.ExtraOpaqueData); err != nil {
 		return nil, err
 	}
 

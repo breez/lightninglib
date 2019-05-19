@@ -12,6 +12,7 @@ import (
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/fastsha256"
 	"github.com/davecgh/go-spew/spew"
@@ -1846,7 +1847,7 @@ func TestLocalPaymentNoForwardingEvents(t *testing.T) {
 	// proceeding.
 	receiver := n.bobServer
 	firstHop := n.firstBobChannelLink.ShortChanID()
-	_, err = n.makePayment(
+	_, err = makePayment(
 		n.aliceServer, receiver, firstHop, hops, amount, htlcAmt,
 		totalTimelock,
 	).Wait(30 * time.Second)
@@ -1906,8 +1907,61 @@ func TestMultiHopPaymentForwardingEvents(t *testing.T) {
 		n.carolChannelLink,
 	)
 	firstHop := n.firstBobChannelLink.ShortChanID()
-	for i := 0; i < numPayments; i++ {
-		_, err := n.makePayment(
+	for i := 0; i < numPayments/2; i++ {
+		_, err := makePayment(
+			n.aliceServer, n.carolServer, firstHop, hops, finalAmt,
+			htlcAmt, totalTimelock,
+		).Wait(30 * time.Second)
+		if err != nil {
+			t.Fatalf("unable to send payment: %v", err)
+		}
+	}
+
+	bobLog, ok := n.bobServer.htlcSwitch.cfg.FwdingLog.(*mockForwardingLog)
+	if !ok {
+		t.Fatalf("mockForwardingLog assertion failed")
+	}
+
+	// After sending 5 of the payments, trigger the forwarding ticker, to
+	// make sure the events are properly flushed.
+	bobTicker, ok := n.bobServer.htlcSwitch.cfg.FwdEventTicker.(*ticker.Force)
+	if !ok {
+		t.Fatalf("mockTicker assertion failed")
+	}
+
+	// We'll trigger the ticker, and wait for the events to appear in Bob's
+	// forwarding log.
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case bobTicker.Force <- time.Now():
+		case <-time.After(1 * time.Second):
+			t.Fatalf("unable to force tick")
+		}
+
+		// If all 5 events is found in Bob's log, we can break out and
+		// continue the test.
+		bobLog.Lock()
+		if len(bobLog.events) == 5 {
+			bobLog.Unlock()
+			break
+		}
+		bobLog.Unlock()
+
+		// Otherwise wait a little bit before checking again.
+		select {
+		case <-time.After(50 * time.Millisecond):
+		case <-timeout:
+			bobLog.Lock()
+			defer bobLog.Unlock()
+			t.Fatalf("expected 5 events in event log, instead "+
+				"found: %v", spew.Sdump(bobLog.events))
+		}
+	}
+
+	// Send the remaining payments.
+	for i := numPayments / 2; i < numPayments; i++ {
+		_, err := makePayment(
 			n.aliceServer, n.carolServer, firstHop, hops, finalAmt,
 			htlcAmt, totalTimelock,
 		).Wait(30 * time.Second)
@@ -1945,10 +1999,6 @@ func TestMultiHopPaymentForwardingEvents(t *testing.T) {
 	}
 
 	// Bob on the other hand, should have 10 events.
-	bobLog, ok := n.bobServer.htlcSwitch.cfg.FwdingLog.(*mockForwardingLog)
-	if !ok {
-		t.Fatalf("mockForwardingLog assertion failed")
-	}
 	bobLog.Lock()
 	defer bobLog.Unlock()
 	if len(bobLog.events) != 10 {

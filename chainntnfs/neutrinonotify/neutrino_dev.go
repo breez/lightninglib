@@ -53,14 +53,18 @@ func (n *NeutrinoNotifier) UnsafeStart(bestHeight int32,
 		n.confirmHintCache, n.spendHintCache,
 	)
 
-	n.chainConn = &NeutrinoChainConn{n.p2pNode}
-
 	// Finally, we'll create our rescan struct, start it, and launch all
 	// the goroutines we need to operate this ChainNotifier instance.
-	n.chainView = n.p2pNode.NewRescan(rescanOptions...)
+	n.chainView = neutrino.NewRescan(
+		&neutrino.RescanChainSource{
+			ChainService: n.p2pNode,
+		},
+		rescanOptions...,
+	)
 	n.rescanErr = n.chainView.Start()
 
 	n.chainUpdates.Start()
+	n.txUpdates.Start()
 
 	if generateBlocks != nil {
 		// Ensure no block notifications are pending when we start the
@@ -90,7 +94,8 @@ func (n *NeutrinoNotifier) UnsafeStart(bestHeight int32,
 
 	// Run notificationDispatcher after setting the notifier's best height
 	// to avoid a race condition.
-	n.bestHeight = uint32(bestHeight)
+	n.bestBlock.Hash = bestHash
+	n.bestBlock.Height = bestHeight
 
 	n.wg.Add(1)
 	go n.notificationDispatcher()

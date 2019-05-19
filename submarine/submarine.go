@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwallet/btcwallet"
 	"github.com/btcsuite/btcd/btcec"
@@ -39,7 +40,7 @@ func genSubmarineSwapScript(swapperPubKey, payerPubKey, hash []byte, lockHeight 
 	builder := txscript.NewScriptBuilder()
 
 	builder.AddOp(txscript.OP_HASH160)
-	builder.AddData(lnwallet.Ripemd160H(hash))
+	builder.AddData(input.Ripemd160H(hash))
 	builder.AddOp(txscript.OP_EQUAL) // Leaves 0P1 (true) on the stack if preimage matches
 	builder.AddOp(txscript.OP_IF)
 	builder.AddData(swapperPubKey) // Path taken if preimage matches

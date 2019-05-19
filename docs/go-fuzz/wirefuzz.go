@@ -3,8 +3,9 @@ package wirefuzz
 import (
 	"bytes"
 	"fmt"
-	"github.com/breez/lightninglib/lnwire"
 	"reflect"
+
+	"github.com/breez/lightninglib/lnwire"
 )
 
 // Fuzz is used by go-fuzz to fuzz for potentially malicious input

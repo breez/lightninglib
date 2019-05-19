@@ -7,10 +7,7 @@ import (
 	"time"
 
 	"github.com/breez/lightninglib/chainntnfs"
-	"github.com/breez/lightninglib/channeldb"
-	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/htlcswitch"
-	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/wire"
@@ -123,7 +120,7 @@ func TestPeerChannelClosureAcceptFeeInitiator(t *testing.T) {
 	defer cleanUp()
 
 	// We make the initiator send a shutdown request.
-	updateChan := make(chan *lnrpc.CloseStatusUpdate, 1)
+	updateChan := make(chan interface{}, 1)
 	errChan := make(chan error, 1)
 	closeCommand := &htlcswitch.ChanClose{
 		CloseType:      htlcswitch.CloseRegular,
@@ -159,7 +156,7 @@ func TestPeerChannelClosureAcceptFeeInitiator(t *testing.T) {
 			dummyDeliveryScript),
 	}
 
-	estimator := lnwallet.StaticFeeEstimator{FeePerKW: 12500}
+	estimator := lnwallet.NewStaticFeeEstimator(12500, 0)
 	feePerKw, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)
@@ -412,7 +409,7 @@ func TestPeerChannelClosureFeeNegotiationsInitiator(t *testing.T) {
 	defer cleanUp()
 
 	// We make the initiator send a shutdown request.
-	updateChan := make(chan *lnrpc.CloseStatusUpdate, 1)
+	updateChan := make(chan interface{}, 1)
 	errChan := make(chan error, 1)
 	closeCommand := &htlcswitch.ChanClose{
 		CloseType:      htlcswitch.CloseRegular,
@@ -449,7 +446,7 @@ func TestPeerChannelClosureFeeNegotiationsInitiator(t *testing.T) {
 		msg: respShutdown,
 	}
 
-	estimator := lnwallet.StaticFeeEstimator{FeePerKW: 12500}
+	estimator := lnwallet.NewStaticFeeEstimator(12500, 0)
 	initiatorIdealFeeRate, err := estimator.EstimateFeePerKW(1)
 	if err != nil {
 		t.Fatalf("unable to query fee estimator: %v", err)

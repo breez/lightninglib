@@ -3,6 +3,7 @@ package lnwallet
 import (
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/btcsuite/btcd/chaincfg"
 )
@@ -37,7 +38,7 @@ type Config struct {
 	// used to generate signature for all inputs to potential funding
 	// transactions, as well as for spends from the funding transaction to
 	// update the commitment state.
-	Signer Signer
+	Signer input.Signer
 
 	// FeeEstimator is the implementation that the wallet will use for the
 	// calculation of on-chain transaction fees.

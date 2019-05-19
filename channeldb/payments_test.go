@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func makeFakePayment() *OutgoingPayment {

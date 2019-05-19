@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math/big"
 	"net"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -274,6 +275,30 @@ func (d *databaseChannelGraph) addRandChannel(node1, node2 *btcec.PublicKey,
 		nil
 }
 
+func (d *databaseChannelGraph) addRandNode() (*btcec.PublicKey, error) {
+	nodeKey, err := randKey()
+	if err != nil {
+		return nil, err
+	}
+	dbNode := &channeldb.LightningNode{
+		HaveNodeAnnouncement: true,
+		Addresses: []net.Addr{
+			&net.TCPAddr{
+				IP: bytes.Repeat([]byte("a"), 16),
+			},
+		},
+		Features:     lnwire.NewFeatureVector(nil, lnwire.GlobalFeatures),
+		AuthSigBytes: testSig.Serialize(),
+	}
+	dbNode.AddPubKey(nodeKey)
+	if err := d.db.AddLightningNode(dbNode); err != nil {
+		return nil, err
+	}
+
+	return nodeKey, nil
+
+}
+
 // memChannelGraph is an implementation of the autopilot.ChannelGraph backed by
 // an in-memory graph.
 type memChannelGraph struct {
@@ -339,6 +364,11 @@ func (m *memChannelGraph) addRandChannel(node1, node2 *btcec.PublicKey,
 		if !ok {
 			vertex1 = memNode{
 				pub: node1,
+				addrs: []net.Addr{
+					&net.TCPAddr{
+						IP: bytes.Repeat([]byte("a"), 16),
+					},
+				},
 			}
 		}
 	} else {
@@ -348,6 +378,11 @@ func (m *memChannelGraph) addRandChannel(node1, node2 *btcec.PublicKey,
 		}
 		vertex1 = memNode{
 			pub: newPub,
+			addrs: []net.Addr{
+				&net.TCPAddr{
+					IP: bytes.Repeat([]byte("a"), 16),
+				},
+			},
 		}
 	}
 
@@ -356,6 +391,11 @@ func (m *memChannelGraph) addRandChannel(node1, node2 *btcec.PublicKey,
 		if !ok {
 			vertex2 = memNode{
 				pub: node2,
+				addrs: []net.Addr{
+					&net.TCPAddr{
+						IP: bytes.Repeat([]byte("a"), 16),
+					},
+				},
 			}
 		}
 	} else {
@@ -365,6 +405,11 @@ func (m *memChannelGraph) addRandChannel(node1, node2 *btcec.PublicKey,
 		}
 		vertex2 = memNode{
 			pub: newPub,
+			addrs: []net.Addr{
+				&net.TCPAddr{
+					IP: bytes.Repeat([]byte("a"), 16),
+				},
+			},
 		}
 	}
 
@@ -389,6 +434,24 @@ func (m *memChannelGraph) addRandChannel(node1, node2 *btcec.PublicKey,
 	m.graph[NewNodeID(vertex2.pub)] = vertex2
 
 	return &edge1, &edge2, nil
+}
+
+func (m *memChannelGraph) addRandNode() (*btcec.PublicKey, error) {
+	newPub, err := randKey()
+	if err != nil {
+		return nil, err
+	}
+	vertex := memNode{
+		pub: newPub,
+		addrs: []net.Addr{
+			&net.TCPAddr{
+				IP: bytes.Repeat([]byte("a"), 16),
+			},
+		},
+	}
+	m.graph[NewNodeID(newPub)] = vertex
+
+	return newPub, nil
 }
 
 // memNode is a purely in-memory implementation of the autopilot.Node
@@ -438,4 +501,23 @@ func (m memNode) ForEachChannel(cb func(ChannelEdge) error) error {
 	}
 
 	return nil
+}
+
+// Median returns the median value in the slice of Amounts.
+func Median(vals []btcutil.Amount) btcutil.Amount {
+	sort.Slice(vals, func(i, j int) bool {
+		return vals[i] < vals[j]
+	})
+
+	num := len(vals)
+	switch {
+	case num == 0:
+		return 0
+
+	case num%2 == 0:
+		return (vals[num/2-1] + vals[num/2]) / 2
+
+	default:
+		return vals[num/2]
+	}
 }

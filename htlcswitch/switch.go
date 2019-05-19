@@ -12,7 +12,6 @@ import (
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/contractcourt"
-	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/ticker"
@@ -119,7 +118,7 @@ type ChanClose struct {
 
 	// Updates is used by request creator to receive the notifications about
 	// execution of the close channel request.
-	Updates chan *lnrpc.CloseStatusUpdate
+	Updates chan interface{}
 
 	// Err is used by request creator to receive request execution error.
 	Err chan error
@@ -176,6 +175,11 @@ type Config struct {
 	// LogEventTicker is a signal instructing the htlcswitch to log
 	// aggregate stats about it's forwarding during the last interval.
 	LogEventTicker ticker.Ticker
+
+	// NotifyActiveChannel and NotifyInactiveChannel allow the link to tell
+	// the ChannelNotifier when channels become active and inactive.
+	NotifyActiveChannel   func(wire.OutPoint)
+	NotifyInactiveChannel func(wire.OutPoint)
 }
 
 // Switch is the central messaging bus for all incoming/outgoing HTLCs.
@@ -1034,7 +1038,8 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 
 			return s.failAddPacket(packet, failure, addErr)
 		}
-		interfaceLinks, _ := s.getLinks(targetLink.Peer().PubKey())
+		targetPeerKey := targetLink.Peer().PubKey()
+		interfaceLinks, _ := s.getLinks(targetPeerKey)
 		s.indexMtx.RUnlock()
 
 		// We'll keep track of any HTLC failures during the link
@@ -1101,7 +1106,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 
 			addErr := fmt.Errorf("unable to find appropriate "+
 				"channel link insufficient capacity, need "+
-				"%v", htlc.Amount)
+				"%v towards node=%x", htlc.Amount, targetPeerKey)
 
 			return s.failAddPacket(packet, failure, addErr)
 
@@ -1415,11 +1420,11 @@ func (s *Switch) teardownCircuit(pkt *htlcPacket) error {
 // then the last parameter should be the ideal fee-per-kw that will be used as
 // a starting point for close negotiation.
 func (s *Switch) CloseLink(chanPoint *wire.OutPoint, closeType ChannelCloseType,
-	targetFeePerKw lnwallet.SatPerKWeight) (chan *lnrpc.CloseStatusUpdate,
+	targetFeePerKw lnwallet.SatPerKWeight) (chan interface{},
 	chan error) {
 
 	// TODO(roasbeef) abstract out the close updates.
-	updateChan := make(chan *lnrpc.CloseStatusUpdate, 2)
+	updateChan := make(chan interface{}, 2)
 	errChan := make(chan error, 1)
 
 	command := &ChanClose{
@@ -1957,6 +1962,11 @@ func (s *Switch) addLiveLink(link ChannelLink) {
 		s.interfaceIndex[peerPub] = make(map[lnwire.ChannelID]ChannelLink)
 	}
 	s.interfaceIndex[peerPub][link.ChanID()] = link
+
+	// Inform the channel notifier if the link has become active.
+	if link.EligibleToForward() {
+		s.cfg.NotifyActiveChannel(*link.ChannelPoint())
+	}
 }
 
 // GetLink is used to initiate the handling of the get link command. The
@@ -2031,6 +2041,9 @@ func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
 	if err != nil {
 		return nil
 	}
+
+	// Inform the Channel Notifier about the link becoming inactive.
+	s.cfg.NotifyInactiveChannel(*link.ChannelPoint())
 
 	// Remove the channel from live link indexes.
 	delete(s.pendingLinkIndex, link.ChanID())

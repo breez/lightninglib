@@ -1,6 +1,9 @@
 package channeldb
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	// ErrNoChanDBExists is returned when a channel bucket hasn't been
@@ -79,6 +82,10 @@ var (
 	// can't be found.
 	ErrEdgeNotFound = fmt.Errorf("edge not found")
 
+	// ErrZombieEdge is an error returned when we attempt to look up an edge
+	// but it is marked as a zombie within the zombie index.
+	ErrZombieEdge = errors.New("edge marked as zombie")
+
 	// ErrEdgeAlreadyExist is returned when edge with specific
 	// channel id can't be added because it already exist.
 	ErrEdgeAlreadyExist = fmt.Errorf("edge already exist")
@@ -103,6 +110,11 @@ var (
 	// indicate it should be.
 	ErrEdgePolicyOptionalFieldNotFound = fmt.Errorf("optional field not " +
 		"present")
+
+	// ErrChanAlreadyExists is return when the caller attempts to create a
+	// channel with a channel point that is already present in the
+	// database.
+	ErrChanAlreadyExists = fmt.Errorf("channel already exists")
 )
 
 // ErrTooManyExtraOpaqueBytes creates an error which should be returned if the

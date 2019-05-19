@@ -8,9 +8,9 @@ import (
 
 	"bytes"
 
+	"github.com/breez/lightninglib/lnwire"
 	"github.com/coreos/bbolt"
 	"github.com/go-errors/errors"
-	"github.com/breez/lightninglib/lnwire"
 )
 
 var (

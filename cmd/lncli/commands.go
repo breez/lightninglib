@@ -17,7 +17,9 @@ import (
 	"syscall"
 
 	"github.com/breez/lightninglib/lnrpc"
+	"github.com/breez/lightninglib/walletunlocker"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/urfave/cli"
@@ -32,7 +34,7 @@ import (
 
 // TODO(roasbeef): expose all fee conf targets
 
-const defaultRecoveryWindow int32 = 250
+const defaultRecoveryWindow int32 = 2500
 
 func printJSON(resp interface{}) {
 	b, err := json.Marshal(resp)
@@ -120,12 +122,12 @@ func newAddress(ctx *cli.Context) error {
 
 	// Map the string encoded address type, to the concrete typed address
 	// type enum. An unrecognized address type will result in an error.
-	var addrType lnrpc.NewAddressRequest_AddressType
+	var addrType lnrpc.AddressType
 	switch stringAddrType { // TODO(roasbeef): make them ints on the cli?
 	case "p2wkh":
-		addrType = lnrpc.NewAddressRequest_WITNESS_PUBKEY_HASH
+		addrType = lnrpc.AddressType_WITNESS_PUBKEY_HASH
 	case "np2wkh":
-		addrType = lnrpc.NewAddressRequest_NESTED_PUBKEY_HASH
+		addrType = lnrpc.AddressType_NESTED_PUBKEY_HASH
 	default:
 		return fmt.Errorf("invalid address type %v, support address type "+
 			"are: p2wkh and np2wkh", stringAddrType)
@@ -140,6 +142,52 @@ func newAddress(ctx *cli.Context) error {
 	}
 
 	printRespJSON(addr)
+	return nil
+}
+
+var estimateFeeCommand = cli.Command{
+	Name:      "estimatefee",
+	Category:  "On-chain",
+	Usage:     "Get fee estimates for sending bitcoin on-chain to multiple addresses.",
+	ArgsUsage: "send-json-string [--conf_target=N]",
+	Description: `
+	Get fee estimates for sending a transaction paying the specified amount(s) to the passed address(es).
+
+	The send-json-string' param decodes addresses and the amount to send respectively in the following format:
+
+	    '{"ExampleAddr": NumCoinsInSatoshis, "SecondAddr": NumCoins}'
+	`,
+	Flags: []cli.Flag{
+		cli.Int64Flag{
+			Name: "conf_target",
+			Usage: "(optional) the number of blocks that the transaction *should* " +
+				"confirm in",
+		},
+	},
+	Action: actionDecorator(estimateFees),
+}
+
+func estimateFees(ctx *cli.Context) error {
+	var amountToAddr map[string]int64
+
+	jsonMap := ctx.Args().First()
+	if err := json.Unmarshal([]byte(jsonMap), &amountToAddr); err != nil {
+		return err
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	resp, err := client.EstimateFee(ctxb, &lnrpc.EstimateFeeRequest{
+		AddrToAmount: amountToAddr,
+		TargetConf:   int32(ctx.Int64("conf_target")),
+	})
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
 	return nil
 }
 
@@ -161,7 +209,13 @@ var sendCoinsCommand = cli.Command{
 			Name:  "addr",
 			Usage: "the BASE58 encoded bitcoin address to send coins to on-chain",
 		},
-		// TODO(roasbeef): switch to BTC on command line? int may not be sufficient
+		cli.BoolFlag{
+			Name: "sweepall",
+			Usage: "if set, then the amount field will be ignored, " +
+				"and all the wallet will attempt to sweep all " +
+				"outputs within the wallet to the target " +
+				"address",
+		},
 		cli.Int64Flag{
 			Name:  "amt",
 			Usage: "the number of bitcoin denominated in satoshis to send",
@@ -215,12 +269,16 @@ func sendCoins(ctx *cli.Context) error {
 		amt = ctx.Int64("amt")
 	case args.Present():
 		amt, err = strconv.ParseInt(args.First(), 10, 64)
-	default:
+	case !ctx.Bool("sweepall"):
 		return fmt.Errorf("Amount argument missing")
 	}
-
 	if err != nil {
 		return fmt.Errorf("unable to decode amount: %v", err)
+	}
+
+	if amt != 0 && ctx.Bool("sweepall") {
+		return fmt.Errorf("amount cannot be set if attempting to " +
+			"sweep all coins out of the wallet")
 	}
 
 	ctxb := context.Background()
@@ -232,6 +290,7 @@ func sendCoins(ctx *cli.Context) error {
 		Amount:     amt,
 		TargetConf: int32(ctx.Int64("conf_target")),
 		SatPerByte: ctx.Int64("sat_per_byte"),
+		SendAll:    ctx.Bool("sweepall"),
 	}
 	txid, err := client.SendCoins(ctxb, req)
 	if err != nil {
@@ -239,6 +298,127 @@ func sendCoins(ctx *cli.Context) error {
 	}
 
 	printRespJSON(txid)
+	return nil
+}
+
+var listUnspentCommand = cli.Command{
+	Name:      "listunspent",
+	Category:  "On-chain",
+	Usage:     "List utxos available for spending.",
+	ArgsUsage: "[min-confs [max-confs]] [--unconfirmed_only]",
+	Description: `
+	For each spendable utxo currently in the wallet, with at least min_confs
+	confirmations, and at most max_confs confirmations, lists the txid,
+	index, amount, address, address type, scriptPubkey and number of
+	confirmations.  Use --min_confs=0 to include unconfirmed coins. To list
+	all coins with at least min_confs confirmations, omit the second
+	argument or flag '--max_confs'. To list all confirmed and unconfirmed
+	coins, no arguments are required. To see only unconfirmed coins, use
+	'--unconfirmed_only' with '--min_confs' and '--max_confs' set to zero or
+	not present.
+	`,
+	Flags: []cli.Flag{
+		cli.Int64Flag{
+			Name:  "min_confs",
+			Usage: "the minimum number of confirmations for a utxo",
+		},
+		cli.Int64Flag{
+			Name:  "max_confs",
+			Usage: "the maximum number of confirmations for a utxo",
+		},
+		cli.BoolFlag{
+			Name: "unconfirmed_only",
+			Usage: "when min_confs and max_confs are zero, " +
+				"setting false implicitly overrides max_confs " +
+				"to be MaxInt32, otherwise max_confs remains " +
+				"zero. An error is returned if the value is " +
+				"true and both min_confs and max_confs are " +
+				"non-zero. (defualt: false)",
+		},
+	},
+	Action: actionDecorator(listUnspent),
+}
+
+func listUnspent(ctx *cli.Context) error {
+	var (
+		minConfirms int64
+		maxConfirms int64
+		err         error
+	)
+	args := ctx.Args()
+
+	if ctx.IsSet("max_confs") && !ctx.IsSet("min_confs") {
+		return fmt.Errorf("max_confs cannot be set without " +
+			"min_confs being set")
+	}
+
+	switch {
+	case ctx.IsSet("min_confs"):
+		minConfirms = ctx.Int64("min_confs")
+	case args.Present():
+		minConfirms, err = strconv.ParseInt(args.First(), 10, 64)
+		if err != nil {
+			cli.ShowCommandHelp(ctx, "listunspent")
+			return nil
+		}
+		args = args.Tail()
+	}
+
+	switch {
+	case ctx.IsSet("max_confs"):
+		maxConfirms = ctx.Int64("max_confs")
+	case args.Present():
+		maxConfirms, err = strconv.ParseInt(args.First(), 10, 64)
+		if err != nil {
+			cli.ShowCommandHelp(ctx, "listunspent")
+			return nil
+		}
+		args = args.Tail()
+	}
+
+	unconfirmedOnly := ctx.Bool("unconfirmed_only")
+
+	// Force minConfirms and maxConfirms to be zero if unconfirmedOnly is
+	// true.
+	if unconfirmedOnly && (minConfirms != 0 || maxConfirms != 0) {
+		cli.ShowCommandHelp(ctx, "listunspent")
+		return nil
+	}
+
+	// When unconfirmedOnly is inactive, we will override maxConfirms to be
+	// a MaxInt32 to return all confirmed and unconfirmed utxos.
+	if maxConfirms == 0 && !unconfirmedOnly {
+		maxConfirms = math.MaxInt32
+	}
+
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.ListUnspentRequest{
+		MinConfs: int32(minConfirms),
+		MaxConfs: int32(maxConfirms),
+	}
+	resp, err := client.ListUnspent(ctxb, req)
+	if err != nil {
+		return err
+	}
+
+	// Parse the response into the final json object that will be printed
+	// to stdout. At the moment, this filters out the raw txid bytes from
+	// each utxo's outpoint and only prints the txid string.
+	var listUnspentResp = struct {
+		Utxos []*Utxo `json:"utxos"`
+	}{
+		Utxos: make([]*Utxo, 0, len(resp.Utxos)),
+	}
+	for _, protoUtxo := range resp.Utxos {
+		utxo := NewUtxoFromProto(protoUtxo)
+		listUnspentResp.Utxos = append(listUnspentResp.Utxos, utxo)
+	}
+
+	printJSON(listUnspentResp)
+
 	return nil
 }
 
@@ -1151,7 +1331,29 @@ var createCommand = cli.Command{
 	was provided by the user. This should be written down as it can be used
 	to potentially recover all on-chain funds, and most off-chain funds as
 	well.
+
+	Finally, it's also possible to use this command and a set of static
+	channel backups to trigger a recover attempt for the provided Static
+	Channel Backups. Only one of the three parameters will be accepted. See
+	the restorechanbackup command for further details w.r.t the format
+	accepted.
 	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name: "single_backup",
+			Usage: "a hex encoded single channel backup obtained " +
+				"from exportchanbackup",
+		},
+		cli.StringFlag{
+			Name: "multi_backup",
+			Usage: "a hex encoded multi-channel backup obtained " +
+				"from exportchanbackup",
+		},
+		cli.StringFlag{
+			Name:  "multi_file",
+			Usage: "the path to a multi-channel back up file",
+		},
+	},
 	Action: actionDecorator(create),
 }
 
@@ -1206,6 +1408,13 @@ func create(ctx *cli.Context) error {
 	// If the passwords don't match, then we'll return an error.
 	if !bytes.Equal(pw1, pw2) {
 		return fmt.Errorf("passwords don't match")
+	}
+
+	// If the password length is less than 8 characters, then we'll
+	// return an error.
+	pwErr := walletunlocker.ValidatePassword(pw1)
+	if pwErr != nil {
+		return pwErr
 	}
 
 	// Next, we'll see if the user has 24-word mnemonic they want to use to
@@ -1386,6 +1595,30 @@ mnemonicCheck:
 	fmt.Println("\n!!!YOU MUST WRITE DOWN THIS SEED TO BE ABLE TO " +
 		"RESTORE THE WALLET!!!")
 
+	// We'll also check to see if they provided any static channel backups,
+	// if so, then we'll also tack these onto the final innit wallet
+	// request.
+	var chanBackups *lnrpc.ChanBackupSnapshot
+	backups, err := parseChanBackups(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to parse chan "+
+			"backups: %v", err)
+	}
+
+	if backups != nil {
+		switch {
+		case backups.GetChanBackups() != nil:
+			singleBackup := backups.GetChanBackups()
+			chanBackups.SingleChanBackups = singleBackup
+
+		case backups.GetMultiChanBackup() != nil:
+			multiBackup := backups.GetMultiChanBackup()
+			chanBackups.MultiChanBackup = &lnrpc.MultiChanBackup{
+				MultiChanBackup: multiBackup,
+			}
+		}
+	}
+
 	// With either the user's prior cipher seed, or a newly generated one,
 	// we'll go ahead and initialize the wallet.
 	req := &lnrpc.InitWalletRequest{
@@ -1393,6 +1626,7 @@ mnemonicCheck:
 		CipherSeedMnemonic: cipherSeedMnemonic,
 		AezeedPassphrase:   aezeedPass,
 		RecoveryWindow:     recoveryWindow,
+		ChannelBackups:     chanBackups,
 	}
 	if _, err := client.InitWallet(ctxb, req); err != nil {
 		return err
@@ -1465,6 +1699,8 @@ func unlock(ctx *cli.Context) error {
 	}
 
 	fmt.Println("\nlnd successfully unlocked!")
+
+	// TODO(roasbeef): add ability to accept hex single and multi backups
 
 	return nil
 }
@@ -1580,6 +1816,11 @@ var getInfoCommand = cli.Command{
 	Action: actionDecorator(getInfo),
 }
 
+type chain struct {
+	Chain   string `json:"chain"`
+	Network string `json:"network"`
+}
+
 func getInfo(ctx *cli.Context) error {
 	ctxb := context.Background()
 	client, cleanUp := getClient(ctx)
@@ -1591,7 +1832,47 @@ func getInfo(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(resp)
+	chains := make([]chain, len(resp.Chains))
+	for i, c := range resp.Chains {
+		chains[i] = chain{
+			Chain:   c.Chain,
+			Network: c.Network,
+		}
+	}
+
+	// We print a struct that mimics the proto definition of GetInfoResponse
+	// but has a better ordering for the same list of fields.
+	printJSON(struct {
+		Version             string   `json:"version"`
+		IdentityPubkey      string   `json:"identity_pubkey"`
+		Alias               string   `json:"alias"`
+		NumPendingChannels  uint32   `json:"num_pending_channels"`
+		NumActiveChannels   uint32   `json:"num_active_channels"`
+		NumInactiveChannels uint32   `json:"num_inactive_channels"`
+		NumPeers            uint32   `json:"num_peers"`
+		BlockHeight         uint32   `json:"block_height"`
+		BlockHash           string   `json:"block_hash"`
+		BestHeaderTimestamp int64    `json:"best_header_timestamp"`
+		SyncedToChain       bool     `json:"synced_to_chain"`
+		Testnet             bool     `json:"testnet"`
+		Chains              []chain  `json:"chains"`
+		Uris                []string `json:"uris"`
+	}{
+		Version:             resp.Version,
+		IdentityPubkey:      resp.IdentityPubkey,
+		Alias:               resp.Alias,
+		NumPendingChannels:  resp.NumPendingChannels,
+		NumActiveChannels:   resp.NumActiveChannels,
+		NumInactiveChannels: resp.NumInactiveChannels,
+		NumPeers:            resp.NumPeers,
+		BlockHeight:         resp.BlockHeight,
+		BlockHash:           resp.BlockHash,
+		BestHeaderTimestamp: resp.BestHeaderTimestamp,
+		SyncedToChain:       resp.SyncedToChain,
+		Testnet:             resp.Testnet,
+		Chains:              chains,
+		Uris:                resp.Uris,
+	})
 	return nil
 }
 
@@ -1787,6 +2068,12 @@ func prunedChannels(ctx *cli.Context) error {
 	return nil
 }
 
+var cltvLimitFlag = cli.UintFlag{
+	Name: "cltv_limit",
+	Usage: "the maximum time lock that may be used for " +
+		"this payment",
+}
+
 var sendPaymentCommand = cli.Command{
 	Name:     "sendpayment",
 	Category: "Payments",
@@ -1833,6 +2120,7 @@ var sendPaymentCommand = cli.Command{
 			Usage: "percentage of the payment's amount used as the" +
 				"maximum fee allowed when sending the payment",
 		},
+		cltvLimitFlag,
 		cli.StringFlag{
 			Name:  "payment_hash, r",
 			Usage: "the hash to use within the payment's HTLC",
@@ -1848,6 +2136,12 @@ var sendPaymentCommand = cli.Command{
 		cli.Int64Flag{
 			Name:  "final_cltv_delta",
 			Usage: "the number of blocks the last hop has to reveal the preimage",
+		},
+		cli.Uint64Flag{
+			Name: "outgoing_chan_id",
+			Usage: "short channel id of the outgoing channel to " +
+				"use for the first hop of the payment",
+			Value: 0,
 		},
 		cli.BoolFlag{
 			Name:  "force, f",
@@ -1945,6 +2239,8 @@ func sendPayment(ctx *cli.Context) error {
 			PaymentRequest: ctx.String("pay_req"),
 			Amt:            ctx.Int64("amt"),
 			FeeLimit:       feeLimit,
+			OutgoingChanId: ctx.Uint64("outgoing_chan_id"),
+			CltvLimit:      uint32(ctx.Int(cltvLimitFlag.Name)),
 		}
 
 		return sendPaymentRequest(client, req)
@@ -2001,6 +2297,7 @@ func sendPayment(ctx *cli.Context) error {
 			rHash, err = hex.DecodeString(ctx.String("payment_hash"))
 		case args.Present():
 			rHash, err = hex.DecodeString(args.First())
+			args = args.Tail()
 		default:
 			return fmt.Errorf("payment hash argument missing")
 		}
@@ -2058,6 +2355,13 @@ func sendPaymentRequest(client lnrpc.LightningClient, req *lnrpc.SendRequest) er
 		F: resp.FailedRoutes,
 	})
 
+	// If we get a payment error back, we pass an error
+	// up to main which eventually calls fatal() and returns
+	// with a non-zero exit code.
+	if resp.PaymentError != "" {
+		return errors.New(resp.PaymentError)
+	}
+
 	return nil
 }
 
@@ -2085,6 +2389,13 @@ var payInvoiceCommand = cli.Command{
 			Name: "fee_limit_percent",
 			Usage: "percentage of the payment's amount used as the" +
 				"maximum fee allowed when sending the payment",
+		},
+		cltvLimitFlag,
+		cli.Uint64Flag{
+			Name: "outgoing_chan_id",
+			Usage: "short channel id of the outgoing channel to " +
+				"use for the first hop of the payment",
+			Value: 0,
 		},
 		cli.BoolFlag{
 			Name:  "force, f",
@@ -2125,7 +2436,10 @@ func payInvoice(ctx *cli.Context) error {
 		PaymentRequest: payReq,
 		Amt:            ctx.Int64("amt"),
 		FeeLimit:       feeLimit,
+		OutgoingChanId: ctx.Uint64("outgoing_chan_id"),
+		CltvLimit:      uint32(ctx.Int(cltvLimitFlag.Name)),
 	}
+
 	return sendPaymentRequest(client, req)
 }
 
@@ -2466,7 +2780,7 @@ var listInvoicesCommand = cli.Command{
 	Name:     "listinvoices",
 	Category: "Payments",
 	Usage: "List all invoices currently stored within the database. Any " +
-		"active debug invoices are ingnored.",
+		"active debug invoices are ignored.",
 	Description: `
 	This command enables the retrieval of all invoices currently stored
 	within the database. It has full support for paginationed responses,
@@ -3494,6 +3808,31 @@ var updateChannelPolicyCommand = cli.Command{
 	Action: actionDecorator(updateChannelPolicy),
 }
 
+func parseChanPoint(s string) (*lnrpc.ChannelPoint, error) {
+	split := strings.Split(s, ":")
+	if len(split) != 2 {
+		return nil, fmt.Errorf("expecting chan_point to be in format of: " +
+			"txid:index")
+	}
+
+	index, err := strconv.ParseInt(split[1], 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode output index: %v", err)
+	}
+
+	txid, err := chainhash.NewHashFromStr(split[0])
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse hex string: %v", err)
+	}
+
+	return &lnrpc.ChannelPoint{
+		FundingTxid: &lnrpc.ChannelPoint_FundingTxidBytes{
+			FundingTxidBytes: txid[:],
+		},
+		OutputIndex: uint32(index),
+	}, nil
+}
+
 func updateChannelPolicy(ctx *cli.Context) error {
 	ctxb := context.Background()
 	client, cleanUp := getClient(ctx)
@@ -3562,22 +3901,9 @@ func updateChannelPolicy(ctx *cli.Context) error {
 	}
 
 	if chanPointStr != "" {
-		split := strings.Split(chanPointStr, ":")
-		if len(split) != 2 {
-			return fmt.Errorf("expecting chan_point to be in format of: " +
-				"txid:index")
-		}
-
-		index, err := strconv.ParseInt(split[1], 10, 32)
+		chanPoint, err = parseChanPoint(chanPointStr)
 		if err != nil {
-			return fmt.Errorf("unable to decode output index: %v", err)
-		}
-
-		chanPoint = &lnrpc.ChannelPoint{
-			FundingTxid: &lnrpc.ChannelPoint_FundingTxidStr{
-				FundingTxidStr: split[0],
-			},
-			OutputIndex: uint32(index),
+			return fmt.Errorf("unable to parse chan point: %v", err)
 		}
 	}
 
@@ -3718,5 +4044,380 @@ func forwardingHistory(ctx *cli.Context) error {
 	}
 
 	printRespJSON(resp)
+	return nil
+}
+
+var exportChanBackupCommand = cli.Command{
+	Name:     "exportchanbackup",
+	Category: "Channels",
+	Usage: "Obtain a static channel back up for a selected channels, " +
+		"or all known channels",
+	ArgsUsage: "[chan_point] [--all] [--output_file]",
+	Description: `
+	This command allows a user to export a Static Channel Backup (SCB) for
+	a selected channel. SCB's are encrypted backups of a channel's initial
+	state that are encrypted with a key derived from the seed of a user. In
+	the case of partial or complete data loss, the SCB will allow the user
+	to reclaim settled funds in the channel at its final state. The
+	exported channel backups can be restored at a later time using the
+	restorechanbackup command.
+
+	This command will return one of two types of channel backups depending
+	on the set of passed arguments:
+
+	   * If a target channel point is specified, then a single channel
+	     backup containing only the information for that channel will be
+	     returned.
+
+	   * If the --all flag is passed, then a multi-channel backup will be
+	     returned. A multi backup is a single encrypted blob (displayed in
+	     hex encoding) that contains several channels in a single cipher
+	     text.
+
+	Both of the backup types can be restored using the restorechanbackup
+	command.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "chan_point",
+			Usage: "the target channel to obtain an SCB for",
+		},
+		cli.BoolFlag{
+			Name: "all",
+			Usage: "if specified, then a multi backup of all " +
+				"active channels will be returned",
+		},
+		cli.StringFlag{
+			Name: "output_file",
+			Usage: `
+			if specified, then rather than printing a JSON output
+			of the static channel backup, a serialized version of
+			the backup (either Single or Multi) will be written to
+			the target file, this is the same format used by lnd in
+			its channels.backup file `,
+		},
+	},
+	Action: actionDecorator(exportChanBackup),
+}
+
+func exportChanBackup(ctx *cli.Context) error {
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	// Show command help if no arguments provided
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "exportchanbackup")
+		return nil
+	}
+
+	var (
+		err          error
+		chanPointStr string
+	)
+	args := ctx.Args()
+
+	switch {
+	case ctx.IsSet("chan_point"):
+		chanPointStr = ctx.String("chan_point")
+
+	case args.Present():
+		chanPointStr = args.First()
+
+	case !ctx.IsSet("all"):
+		return fmt.Errorf("must specify chan_point if --all isn't set")
+	}
+
+	if chanPointStr != "" {
+		chanPointRPC, err := parseChanPoint(chanPointStr)
+		if err != nil {
+			return err
+		}
+
+		chanBackup, err := client.ExportChannelBackup(
+			ctxb, &lnrpc.ExportChannelBackupRequest{
+				ChanPoint: chanPointRPC,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		txid, err := chainhash.NewHash(
+			chanPointRPC.GetFundingTxidBytes(),
+		)
+		if err != nil {
+			return err
+		}
+
+		chanPoint := wire.OutPoint{
+			Hash:  *txid,
+			Index: chanPointRPC.OutputIndex,
+		}
+
+		printJSON(struct {
+			ChanPoint  string `json:"chan_point"`
+			ChanBackup string `json:"chan_backup"`
+		}{
+			ChanPoint: chanPoint.String(),
+			ChanBackup: hex.EncodeToString(
+				chanBackup.ChanBackup,
+			),
+		},
+		)
+		return nil
+	}
+
+	if !ctx.IsSet("all") {
+		return fmt.Errorf("if a channel isn't specified, -all must be")
+	}
+
+	chanBackup, err := client.ExportAllChannelBackups(
+		ctxb, &lnrpc.ChanBackupExportRequest{},
+	)
+	if err != nil {
+		return err
+	}
+
+	if ctx.IsSet("output_file") {
+		return ioutil.WriteFile(
+			ctx.String("output_file"),
+			chanBackup.MultiChanBackup.MultiChanBackup,
+			0666,
+		)
+	}
+
+	// TODO(roasbeef): support for export | restore ?
+
+	var chanPoints []string
+	for _, chanPoint := range chanBackup.MultiChanBackup.ChanPoints {
+		txid, err := chainhash.NewHash(chanPoint.GetFundingTxidBytes())
+		if err != nil {
+			return err
+		}
+
+		chanPoints = append(chanPoints, wire.OutPoint{
+			Hash:  *txid,
+			Index: chanPoint.OutputIndex,
+		}.String())
+	}
+
+	printJSON(struct {
+		ChanPoints      []string `json:"chan_points"`
+		MultiChanBackup string   `json:"multi_chan_backup"`
+	}{
+		ChanPoints: chanPoints,
+		MultiChanBackup: hex.EncodeToString(
+			chanBackup.MultiChanBackup.MultiChanBackup,
+		),
+	},
+	)
+	return nil
+}
+
+var verifyChanBackupCommand = cli.Command{
+	Name:      "verifychanbackup",
+	Category:  "Channels",
+	Usage:     "Verify an existing channel backup",
+	ArgsUsage: "[--single_backup] [--multi_backup] [--multi_file]",
+	Description: `
+    This command allows a user to verify an existing Single or Multi channel
+    backup for integrity. This is useful when a user has a backup, but is
+    unsure as to if it's valid or for the target node.
+
+    The command will accept backups in one of three forms:
+
+       * A single channel packed SCB, which can be obtained from
+	 exportchanbackup. This should be passed in hex encoded format.
+
+       * A packed multi-channel SCB, which couples several individual
+	 static channel backups in single blob.
+
+       * A file path which points to a packed multi-channel backup within a
+	 file, using the same format that lnd does in its channels.backup
+	 file.
+    `,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name: "single_backup",
+			Usage: "a hex encoded single channel backup obtained " +
+				"from exportchanbackup",
+		},
+		cli.StringFlag{
+			Name: "multi_backup",
+			Usage: "a hex encoded multi-channel backup obtained " +
+				"from exportchanbackup",
+		},
+		cli.StringFlag{
+			Name:  "multi_file",
+			Usage: "the path to a multi-channel back up file",
+		},
+	},
+	Action: actionDecorator(verifyChanBackup),
+}
+
+func verifyChanBackup(ctx *cli.Context) error {
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	// Show command help if no arguments provided
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "verifychanbackup")
+		return nil
+	}
+
+	backups, err := parseChanBackups(ctx)
+	if err != nil {
+		return err
+	}
+
+	verifyReq := lnrpc.ChanBackupSnapshot{}
+
+	if backups.GetChanBackups() != nil {
+		verifyReq.SingleChanBackups = backups.GetChanBackups()
+	}
+	if backups.GetMultiChanBackup() != nil {
+		verifyReq.MultiChanBackup = &lnrpc.MultiChanBackup{
+			MultiChanBackup: backups.GetMultiChanBackup(),
+		}
+	}
+
+	resp, err := client.VerifyChanBackup(ctxb, &verifyReq)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
+	return nil
+}
+
+var restoreChanBackupCommand = cli.Command{
+	Name:     "restorechanbackup",
+	Category: "Channels",
+	Usage: "Restore an existing single or multi-channel static channel " +
+		"backup",
+	ArgsUsage: "[--single_backup] [--multi_backup] [--multi_file=",
+	Description: `
+	Allows a suer to restore a Static Channel Backup (SCB) that was
+	obtained either via the exportchanbackup command, or from lnd's
+	automatically manged channels.backup file. This command should be used
+	if a user is attempting to restore a channel due to data loss on a
+	running node restored with the same seed as the node that created the
+	channel. If successful, this command will allows the user to recover
+	the settled funds stored in the recovered channels.
+
+	The command will accept backups in one of three forms:
+
+	   * A single channel packed SCB, which can be obtained from
+	     exportchanbackup. This should be passed in hex encoded format.
+
+	   * A packed multi-channel SCB, which couples several individual
+	     static channel backups in single blob.
+
+	   * A file path which points to a packed multi-channel backup within a
+	     file, using the same format that lnd does in its channels.backup
+	     file.
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name: "single_backup",
+			Usage: "a hex encoded single channel backup obtained " +
+				"from exportchanbackup",
+		},
+		cli.StringFlag{
+			Name: "multi_backup",
+			Usage: "a hex encoded multi-channel backup obtained " +
+				"from exportchanbackup",
+		},
+		cli.StringFlag{
+			Name:  "multi_file",
+			Usage: "the path to a multi-channel back up file",
+		},
+	},
+	Action: actionDecorator(restoreChanBackup),
+}
+
+func parseChanBackups(ctx *cli.Context) (*lnrpc.RestoreChanBackupRequest, error) {
+	switch {
+	case ctx.IsSet("single_backup"):
+		packedBackup, err := hex.DecodeString(
+			ctx.String("single_backup"),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode single packed "+
+				"backup: %v", err)
+		}
+
+		return &lnrpc.RestoreChanBackupRequest{
+			Backup: &lnrpc.RestoreChanBackupRequest_ChanBackups{
+				ChanBackups: &lnrpc.ChannelBackups{
+					ChanBackups: []*lnrpc.ChannelBackup{
+						{
+							ChanBackup: packedBackup,
+						},
+					},
+				},
+			},
+		}, nil
+
+	case ctx.IsSet("multi_backup"):
+		packedMulti, err := hex.DecodeString(
+			ctx.String("multi_backup"),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode multi packed "+
+				"backup: %v", err)
+		}
+
+		return &lnrpc.RestoreChanBackupRequest{
+			Backup: &lnrpc.RestoreChanBackupRequest_MultiChanBackup{
+				MultiChanBackup: packedMulti,
+			},
+		}, nil
+
+	case ctx.IsSet("multi_file"):
+		packedMulti, err := ioutil.ReadFile(ctx.String("multi_file"))
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode multi packed "+
+				"backup: %v", err)
+		}
+
+		return &lnrpc.RestoreChanBackupRequest{
+			Backup: &lnrpc.RestoreChanBackupRequest_MultiChanBackup{
+				MultiChanBackup: packedMulti,
+			},
+		}, nil
+
+	default:
+		return nil, nil
+	}
+}
+
+func restoreChanBackup(ctx *cli.Context) error {
+	ctxb := context.Background()
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	// Show command help if no arguments provided
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		cli.ShowCommandHelp(ctx, "restorechanbackup")
+		return nil
+	}
+
+	var req lnrpc.RestoreChanBackupRequest
+
+	backups, err := parseChanBackups(ctx)
+	if err != nil {
+		return err
+	}
+
+	req.Backup = backups.Backup
+
+	_, err = client.RestoreChannelBackups(ctxb, &req)
+	if err != nil {
+		return fmt.Errorf("unable to restore chan backups: %v", err)
+	}
+
 	return nil
 }

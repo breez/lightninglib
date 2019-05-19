@@ -9,14 +9,25 @@ import (
 	"github.com/breez/lightninglib/autopilot"
 	"github.com/breez/lightninglib/build"
 	"github.com/breez/lightninglib/chainntnfs"
+	"github.com/breez/lightninglib/chanbackup"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/channelnotifier"
 	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/discovery"
 	"github.com/breez/lightninglib/htlcswitch"
+	"github.com/breez/lightninglib/invoices"
+	"github.com/breez/lightninglib/lnrpc/autopilotrpc"
+	"github.com/breez/lightninglib/lnrpc/chainrpc"
+	"github.com/breez/lightninglib/lnrpc/invoicesrpc"
+	"github.com/breez/lightninglib/lnrpc/routerrpc"
+	"github.com/breez/lightninglib/lnrpc/signrpc"
+	"github.com/breez/lightninglib/lnrpc/walletrpc"
 	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/netann"
 	"github.com/breez/lightninglib/routing"
 	"github.com/breez/lightninglib/signal"
 	"github.com/breez/lightninglib/sweep"
+	"github.com/breez/lightninglib/watchtower"
 	"github.com/btcsuite/btcd/connmgr"
 	"github.com/btcsuite/btclog"
 	"github.com/jrick/logrotate/rotator"
@@ -64,6 +75,16 @@ var (
 	cnctLog = build.NewSubLogger("CNCT", backendLog.Logger)
 	sphxLog = build.NewSubLogger("SPHX", backendLog.Logger)
 	swprLog = build.NewSubLogger("SWPR", backendLog.Logger)
+	sgnrLog = build.NewSubLogger("SGNR", backendLog.Logger)
+	wlktLog = build.NewSubLogger("WLKT", backendLog.Logger)
+	arpcLog = build.NewSubLogger("ARPC", backendLog.Logger)
+	invcLog = build.NewSubLogger("INVC", backendLog.Logger)
+	nannLog = build.NewSubLogger("NANN", backendLog.Logger)
+	wtwrLog = build.NewSubLogger("WTWR", backendLog.Logger)
+	ntfrLog = build.NewSubLogger("NTFR", backendLog.Logger)
+	irpcLog = build.NewSubLogger("IRPC", backendLog.Logger)
+	chnfLog = build.NewSubLogger("CHNF", backendLog.Logger)
+	chbuLog = build.NewSubLogger("CHBU", backendLog.Logger)
 )
 
 // Initialize package-global logger variables.
@@ -81,6 +102,26 @@ func init() {
 	sphinx.UseLogger(sphxLog)
 	signal.UseLogger(ltndLog)
 	sweep.UseLogger(swprLog)
+	signrpc.UseLogger(sgnrLog)
+	walletrpc.UseLogger(wlktLog)
+	autopilotrpc.UseLogger(arpcLog)
+	invoices.UseLogger(invcLog)
+	netann.UseLogger(nannLog)
+	watchtower.UseLogger(wtwrLog)
+	chainrpc.UseLogger(ntfrLog)
+	invoicesrpc.UseLogger(irpcLog)
+	channelnotifier.UseLogger(chnfLog)
+	chanbackup.UseLogger(chbuLog)
+
+	addSubLogger(routerrpc.Subsystem, routerrpc.UseLogger)
+}
+
+// addSubLogger is a helper method to conveniently register the logger of a sub
+// system.
+func addSubLogger(subsystem string, useLogger func(btclog.Logger)) {
+	logger := build.NewSubLogger(subsystem, backendLog.Logger)
+	useLogger(logger)
+	subsystemLoggers[subsystem] = logger
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
@@ -104,6 +145,16 @@ var subsystemLoggers = map[string]btclog.Logger{
 	"CNCT": cnctLog,
 	"SPHX": sphxLog,
 	"SWPR": swprLog,
+	"SGNR": sgnrLog,
+	"WLKT": wlktLog,
+	"ARPC": arpcLog,
+	"INVC": invcLog,
+	"NANN": nannLog,
+	"WTWR": wtwrLog,
+	"NTFR": ntfnLog,
+	"IRPC": irpcLog,
+	"CHNF": chnfLog,
+	"CHBU": chbuLog,
 }
 
 // initLogRotator initializes the logging rotator to write logs to logFile and

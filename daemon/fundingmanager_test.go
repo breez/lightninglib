@@ -17,8 +17,8 @@ import (
 
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
-	"github.com/breez/lightninglib/contractcourt"
 	"github.com/breez/lightninglib/htlcswitch"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnrpc"
@@ -29,7 +29,6 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
-	_ "github.com/btcsuite/btcwallet/walletdb/bdb"
 )
 
 const (
@@ -170,6 +169,10 @@ func (n *testNode) SendMessage(_ bool, msg ...lnwire.Message) error {
 	return n.sendMessage(msg[0])
 }
 
+func (n *testNode) SendMessageLazy(sync bool, msgs ...lnwire.Message) error {
+	return n.SendMessage(sync, msgs...)
+}
+
 func (n *testNode) WipeChannel(_ *wire.OutPoint) error {
 	return nil
 }
@@ -203,7 +206,7 @@ func (n *testNode) AddNewChannel(channel *channeldb.OpenChannel,
 
 func createTestWallet(cdb *channeldb.DB, netParams *chaincfg.Params,
 	notifier chainntnfs.ChainNotifier, wc lnwallet.WalletController,
-	signer lnwallet.Signer, keyRing keychain.SecretKeyRing,
+	signer input.Signer, keyRing keychain.SecretKeyRing,
 	bio lnwallet.BlockChainIO,
 	estimator lnwallet.FeeEstimator) (*lnwallet.LightningWallet, error) {
 
@@ -233,7 +236,7 @@ func createTestFundingManager(t *testing.T, privKey *btcec.PrivateKey,
 	addr *lnwire.NetAddress, tempTestDir string) (*testNode, error) {
 
 	netParams := activeNetParams.Params
-	estimator := lnwallet.StaticFeeEstimator{FeePerKW: 62500}
+	estimator := lnwallet.NewStaticFeeEstimator(62500, 0)
 
 	chainNotifier := &mockNotifier{
 		oneConfChannel: make(chan *chainntnfs.TxConfirmation, 1),
@@ -252,7 +255,9 @@ func createTestFundingManager(t *testing.T, privKey *btcec.PrivateKey,
 	signer := &mockSigner{
 		key: alicePrivKey,
 	}
-	bio := &mockChainIO{}
+	bio := &mockChainIO{
+		bestHeight: fundingBroadcastHeight,
+	}
 
 	dbDir := filepath.Join(tempTestDir, "cdb")
 	cdb, err := channeldb.Open(dbDir)
@@ -339,7 +344,7 @@ func createTestFundingManager(t *testing.T, privKey *btcec.PrivateKey,
 			return lnwire.NewMSatFromSatoshis(chanAmt) - reserve
 		},
 		RequiredRemoteMaxHTLCs: func(chanAmt btcutil.Amount) uint16 {
-			return uint16(lnwallet.MaxHTLCNumber / 2)
+			return uint16(input.MaxHTLCNumber / 2)
 		},
 		WatchNewChannel: func(*channeldb.OpenChannel, *btcec.PublicKey) error {
 			return nil
@@ -351,8 +356,9 @@ func createTestFundingManager(t *testing.T, privKey *btcec.PrivateKey,
 			publTxChan <- txn
 			return nil
 		},
-		ZombieSweeperInterval: 1 * time.Hour,
-		ReservationTimeout:    1 * time.Nanosecond,
+		ZombieSweeperInterval:  1 * time.Hour,
+		ReservationTimeout:     1 * time.Nanosecond,
+		NotifyOpenChannelEvent: func(wire.OutPoint) {},
 	})
 	if err != nil {
 		t.Fatalf("failed creating fundingManager: %v", err)

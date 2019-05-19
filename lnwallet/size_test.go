@@ -3,7 +3,7 @@ package lnwallet_test
 import (
 	"testing"
 
-	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/input"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
@@ -106,7 +106,7 @@ func TestTxWeightEstimator(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		var weightEstimate lnwallet.TxWeightEstimator
+		var weightEstimate input.TxWeightEstimator
 		tx := wire.NewMsgTx(1)
 
 		for j := 0; j < test.numP2PKHInputs; j++ {

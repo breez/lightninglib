@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/davecgh/go-spew/spew"
 
 	"time"
 )

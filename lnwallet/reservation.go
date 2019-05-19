@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -49,14 +50,6 @@ func (c *ChannelContribution) toChanConfig() channeldb.ChannelConfig {
 	return *c.ChannelConfig
 }
 
-// InputScript represents any script inputs required to redeem a previous
-// output. This struct is used rather than just a witness, or scripSig in
-// order to accommodate nested p2sh which utilizes both types of input scripts.
-type InputScript struct {
-	Witness   [][]byte
-	ScriptSig []byte
-}
-
 // ChannelReservation represents an intent to open a lightning payment channel
 // with a counterparty. The funding processes from reservation to channel opening
 // is a 3-step process. In order to allow for full concurrency during the
@@ -98,8 +91,8 @@ type ChannelReservation struct {
 
 	// In order of sorted inputs. Sorting is done in accordance
 	// to BIP-69: https://github.com/bitcoin/bips/blob/master/bip-0069.mediawiki.
-	ourFundingInputScripts   []*InputScript
-	theirFundingInputScripts []*InputScript
+	ourFundingInputScripts   []*input.Script
+	theirFundingInputScripts []*input.Script
 
 	// Our signature for their version of the commitment transaction.
 	ourCommitmentSig   []byte
@@ -145,7 +138,7 @@ func NewChannelReservation(capacity, fundingAmt btcutil.Amount,
 		initiator    bool
 	)
 
-	commitFee := commitFeePerKw.FeeForWeight(CommitWeight)
+	commitFee := commitFeePerKw.FeeForWeight(input.CommitWeight)
 	fundingMSat := lnwire.NewMSatFromSatoshis(fundingAmt)
 	capacityMSat := lnwire.NewMSatFromSatoshis(capacity)
 	feeMSat := lnwire.NewMSatFromSatoshis(commitFee)
@@ -316,9 +309,9 @@ func (r *ChannelReservation) CommitConstraints(c *channeldb.ChannelConstraints) 
 
 	// Fail if maxHtlcs is above the maximum allowed number of 483.  This
 	// number is specified in BOLT-02.
-	if c.MaxAcceptedHtlcs > uint16(MaxHTLCNumber/2) {
+	if c.MaxAcceptedHtlcs > uint16(input.MaxHTLCNumber/2) {
 		return ErrMaxHtlcNumTooLarge(
-			c.MaxAcceptedHtlcs, uint16(MaxHTLCNumber/2),
+			c.MaxAcceptedHtlcs, uint16(input.MaxHTLCNumber/2),
 		)
 	}
 
@@ -420,7 +413,7 @@ func (r *ChannelReservation) TheirContribution() *ChannelContribution {
 //
 // NOTE: These signatures will only be populated after a call to
 // .ProcessContribution()
-func (r *ChannelReservation) OurSignatures() ([]*InputScript, []byte) {
+func (r *ChannelReservation) OurSignatures() ([]*input.Script, []byte) {
 	r.RLock()
 	defer r.RUnlock()
 	return r.ourFundingInputScripts, r.ourCommitmentSig
@@ -439,7 +432,7 @@ func (r *ChannelReservation) OurSignatures() ([]*InputScript, []byte) {
 // block until the funding transaction obtains the configured number of
 // confirmations. Once the method unblocks, a LightningChannel instance is
 // returned, marking the channel available for updates.
-func (r *ChannelReservation) CompleteReservation(fundingInputScripts []*InputScript,
+func (r *ChannelReservation) CompleteReservation(fundingInputScripts []*input.Script,
 	commitmentSig []byte) (*channeldb.OpenChannel, error) {
 
 	// TODO(roasbeef): add flag for watch or not?
@@ -490,7 +483,7 @@ func (r *ChannelReservation) CompleteReservationSingle(fundingPoint *wire.OutPoi
 //
 // NOTE: These attributes will be unpopulated before a call to
 // .CompleteReservation().
-func (r *ChannelReservation) TheirSignatures() ([]*InputScript, []byte) {
+func (r *ChannelReservation) TheirSignatures() ([]*input.Script, []byte) {
 	r.RLock()
 	defer r.RUnlock()
 	return r.theirFundingInputScripts, r.theirCommitmentSig

@@ -11,6 +11,7 @@ import (
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/htlcswitch"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnpeer"
 	"github.com/breez/lightninglib/lnrpc"
@@ -333,6 +334,10 @@ type fundingConfig struct {
 	// flood us with very small channels that would never really be usable
 	// due to fees.
 	MinChanSize btcutil.Amount
+
+	// NotifyOpenChannelEvent informs the ChannelNotifier when channels
+	// transition from pending open to open.
+	NotifyOpenChannelEvent func(wire.OutPoint)
 }
 
 // fundingManager acts as an orchestrator/bridge between the wallet's
@@ -504,7 +509,7 @@ func (f *fundingManager) Start() error {
 			channel.IsInitiator {
 
 			err := f.cfg.PublishTransaction(channel.FundingTxn)
-			if err != nil && err != lnwallet.ErrDoubleSpend {
+			if err != nil {
 				fndgLog.Errorf("Unable to rebroadcast funding "+
 					"tx for ChannelPoint(%v): %v",
 					channel.FundingOutpoint, err)
@@ -1848,12 +1853,12 @@ func makeFundingScript(channel *channeldb.OpenChannel) ([]byte, error) {
 	localKey := channel.LocalChanCfg.MultiSigKey.PubKey.SerializeCompressed()
 	remoteKey := channel.RemoteChanCfg.MultiSigKey.PubKey.SerializeCompressed()
 
-	multiSigScript, err := lnwallet.GenMultiSigScript(localKey, remoteKey)
+	multiSigScript, err := input.GenMultiSigScript(localKey, remoteKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return lnwallet.WitnessScriptHash(multiSigScript)
+	return input.WitnessScriptHash(multiSigScript)
 }
 
 // waitForFundingConfirmation handles the final stages of the channel funding
@@ -1938,6 +1943,10 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 			"%v", err)
 		return
 	}
+
+	// Inform the ChannelNotifier that the channel has transitioned from
+	// pending open to open.
+	f.cfg.NotifyOpenChannelEvent(completeChan.FundingOutpoint)
 
 	// TODO(roasbeef): ideally persistent state update for chan above
 	// should be abstracted
@@ -2279,7 +2288,7 @@ func (f *fundingManager) annAfterSixConfs(completeChan *channeldb.OpenChannel,
 		chanID := lnwire.NewChanIDFromOutPoint(&fundingPoint)
 
 		fndgLog.Infof("Announcing ChannelPoint(%v), short_chan_id=%v",
-			&fundingPoint, spew.Sdump(shortChanID))
+			&fundingPoint, shortChanID)
 
 		// We'll obtain the min HTLC value we can forward in our
 		// direction, as we'll use this value within our ChannelUpdate.
@@ -2311,7 +2320,7 @@ func (f *fundingManager) annAfterSixConfs(completeChan *channeldb.OpenChannel,
 		}
 
 		fndgLog.Debugf("Channel with ChannelPoint(%v), short_chan_id=%v "+
-			"announced", &fundingPoint, spew.Sdump(shortChanID))
+			"announced", &fundingPoint, shortChanID)
 	}
 
 	// We delete the channel opening state from our internal database

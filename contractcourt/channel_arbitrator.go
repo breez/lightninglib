@@ -1,25 +1,19 @@
 package contractcourt
 
 import (
+	"bytes"
 	"errors"
 	"sync"
 	"sync/atomic"
 
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/lntypes"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/davecgh/go-spew/spew"
-)
-
-const (
-	// broadcastRedeemMultiplier is the additional factor that we'll scale
-	// the normal broadcastDelta by when deciding whether or not to
-	// broadcast a commitment to claim an HTLC on-chain. We use a scaled
-	// value, as when redeeming we want to ensure that we have enough time
-	// to redeem the HTLC, well before it times out.
-	broadcastRedeemMultiplier = 2
 )
 
 var (
@@ -38,7 +32,7 @@ type WitnessSubscription struct {
 	// sent over.
 	//
 	// TODO(roasbeef): couple with WitnessType?
-	WitnessUpdates <-chan []byte
+	WitnessUpdates <-chan lntypes.Preimage
 
 	// CancelSubscription is a function closure that should be used by a
 	// client to cancel the subscription once they are no longer interested
@@ -60,10 +54,12 @@ type WitnessBeacon interface {
 
 	// LookupPreImage attempts to lookup a preimage in the global cache.
 	// True is returned for the second argument if the preimage is found.
-	LookupPreimage(payhash []byte) ([]byte, bool)
+	LookupPreimage(payhash lntypes.Hash) (lntypes.Preimage, bool)
 
-	// AddPreImage adds a newly discovered preimage to the global cache.
-	AddPreimage(pre []byte) error
+	// AddPreimages adds a batch of newly discovered preimages to the global
+	// cache, and also signals any subscribers of the newly discovered
+	// witness.
+	AddPreimages(preimages ...lntypes.Preimage) error
 }
 
 // ChannelArbitratorConfig contains all the functionality that the
@@ -130,6 +126,36 @@ type ChannelArbitratorConfig struct {
 	MarkChannelResolved func() error
 
 	ChainArbitratorConfig
+}
+
+// ContractReport provides a summary of a commitment tx output.
+type ContractReport struct {
+	// Outpoint is the final output that will be swept back to the wallet.
+	Outpoint wire.OutPoint
+
+	// Incoming indicates whether the htlc was incoming to this channel.
+	Incoming bool
+
+	// Amount is the final value that will be swept in back to the wallet.
+	Amount btcutil.Amount
+
+	// MaturityHeight is the absolute block height that this output will
+	// mature at.
+	MaturityHeight uint32
+
+	// Stage indicates whether the htlc is in the CLTV-timeout stage (1) or
+	// the CSV-delay stage (2). A stage 1 htlc's maturity height will be set
+	// to its expiry height, while a stage 2 htlc's maturity height will be
+	// set to its confirmation height plus the maturity requirement.
+	Stage uint32
+
+	// LimboBalance is the total number of frozen coins within this
+	// contract.
+	LimboBalance btcutil.Amount
+
+	// RecoveredBalance is the total value that has been successfully swept
+	// back to the user's wallet.
+	RecoveredBalance btcutil.Amount
 }
 
 // htlcSet represents the set of active HTLCs on a given commitment
@@ -202,6 +228,10 @@ type ChannelArbitrator struct {
 	// be able to signal them for shutdown in the case that we shutdown.
 	activeResolvers []ContractResolver
 
+	// activeResolversLock prevents simultaneous read and write to the
+	// resolvers slice.
+	activeResolversLock sync.RWMutex
+
 	// resolutionSignal is a channel that will be sent upon by contract
 	// resolvers once their contract has been fully resolved. With each
 	// send, we'll check to see if the contract is fully resolved.
@@ -243,8 +273,7 @@ func (c *ChannelArbitrator) Start() error {
 	}
 
 	var (
-		err                 error
-		unresolvedContracts []ContractResolver
+		err error
 	)
 
 	log.Debugf("Starting ChannelArbitrator(%v), htlc_set=%v",
@@ -332,22 +361,9 @@ func (c *ChannelArbitrator) Start() error {
 	if startingState == StateWaitingFullResolution &&
 		nextState == StateWaitingFullResolution {
 
-		// We'll now query our log to see if there are any active
-		// unresolved contracts. If this is the case, then we'll
-		// relaunch all contract resolvers.
-		unresolvedContracts, err = c.log.FetchUnresolvedContracts()
-		if err != nil {
+		if err := c.relaunchResolvers(); err != nil {
 			c.cfg.BlockEpochs.Cancel()
 			return err
-		}
-
-		log.Infof("ChannelArbitrator(%v): relaunching %v contract "+
-			"resolvers", c.cfg.ChanPoint, len(unresolvedContracts))
-
-		c.activeResolvers = unresolvedContracts
-		for _, contract := range unresolvedContracts {
-			c.wg.Add(1)
-			go c.resolveContract(contract)
 		}
 	}
 
@@ -356,6 +372,150 @@ func (c *ChannelArbitrator) Start() error {
 	c.wg.Add(1)
 	go c.channelAttendant(bestHeight)
 	return nil
+}
+
+// relauchResolvers relaunches the set of resolvers for unresolved contracts in
+// order to provide them with information that's not immediately available upon
+// starting the ChannelArbitrator. This information should ideally be stored in
+// the database, so this only serves as a intermediate work-around to prevent a
+// migration.
+func (c *ChannelArbitrator) relaunchResolvers() error {
+	// We'll now query our log to see if there are any active
+	// unresolved contracts. If this is the case, then we'll
+	// relaunch all contract resolvers.
+	unresolvedContracts, err := c.log.FetchUnresolvedContracts()
+	if err != nil {
+		return err
+	}
+
+	// Retrieve the commitment tx hash from the log.
+	contractResolutions, err := c.log.FetchContractResolutions()
+	if err != nil {
+		log.Errorf("unable to fetch contract resolutions: %v",
+			err)
+		return err
+	}
+	commitHash := contractResolutions.CommitHash
+
+	// Reconstruct the htlc outpoints and data from the chain action log.
+	// The purpose of the constructed htlc map is to supplement to resolvers
+	// restored from database with extra data. Ideally this data is stored
+	// as part of the resolver in the log. This is a workaround to prevent a
+	// db migration.
+	htlcMap := make(map[wire.OutPoint]*channeldb.HTLC)
+	chainActions, err := c.log.FetchChainActions()
+	if err != nil {
+		log.Errorf("unable to fetch chain actions: %v", err)
+		return err
+	}
+	for _, htlcs := range chainActions {
+		for _, htlc := range htlcs {
+			outpoint := wire.OutPoint{
+				Hash:  commitHash,
+				Index: uint32(htlc.OutputIndex),
+			}
+			htlcMap[outpoint] = &htlc
+		}
+	}
+
+	log.Infof("ChannelArbitrator(%v): relaunching %v contract "+
+		"resolvers", c.cfg.ChanPoint, len(unresolvedContracts))
+
+	for _, resolver := range unresolvedContracts {
+		supplementResolver(resolver, htlcMap)
+	}
+
+	c.launchResolvers(unresolvedContracts)
+
+	return nil
+}
+
+// supplementResolver takes a resolver as it is restored from the log and fills
+// in missing data from the htlcMap.
+func supplementResolver(resolver ContractResolver,
+	htlcMap map[wire.OutPoint]*channeldb.HTLC) error {
+
+	switch r := resolver.(type) {
+
+	case *htlcSuccessResolver:
+		return supplementSuccessResolver(r, htlcMap)
+
+	case *htlcIncomingContestResolver:
+		return supplementSuccessResolver(
+			&r.htlcSuccessResolver, htlcMap,
+		)
+
+	case *htlcTimeoutResolver:
+		return supplementTimeoutResolver(r, htlcMap)
+
+	case *htlcOutgoingContestResolver:
+		return supplementTimeoutResolver(
+			&r.htlcTimeoutResolver, htlcMap,
+		)
+	}
+
+	return nil
+}
+
+// supplementSuccessResolver takes a htlcSuccessResolver as it is restored from
+// the log and fills in missing data from the htlcMap.
+func supplementSuccessResolver(r *htlcSuccessResolver,
+	htlcMap map[wire.OutPoint]*channeldb.HTLC) error {
+
+	res := r.htlcResolution
+	htlcPoint := res.HtlcPoint()
+	htlc, ok := htlcMap[htlcPoint]
+	if !ok {
+		return errors.New(
+			"htlc for success resolver unavailable",
+		)
+	}
+	r.htlcAmt = htlc.Amt
+	return nil
+}
+
+// supplementTimeoutResolver takes a htlcSuccessResolver as it is restored from
+// the log and fills in missing data from the htlcMap.
+func supplementTimeoutResolver(r *htlcTimeoutResolver,
+	htlcMap map[wire.OutPoint]*channeldb.HTLC) error {
+
+	res := r.htlcResolution
+	htlcPoint := res.HtlcPoint()
+	htlc, ok := htlcMap[htlcPoint]
+	if !ok {
+		return errors.New(
+			"htlc for timeout resolver unavailable",
+		)
+	}
+	r.htlcAmt = htlc.Amt
+	return nil
+}
+
+// Report returns htlc reports for the active resolvers.
+func (c *ChannelArbitrator) Report() []*ContractReport {
+	c.activeResolversLock.RLock()
+	defer c.activeResolversLock.RUnlock()
+
+	var reports []*ContractReport
+	for _, resolver := range c.activeResolvers {
+		r, ok := resolver.(reportingContractResolver)
+		if !ok {
+			continue
+		}
+
+		if r.IsResolved() {
+			continue
+		}
+
+		report := r.report()
+		if report == nil {
+			continue
+		}
+
+		reports = append(reports, report)
+	}
+
+	return reports
 }
 
 // Stop signals the ChannelArbitrator for a graceful shutdown.
@@ -370,9 +530,11 @@ func (c *ChannelArbitrator) Stop() error {
 		go c.cfg.ChainEvents.Cancel()
 	}
 
+	c.activeResolversLock.RLock()
 	for _, activeResolver := range c.activeResolvers {
 		activeResolver.Stop()
 	}
+	c.activeResolversLock.RUnlock()
 
 	close(c.quit)
 	c.wg.Wait()
@@ -703,11 +865,7 @@ func (c *ChannelArbitrator) stateStep(triggerHeight uint32,
 
 		// Finally, we'll launch all the required contract resolvers.
 		// Once they're all resolved, we're no longer needed.
-		c.activeResolvers = htlcResolvers
-		for _, contract := range htlcResolvers {
-			c.wg.Add(1)
-			go c.resolveContract(contract)
-		}
+		c.launchResolvers(htlcResolvers)
 
 		nextState = StateWaitingFullResolution
 
@@ -717,7 +875,19 @@ func (c *ChannelArbitrator) stateStep(triggerHeight uint32,
 		log.Infof("ChannelArbitrator(%v): still awaiting contract "+
 			"resolution", c.cfg.ChanPoint)
 
-		nextState = StateWaitingFullResolution
+		numUnresolved, err := c.log.FetchUnresolvedContracts()
+		if err != nil {
+			return StateError, closeTx, err
+		}
+
+		// If we still have unresolved contracts, then we'll stay alive
+		// to oversee their resolution.
+		if len(numUnresolved) != 0 {
+			nextState = StateWaitingFullResolution
+			break
+		}
+
+		nextState = StateFullyResolved
 
 	// If we start as fully resolved, then we'll end as fully resolved.
 	case StateFullyResolved:
@@ -739,6 +909,18 @@ func (c *ChannelArbitrator) stateStep(triggerHeight uint32,
 		nextState)
 
 	return nextState, closeTx, nil
+}
+
+// launchResolvers updates the activeResolvers list and starts the resolvers.
+func (c *ChannelArbitrator) launchResolvers(resolvers []ContractResolver) {
+	c.activeResolversLock.Lock()
+	defer c.activeResolversLock.Unlock()
+
+	c.activeResolvers = resolvers
+	for _, contract := range resolvers {
+		c.wg.Add(1)
+		go c.resolveContract(contract)
+	}
 }
 
 // advanceState is the main driver of our state machine. This method is an
@@ -910,41 +1092,56 @@ func (c *ChannelArbitrator) checkChainActions(height uint32,
 		"height=%v", c.cfg.ChanPoint, height)
 
 	actionMap := make(ChainActionMap)
-	redeemCutoff := c.cfg.BroadcastDelta * broadcastRedeemMultiplier
 
 	// First, we'll make an initial pass over the set of incoming and
 	// outgoing HTLC's to decide if we need to go on chain at all.
 	haveChainActions := false
 	for _, htlc := range c.activeHTLCs.outgoingHTLCs {
-		// If any of our HTLC's triggered an on-chain action, then we
-		// can break early.
-		if haveChainActions {
-			break
-		}
-
 		// We'll need to go on-chain for an outgoing HTLC if it was
 		// never resolved downstream, and it's "close" to timing out.
-		haveChainActions = haveChainActions || c.shouldGoOnChain(
-			htlc.RefundTimeout, c.cfg.BroadcastDelta, height,
+		toChain := c.shouldGoOnChain(
+			htlc.RefundTimeout, c.cfg.OutgoingBroadcastDelta,
+			height,
 		)
-	}
-	for _, htlc := range c.activeHTLCs.incomingHTLCs {
-		// If any of our HTLC's triggered an on-chain action, then we
-		// can break early.
-		if haveChainActions {
-			break
+
+		if toChain {
+			log.Debugf("ChannelArbitrator(%v): go to chain for "+
+				"outgoing htlc %x: timeout=%v, "+
+				"blocks_until_expiry=%v, broadcast_delta=%v",
+				c.cfg.ChanPoint, htlc.RHash[:],
+				htlc.RefundTimeout, htlc.RefundTimeout-height,
+				c.cfg.OutgoingBroadcastDelta,
+			)
 		}
 
+		haveChainActions = haveChainActions || toChain
+	}
+
+	for _, htlc := range c.activeHTLCs.incomingHTLCs {
 		// We'll need to go on-chain to pull an incoming HTLC iff we
 		// know the pre-image and it's close to timing out. We need to
 		// ensure that we claim the funds that our rightfully ours
 		// on-chain.
-		if _, ok := c.cfg.PreimageDB.LookupPreimage(htlc.RHash[:]); !ok {
+		if _, ok := c.cfg.PreimageDB.LookupPreimage(htlc.RHash); !ok {
 			continue
 		}
-		haveChainActions = haveChainActions || c.shouldGoOnChain(
-			htlc.RefundTimeout, redeemCutoff, height,
+
+		toChain := c.shouldGoOnChain(
+			htlc.RefundTimeout, c.cfg.IncomingBroadcastDelta,
+			height,
 		)
+
+		if toChain {
+			log.Debugf("ChannelArbitrator(%v): go to chain for "+
+				"incoming htlc %x: timeout=%v, "+
+				"blocks_until_expiry=%v, broadcast_delta=%v",
+				c.cfg.ChanPoint, htlc.RHash[:],
+				htlc.RefundTimeout, htlc.RefundTimeout-height,
+				c.cfg.IncomingBroadcastDelta,
+			)
+		}
+
+		haveChainActions = haveChainActions || toChain
 	}
 
 	// If we don't have any actions to make, then we'll return an empty
@@ -981,7 +1178,8 @@ func (c *ChannelArbitrator) checkChainActions(height uint32,
 		// until the HTLC times out to see if we can also redeem it
 		// on-chain.
 		case !c.shouldGoOnChain(
-			htlc.RefundTimeout, c.cfg.BroadcastDelta, height,
+			htlc.RefundTimeout, c.cfg.OutgoingBroadcastDelta,
+			height,
 		):
 			// TODO(roasbeef): also need to be able to query
 			// circuit map to see if HTLC hasn't been fully
@@ -1016,13 +1214,12 @@ func (c *ChannelArbitrator) checkChainActions(height uint32,
 	// either learn of it eventually from the outgoing HTLC, or the sender
 	// will timeout the HTLC.
 	for _, htlc := range c.activeHTLCs.incomingHTLCs {
-		payHash := htlc.RHash
-
 		// If we have the pre-image, then we should go on-chain to
 		// redeem the HTLC immediately.
-		if _, ok := c.cfg.PreimageDB.LookupPreimage(payHash[:]); ok {
+		if _, ok := c.cfg.PreimageDB.LookupPreimage(htlc.RHash); ok {
 			log.Tracef("ChannelArbitrator(%v): preimage for "+
-				"htlc=%x is known!", c.cfg.ChanPoint, payHash[:])
+				"htlc=%x is known!", c.cfg.ChanPoint,
+				htlc.RHash[:])
 
 			actionMap[HtlcClaimAction] = append(
 				actionMap[HtlcClaimAction], htlc,
@@ -1032,7 +1229,7 @@ func (c *ChannelArbitrator) checkChainActions(height uint32,
 
 		log.Tracef("ChannelArbitrator(%v): watching chain to decide "+
 			"action for incoming htlc=%x", c.cfg.ChanPoint,
-			payHash[:])
+			htlc.RHash[:])
 
 		// Otherwise, we don't yet have the pre-image, but should watch
 		// on-chain to see if either: the remote party times out the
@@ -1071,33 +1268,11 @@ func (c *ChannelArbitrator) prepContractResolutions(htlcActions ChainActionMap,
 	inResolutionMap := make(map[wire.OutPoint]lnwallet.IncomingHtlcResolution)
 	for i := 0; i < len(incomingResolutions); i++ {
 		inRes := incomingResolutions[i]
-
-		// If we have a success transaction, then the htlc's outpoint
-		// is the transaction's only input. Otherwise, it's the claim
-		// point.
-		var htlcPoint wire.OutPoint
-		if inRes.SignedSuccessTx != nil {
-			htlcPoint = inRes.SignedSuccessTx.TxIn[0].PreviousOutPoint
-		} else {
-			htlcPoint = inRes.ClaimOutpoint
-		}
-
-		inResolutionMap[htlcPoint] = inRes
+		inResolutionMap[inRes.HtlcPoint()] = inRes
 	}
 	for i := 0; i < len(outgoingResolutions); i++ {
 		outRes := outgoingResolutions[i]
-
-		// If we have a timeout transaction, then the htlc's outpoint
-		// is the transaction's only input. Otherwise, it's the claim
-		// point.
-		var htlcPoint wire.OutPoint
-		if outRes.SignedTimeoutTx != nil {
-			htlcPoint = outRes.SignedTimeoutTx.TxIn[0].PreviousOutPoint
-		} else {
-			htlcPoint = outRes.ClaimOutpoint
-		}
-
-		outResolutionMap[htlcPoint] = outRes
+		outResolutionMap[outRes.HtlcPoint()] = outRes
 	}
 
 	// We'll create the resolver kit that we'll be cloning for each
@@ -1155,6 +1330,7 @@ func (c *ChannelArbitrator) prepContractResolutions(htlcActions ChainActionMap,
 					htlcResolution:  resolution,
 					broadcastHeight: height,
 					payHash:         htlc.RHash,
+					htlcAmt:         htlc.Amt,
 					ResolverKit:     resKit,
 				}
 				htlcResolvers = append(htlcResolvers, resolver)
@@ -1182,6 +1358,7 @@ func (c *ChannelArbitrator) prepContractResolutions(htlcActions ChainActionMap,
 					htlcResolution:  resolution,
 					broadcastHeight: height,
 					htlcIndex:       htlc.HtlcIndex,
+					htlcAmt:         htlc.Amt,
 					ResolverKit:     resKit,
 				}
 				htlcResolvers = append(htlcResolvers, resolver)
@@ -1215,6 +1392,7 @@ func (c *ChannelArbitrator) prepContractResolutions(htlcActions ChainActionMap,
 						htlcResolution:  resolution,
 						broadcastHeight: height,
 						payHash:         htlc.RHash,
+						htlcAmt:         htlc.Amt,
 						ResolverKit:     resKit,
 					},
 				}
@@ -1241,10 +1419,11 @@ func (c *ChannelArbitrator) prepContractResolutions(htlcActions ChainActionMap,
 
 				resKit.Quit = make(chan struct{})
 				resolver := &htlcOutgoingContestResolver{
-					htlcTimeoutResolver{
+					htlcTimeoutResolver: htlcTimeoutResolver{
 						htlcResolution:  resolution,
 						broadcastHeight: height,
 						htlcIndex:       htlc.HtlcIndex,
+						htlcAmt:         htlc.Amt,
 						ResolverKit:     resKit,
 					},
 				}
@@ -1269,6 +1448,25 @@ func (c *ChannelArbitrator) prepContractResolutions(htlcActions ChainActionMap,
 	}
 
 	return htlcResolvers, msgsToSend, nil
+}
+
+// replaceResolver replaces a in the list of active resolvers. If the resolver
+// to be replaced is not found, it returns an error.
+func (c *ChannelArbitrator) replaceResolver(oldResolver,
+	newResolver ContractResolver) error {
+
+	c.activeResolversLock.Lock()
+	defer c.activeResolversLock.Unlock()
+
+	oldKey := oldResolver.ResolverKey()
+	for i, r := range c.activeResolvers {
+		if bytes.Equal(r.ResolverKey(), oldKey) {
+			c.activeResolvers[i] = newResolver
+			return nil
+		}
+	}
+
+	return errors.New("resolver to be replaced not found")
 }
 
 // resolveContract is a goroutine tasked with fully resolving an unresolved
@@ -1320,11 +1518,23 @@ func (c *ChannelArbitrator) resolveContract(currentContract ContractResolver) {
 					c.cfg.ChanPoint, currentContract,
 					nextContract)
 
+				// Swap contract in log.
 				err := c.log.SwapContract(
 					currentContract, nextContract,
 				)
 				if err != nil {
 					log.Errorf("unable to add recurse "+
+						"contract: %v", err)
+				}
+
+				// Swap contract in resolvers list. This is to
+				// make sure that reports are queried from the
+				// new resolver.
+				err = c.replaceResolver(
+					currentContract, nextContract,
+				)
+				if err != nil {
+					log.Errorf("unable to replace "+
 						"contract: %v", err)
 				}
 
@@ -1632,29 +1842,22 @@ func (c *ChannelArbitrator) channelAttendant(bestHeight int32) {
 			log.Infof("ChannelArbitrator(%v): a contract has been "+
 				"fully resolved!", c.cfg.ChanPoint)
 
-			numUnresolved, err := c.log.FetchUnresolvedContracts()
+			nextState, _, err := c.advanceState(
+				uint32(bestHeight), chainTrigger,
+			)
 			if err != nil {
-				log.Errorf("unable to query resolved "+
-					"contracts: %v", err)
+				log.Errorf("unable to advance state: %v", err)
 			}
 
-			// If we still have unresolved contracts, then we'll
-			// stay alive to oversee their resolution.
-			if len(numUnresolved) != 0 {
-				continue
-			}
+			// If we don't have anything further to do after
+			// advancing our state, then we'll exit.
+			if nextState == StateFullyResolved {
+				log.Infof("ChannelArbitrator(%v): all "+
+					"contracts fully resolved, exiting",
+					c.cfg.ChanPoint)
 
-			log.Infof("ChannelArbitrator(%v): all contracts fully "+
-				"resolved, exiting", c.cfg.ChanPoint)
-
-			// Otherwise, our job is finished here, the contract is
-			// now fully resolved! We'll mark it as such, then exit
-			// ourselves.
-			if err := c.cfg.MarkChannelResolved(); err != nil {
-				log.Errorf("unable to mark contract "+
-					"resolved: %v", err)
+				return
 			}
-			return
 
 		// We've just received a request to forcibly close out the
 		// channel. We'll

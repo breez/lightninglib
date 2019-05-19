@@ -1,12 +1,12 @@
 package routing
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/zpay32"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/coreos/bbolt"
 )
@@ -47,7 +47,7 @@ type missionControl struct {
 	// it was added to the prune view. Edges are added to this map if a
 	// caller reports to missionControl a failure localized to that edge
 	// when sending a payment.
-	failedEdges map[uint64]time.Time
+	failedEdges map[EdgeLocator]time.Time
 
 	// failedVertexes maps a node's public key that should be pruned, to
 	// the time that it was added to the prune view. Vertexes are added to
@@ -76,7 +76,7 @@ func newMissionControl(g *channeldb.ChannelGraph, selfNode *channeldb.LightningN
 	qb func(*channeldb.ChannelEdgeInfo) lnwire.MilliSatoshi) *missionControl {
 
 	return &missionControl{
-		failedEdges:    make(map[uint64]time.Time),
+		failedEdges:    make(map[EdgeLocator]time.Time),
 		failedVertexes: make(map[Vertex]time.Time),
 		selfNode:       selfNode,
 		queryBandwidth: qb,
@@ -90,7 +90,7 @@ func newMissionControl(g *channeldb.ChannelGraph, selfNode *channeldb.LightningN
 // state of the wider network from the PoV of mission control compiled via HTLC
 // routing attempts in the past.
 type graphPruneView struct {
-	edges map[uint64]struct{}
+	edges map[EdgeLocator]struct{}
 
 	vertexes map[Vertex]struct{}
 }
@@ -125,7 +125,7 @@ func (m *missionControl) GraphPruneView() graphPruneView {
 
 	// We'll also do the same for edges, but use the edgeDecay this time
 	// rather than the decay for vertexes.
-	edges := make(map[uint64]struct{})
+	edges := make(map[EdgeLocator]struct{})
 	for edge, pruneTime := range m.failedEdges {
 		if now.Sub(pruneTime) >= edgeDecay {
 			log.Tracef("Pruning decayed failure report for edge %v "+
@@ -149,39 +149,12 @@ func (m *missionControl) GraphPruneView() graphPruneView {
 	}
 }
 
-// paymentSession is used during an HTLC routings session to prune the local
-// chain view in response to failures, and also report those failures back to
-// missionControl. The snapshot copied for this session will only ever grow,
-// and will now be pruned after a decay like the main view within mission
-// control. We do this as we want to avoid the case where we continually try a
-// bad edge or route multiple times in a session. This can lead to an infinite
-// loop if payment attempts take long enough. An additional set of edges can
-// also be provided to assist in reaching the payment's destination.
-type paymentSession struct {
-	pruneViewSnapshot graphPruneView
-
-	additionalEdges map[Vertex][]*channeldb.ChannelEdgePolicy
-
-	bandwidthHints map[uint64]lnwire.MilliSatoshi
-
-	// errFailedFeeChans is a map of the short channel ID's that were the
-	// source of policy related routing failures during this payment attempt.
-	// We'll use this map to prune out channels when the first error may not
-	// require pruning, but any subsequent ones do.
-	errFailedPolicyChans map[uint64]struct{}
-
-	mc *missionControl
-
-	haveRoutes     bool
-	preBuiltRoutes []*Route
-}
-
 // NewPaymentSession creates a new payment session backed by the latest prune
 // view from Mission Control. An optional set of routing hints can be provided
 // in order to populate additional edges to explore when finding a path to the
 // payment's destination.
-func (m *missionControl) NewPaymentSession(routeHints [][]HopHint,
-	target *btcec.PublicKey) (*paymentSession, error) {
+func (m *missionControl) NewPaymentSession(routeHints [][]zpay32.HopHint,
+	target Vertex) (*paymentSession, error) {
 
 	viewSnapshot := m.GraphPruneView()
 
@@ -203,7 +176,13 @@ func (m *missionControl) NewPaymentSession(routeHints [][]HopHint,
 			if i != len(routeHint)-1 {
 				endNode.AddPubKey(routeHint[i+1].NodeID)
 			} else {
-				endNode.AddPubKey(target)
+				targetPubKey, err := btcec.ParsePubKey(
+					target[:], btcec.S256(),
+				)
+				if err != nil {
+					return nil, err
+				}
+				endNode.AddPubKey(targetPubKey)
 			}
 
 			// Finally, create the channel edge from the hop hint
@@ -245,8 +224,9 @@ func (m *missionControl) NewPaymentSession(routeHints [][]HopHint,
 		pruneViewSnapshot:    viewSnapshot,
 		additionalEdges:      edges,
 		bandwidthHints:       bandwidthHints,
-		errFailedPolicyChans: make(map[uint64]struct{}),
+		errFailedPolicyChans: make(map[EdgeLocator]struct{}),
 		mc:                   m,
+		pathFinder:           findPath,
 	}, nil
 }
 
@@ -259,8 +239,9 @@ func (m *missionControl) NewPaymentSessionFromRoutes(routes []*Route) *paymentSe
 		pruneViewSnapshot:    m.GraphPruneView(),
 		haveRoutes:           true,
 		preBuiltRoutes:       routes,
-		errFailedPolicyChans: make(map[uint64]struct{}),
+		errFailedPolicyChans: make(map[EdgeLocator]struct{}),
 		mc:                   m,
+		pathFinder:           findPath,
 	}
 }
 
@@ -299,150 +280,11 @@ func generateBandwidthHints(sourceNode *channeldb.LightningNode,
 	return bandwidthHints, nil
 }
 
-// ReportVertexFailure adds a vertex to the graph prune view after a client
-// reports a routing failure localized to the vertex. The time the vertex was
-// added is noted, as it'll be pruned from the shared view after a period of
-// vertexDecay. However, the vertex will remain pruned for the *local* session.
-// This ensures we don't retry this vertex during the payment attempt.
-func (p *paymentSession) ReportVertexFailure(v Vertex) {
-	log.Debugf("Reporting vertex %v failure to Mission Control", v)
-
-	// First, we'll add the failed vertex to our local prune view snapshot.
-	p.pruneViewSnapshot.vertexes[v] = struct{}{}
-
-	// With the vertex added, we'll now report back to the global prune
-	// view, with this new piece of information so it can be utilized for
-	// new payment sessions.
-	p.mc.Lock()
-	p.mc.failedVertexes[v] = time.Now()
-	p.mc.Unlock()
-}
-
-// ReportChannelFailure adds a channel to the graph prune view. The time the
-// channel was added is noted, as it'll be pruned from the global view after a
-// period of edgeDecay. However, the edge will remain pruned for the duration
-// of the *local* session. This ensures that we don't flap by continually
-// retrying an edge after its pruning has expired.
-//
-// TODO(roasbeef): also add value attempted to send and capacity of channel
-func (p *paymentSession) ReportChannelFailure(e uint64) {
-	log.Debugf("Reporting edge %v failure to Mission Control", e)
-
-	// First, we'll add the failed edge to our local prune view snapshot.
-	p.pruneViewSnapshot.edges[e] = struct{}{}
-
-	// With the edge added, we'll now report back to the global prune view,
-	// with this new piece of information so it can be utilized for new
-	// payment sessions.
-	p.mc.Lock()
-	p.mc.failedEdges[e] = time.Now()
-	p.mc.Unlock()
-}
-
-// ReportChannelPolicyFailure handles a failure message that relates to a
-// channel policy. For these types of failures, the policy is updated and we
-// want to keep it included during path finding. This function does mark the
-// edge as 'policy failed once'. The next time it fails, the whole node will be
-// pruned. This is to prevent nodes from keeping us busy by continuously sending
-// new channel updates.
-func (p *paymentSession) ReportChannelPolicyFailure(
-	errSource Vertex, failedChanID uint64) {
-
-	// Check to see if we've already reported a policy related failure for
-	// this channel. If so, then we'll prune out the vertex.
-	_, ok := p.errFailedPolicyChans[failedChanID]
-	if ok {
-		// TODO(joostjager): is this aggresive pruning still necessary?
-		// Just pruning edges may also work unless there is a huge
-		// number of failing channels from that node?
-		p.ReportVertexFailure(errSource)
-
-		return
-	}
-
-	// Finally, we'll record a policy failure from this node and move on.
-	p.errFailedPolicyChans[failedChanID] = struct{}{}
-}
-
-// RequestRoute returns a route which is likely to be capable for successfully
-// routing the specified HTLC payment to the target node. Initially the first
-// set of paths returned from this method may encounter routing failure along
-// the way, however as more payments are sent, mission control will start to
-// build an up to date view of the network itself. With each payment a new area
-// will be explored, which feeds into the recommendations made for routing.
-//
-// NOTE: This function is safe for concurrent access.
-func (p *paymentSession) RequestRoute(payment *LightningPayment,
-	height uint32, finalCltvDelta uint16) (*Route, error) {
-
-	switch {
-	// If we have a set of pre-built routes, then we'll just pop off the
-	// next route from the queue, and use it directly.
-	case p.haveRoutes && len(p.preBuiltRoutes) > 0:
-		nextRoute := p.preBuiltRoutes[0]
-		p.preBuiltRoutes[0] = nil // Set to nil to avoid GC leak.
-		p.preBuiltRoutes = p.preBuiltRoutes[1:]
-
-		return nextRoute, nil
-
-	// If we were instantiated with a set of pre-built routes, and we've
-	// run out, then we'll return a terminal error.
-	case p.haveRoutes && len(p.preBuiltRoutes) == 0:
-		return nil, fmt.Errorf("pre-built routes exhausted")
-	}
-
-	// Otherwise we actually need to perform path finding, so we'll obtain
-	// our current prune view snapshot. This view will only ever grow
-	// during the duration of this payment session, never shrinking.
-	pruneView := p.pruneViewSnapshot
-
-	log.Debugf("Mission Control session using prune view of %v "+
-		"edges, %v vertexes", len(pruneView.edges),
-		len(pruneView.vertexes))
-
-	// TODO(roasbeef): sync logic amongst dist sys
-
-	// Taking into account this prune view, we'll attempt to locate a path
-	// to our destination, respecting the recommendations from
-	// missionControl.
-	path, err := findPath(
-		&graphParams{
-			graph:           p.mc.graph,
-			additionalEdges: p.additionalEdges,
-			bandwidthHints:  p.bandwidthHints,
-		},
-		&restrictParams{
-			ignoredNodes: pruneView.vertexes,
-			ignoredEdges: pruneView.edges,
-			feeLimit:     payment.FeeLimit,
-		},
-		p.mc.selfNode, payment.Target, payment.Amount,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// With the next candidate path found, we'll attempt to turn this into
-	// a route by applying the time-lock and fee requirements.
-	sourceVertex := Vertex(p.mc.selfNode.PubKeyBytes)
-	route, err := newRoute(
-		payment.Amount, payment.FeeLimit, sourceVertex, path, height,
-		finalCltvDelta,
-	)
-	if err != nil {
-		// TODO(roasbeef): return which edge/vertex didn't work
-		// out
-		return nil, err
-	}
-
-	return route, err
-}
-
 // ResetHistory resets the history of missionControl returning it to a state as
 // if no payment attempts have been made.
 func (m *missionControl) ResetHistory() {
 	m.Lock()
-	m.failedEdges = make(map[uint64]time.Time)
+	m.failedEdges = make(map[EdgeLocator]time.Time)
 	m.failedVertexes = make(map[Vertex]time.Time)
 	m.Unlock()
 }

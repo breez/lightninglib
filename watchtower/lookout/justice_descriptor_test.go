@@ -7,17 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
-	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/watchtower/blob"
 	"github.com/breez/lightninglib/watchtower/lookout"
 	"github.com/breez/lightninglib/watchtower/wtdb"
+	"github.com/breez/lightninglib/watchtower/wtmock"
+	"github.com/breez/lightninglib/watchtower/wtpolicy"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcutil/txsort"
 	"github.com/davecgh/go-spew/spew"
 )
 
@@ -44,58 +47,39 @@ var (
 		0x70, 0x4c, 0xff, 0x1e, 0x9c, 0x00, 0x93, 0xbe,
 		0xe2, 0x2e, 0x68, 0x08, 0x4c, 0xb4, 0x0f, 0x4f,
 	}
+
+	rewardCommitType = blob.TypeFromFlags(
+		blob.FlagReward, blob.FlagCommitOutputs,
+	)
+
+	altruistCommitType = blob.FlagCommitOutputs.Type()
 )
 
-type mockSigner struct {
-	index uint32
-	keys  map[keychain.KeyLocator]*btcec.PrivateKey
-}
-
-func newMockSigner() *mockSigner {
-	return &mockSigner{
-		keys: make(map[keychain.KeyLocator]*btcec.PrivateKey),
-	}
-}
-
-func (s *mockSigner) SignOutputRaw(tx *wire.MsgTx,
-	signDesc *lnwallet.SignDescriptor) ([]byte, error) {
-
-	witnessScript := signDesc.WitnessScript
-	amt := signDesc.Output.Value
-
-	privKey, ok := s.keys[signDesc.KeyDesc.KeyLocator]
-	if !ok {
-		panic("cannot sign w/ unknown key")
-	}
-
-	sig, err := txscript.RawTxInWitnessSignature(
-		tx, signDesc.SigHashes, signDesc.InputIndex, amt,
-		witnessScript, signDesc.HashType, privKey,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return sig[:len(sig)-1], nil
-}
-
-func (s *mockSigner) ComputeInputScript(tx *wire.MsgTx,
-	signDesc *lnwallet.SignDescriptor) (*lnwallet.InputScript, error) {
-	return nil, nil
-}
-
-func (s *mockSigner) addPrivKey(privKey *btcec.PrivateKey) keychain.KeyLocator {
-	keyLoc := keychain.KeyLocator{
-		Index: s.index,
-	}
-	s.index++
-
-	s.keys[keyLoc] = privKey
-
-	return keyLoc
-}
-
+// TestJusticeDescriptor asserts that a JusticeDescriptor is able to produce the
+// correct justice transaction for different blob types.
 func TestJusticeDescriptor(t *testing.T) {
+	tests := []struct {
+		name     string
+		blobType blob.Type
+	}{
+		{
+			name:     "reward and commit type",
+			blobType: rewardCommitType,
+		},
+		{
+			name:     "altruist and commit type",
+			blobType: altruistCommitType,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testJusticeDescriptor(t, test.blobType)
+		})
+	}
+}
+
+func testJusticeDescriptor(t *testing.T, blobType blob.Type) {
 	const (
 		localAmount  = btcutil.Amount(100000)
 		remoteAmount = btcutil.Amount(200000)
@@ -114,14 +98,14 @@ func TestJusticeDescriptor(t *testing.T) {
 	)
 
 	// Create the signer, and add the revocation and to-remote privkeys.
-	signer := newMockSigner()
+	signer := wtmock.NewMockSigner()
 	var (
-		revKeyLoc      = signer.addPrivKey(revSK)
-		toRemoteKeyLoc = signer.addPrivKey(toRemoteSK)
+		revKeyLoc      = signer.AddPrivKey(revSK)
+		toRemoteKeyLoc = signer.AddPrivKey(toRemoteSK)
 	)
 
 	// Construct the to-local witness script.
-	toLocalScript, err := lnwallet.CommitScriptToSelf(
+	toLocalScript, err := input.CommitScriptToSelf(
 		csvDelay, toLocalPK, revPK,
 	)
 	if err != nil {
@@ -129,13 +113,13 @@ func TestJusticeDescriptor(t *testing.T) {
 	}
 
 	// Compute the to-local witness script hash.
-	toLocalScriptHash, err := lnwallet.WitnessScriptHash(toLocalScript)
+	toLocalScriptHash, err := input.WitnessScriptHash(toLocalScript)
 	if err != nil {
 		t.Fatalf("unable to create to-local witness script hash: %v", err)
 	}
 
 	// Compute the to-remote witness script hash.
-	toRemoteScriptHash, err := lnwallet.CommitScriptUnencumbered(toRemotePK)
+	toRemoteScriptHash, err := input.CommitScriptUnencumbered(toRemotePK)
 	if err != nil {
 		t.Fatalf("unable to create to-remote script: %v", err)
 	}
@@ -159,30 +143,26 @@ func TestJusticeDescriptor(t *testing.T) {
 	breachTxID := breachTxn.TxHash()
 
 	// Compute the weight estimate for our justice transaction.
-	var weightEstimate lnwallet.TxWeightEstimator
+	var weightEstimate input.TxWeightEstimator
+	weightEstimate.AddWitnessInput(input.ToLocalPenaltyWitnessSize)
+	weightEstimate.AddWitnessInput(input.P2WKHWitnessSize)
 	weightEstimate.AddP2WKHOutput()
-	weightEstimate.AddP2WKHOutput()
-	weightEstimate.AddWitnessInput(lnwallet.ToLocalPenaltyWitnessSize)
-	weightEstimate.AddWitnessInput(lnwallet.P2WKHWitnessSize)
+	if blobType.Has(blob.FlagReward) {
+		weightEstimate.AddP2WKHOutput()
+	}
 	txWeight := weightEstimate.Weight()
 
 	// Create a session info so that simulate agreement of the sweep
 	// parameters that should be used in constructing the justice
 	// transaction.
-	sessionInfo := &wtdb.SessionInfo{
-		SweepFeeRate:  2000,
-		RewardRate:    900000,
-		RewardAddress: makeAddrSlice(22),
+	policy := wtpolicy.Policy{
+		BlobType:     blobType,
+		SweepFeeRate: 2000,
+		RewardRate:   900000,
 	}
-
-	// Given the total input amount and the weight estimate, compute the
-	// amount that should be swept for the victim and the amount taken as a
-	// reward by the watchtower.
-	sweepAmt, rewardAmt, err := sessionInfo.ComputeSweepOutputs(
-		totalAmount, int64(txWeight),
-	)
-	if err != nil {
-		t.Fatalf("unable to compute sweep outputs: %v", err)
+	sessionInfo := &wtdb.SessionInfo{
+		Policy:        policy,
+		RewardAddress: makeAddrSlice(22),
 	}
 
 	// Begin to assemble the justice kit, starting with the sweep address,
@@ -215,24 +195,24 @@ func TestJusticeDescriptor(t *testing.T) {
 				},
 			},
 		},
-		TxOut: []*wire.TxOut{
-			{
-
-				Value:    int64(sweepAmt),
-				PkScript: justiceKit.SweepAddress,
-			},
-			{
-
-				Value:    int64(rewardAmt),
-				PkScript: sessionInfo.RewardAddress,
-			},
-		},
 	}
+
+	outputs, err := policy.ComputeJusticeTxOuts(
+		totalAmount, int64(txWeight), justiceKit.SweepAddress,
+		sessionInfo.RewardAddress,
+	)
+	if err != nil {
+		t.Fatalf("unable to compute justice txouts: %v", err)
+	}
+
+	// Attach the txouts and BIP69 sort the resulting transaction.
+	justiceTxn.TxOut = outputs
+	txsort.InPlaceSort(justiceTxn)
 
 	hashCache := txscript.NewTxSigHashes(justiceTxn)
 
 	// Create the sign descriptor used to sign for the to-local input.
-	toLocalSignDesc := &lnwallet.SignDescriptor{
+	toLocalSignDesc := &input.SignDescriptor{
 		KeyDesc: keychain.KeyDescriptor{
 			KeyLocator: revKeyLoc,
 		},
@@ -244,7 +224,7 @@ func TestJusticeDescriptor(t *testing.T) {
 	}
 
 	// Create the sign descriptor used to sign for the to-remote input.
-	toRemoteSignDesc := &lnwallet.SignDescriptor{
+	toRemoteSignDesc := &input.SignDescriptor{
 		KeyDesc: keychain.KeyDescriptor{
 			KeyLocator: toRemoteKeyLoc,
 			PubKey:     toRemotePK,
@@ -271,7 +251,7 @@ func TestJusticeDescriptor(t *testing.T) {
 	// Compute the witness for the to-remote input. The first element is a
 	// DER-encoded signature under the to-remote pubkey. The sighash flag is
 	// also present, so we trim it.
-	toRemoteWitness, err := lnwallet.CommitSpendNoDelay(
+	toRemoteWitness, err := input.CommitSpendNoDelay(
 		signer, toRemoteSignDesc, justiceTxn,
 	)
 	if err != nil {

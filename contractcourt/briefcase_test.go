@@ -11,6 +11,7 @@ import (
 	prand "math/rand"
 
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/btcec"
@@ -63,7 +64,7 @@ var (
 		0xb4, 0x12, 0xa3,
 	}
 
-	testSignDesc = lnwallet.SignDescriptor{
+	testSignDesc = input.SignDescriptor{
 		SingleTweak: []byte{
 			0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
 			0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
@@ -293,7 +294,6 @@ func TestContractInsertionRetrieval(t *testing.T) {
 			resolved:        false,
 			broadcastHeight: 109,
 			chanPoint:       testChanPoint1,
-			sweepTx:         nil,
 		},
 	}
 

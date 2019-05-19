@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/breez/lightninglib/lnwallet"
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/watchtower/blob"
 )
 
 // WriteElement is a one-stop shop to write the big endian representation of
@@ -26,6 +29,13 @@ func WriteElement(w io.Writer, element interface{}) error {
 	case uint16:
 		var b [2]byte
 		binary.BigEndian.PutUint16(b[:], e)
+		if _, err := w.Write(b[:]); err != nil {
+			return err
+		}
+
+	case blob.Type:
+		var b [2]byte
+		binary.BigEndian.PutUint16(b[:], uint16(e))
 		if _, err := w.Write(b[:]); err != nil {
 			return err
 		}
@@ -78,6 +88,20 @@ func WriteElement(w io.Writer, element interface{}) error {
 			return err
 		}
 
+	case chainhash.Hash:
+		if _, err := w.Write(e[:]); err != nil {
+			return err
+		}
+
+	case *lnwire.RawFeatureVector:
+		if e == nil {
+			return fmt.Errorf("cannot write nil feature vector")
+		}
+
+		if err := e.Encode(w); err != nil {
+			return err
+		}
+
 	case *btcec.PublicKey:
 		if e == nil {
 			return fmt.Errorf("cannot write nil pubkey")
@@ -127,6 +151,13 @@ func ReadElement(r io.Reader, element interface{}) error {
 		}
 		*e = binary.BigEndian.Uint16(b[:])
 
+	case *blob.Type:
+		var b [2]byte
+		if _, err := io.ReadFull(r, b[:]); err != nil {
+			return err
+		}
+		*e = blob.Type(binary.BigEndian.Uint16(b[:]))
+
 	case *uint32:
 		var b [4]byte
 		if _, err := io.ReadFull(r, b[:]); err != nil {
@@ -148,12 +179,12 @@ func ReadElement(r io.Reader, element interface{}) error {
 
 	case *[32]byte:
 		if _, err := io.ReadFull(r, e[:]); err != nil {
-
+			return err
 		}
 
 	case *[33]byte:
 		if _, err := io.ReadFull(r, e[:]); err != nil {
-
+			return err
 		}
 
 	case *[]byte:
@@ -176,6 +207,20 @@ func ReadElement(r io.Reader, element interface{}) error {
 			return err
 		}
 		*e = ErrorCode(binary.BigEndian.Uint16(b[:]))
+
+	case *chainhash.Hash:
+		if _, err := io.ReadFull(r, e[:]); err != nil {
+			return err
+		}
+
+	case **lnwire.RawFeatureVector:
+		f := lnwire.NewRawFeatureVector()
+		err := f.Decode(r)
+		if err != nil {
+			return err
+		}
+
+		*e = f
 
 	case **btcec.PublicKey:
 		var b [btcec.PubKeyBytesLenCompressed]byte

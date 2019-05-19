@@ -8,6 +8,7 @@ import (
 
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -164,7 +165,8 @@ func createTestChannelArbitrator(log ArbitratorLog) (*ChannelArbitrator,
 		DeliverResolutionMsg: func(...ResolutionMsg) error {
 			return nil
 		},
-		BroadcastDelta: 5,
+		OutgoingBroadcastDelta: 5,
+		IncomingBroadcastDelta: 5,
 		Notifier: &mockNotifier{
 			epochChan: make(chan *chainntnfs.BlockEpoch),
 			spendChan: make(chan *chainntnfs.SpendDetail),
@@ -510,8 +512,10 @@ func TestChannelArbitratorLocalForceClosePendingHtlc(t *testing.T) {
 
 	// The force close request should trigger broadcast of the commitment
 	// transaction.
-	assertStateTransitions(t, arbLog.newStates,
-		StateBroadcastCommit, StateCommitmentBroadcasted)
+	assertStateTransitions(
+		t, arbLog.newStates, StateBroadcastCommit,
+		StateCommitmentBroadcasted,
+	)
 	select {
 	case <-respChan:
 	case <-time.After(5 * time.Second):
@@ -528,7 +532,17 @@ func TestChannelArbitratorLocalForceClosePendingHtlc(t *testing.T) {
 	}
 
 	// Now notify about the local force close getting confirmed.
-	closeTx := &wire.MsgTx{}
+	closeTx := &wire.MsgTx{
+		TxIn: []*wire.TxIn{
+			{
+				PreviousOutPoint: wire.OutPoint{},
+				Witness: [][]byte{
+					{0x1},
+					{0x2},
+				},
+			},
+		},
+	}
 
 	htlcOp := wire.OutPoint{
 		Hash:  closeTx.TxHash(),
@@ -539,7 +553,7 @@ func TestChannelArbitratorLocalForceClosePendingHtlc(t *testing.T) {
 	// our commitment transaction got confirmed.
 	outgoingRes := lnwallet.OutgoingHtlcResolution{
 		Expiry: 10,
-		SweepSignDesc: lnwallet.SignDescriptor{
+		SweepSignDesc: input.SignDescriptor{
 			Output: &wire.TxOut{},
 		},
 		SignedTimeoutTx: &wire.MsgTx{
@@ -568,8 +582,10 @@ func TestChannelArbitratorLocalForceClosePendingHtlc(t *testing.T) {
 		&channeldb.ChannelCloseSummary{},
 	}
 
-	assertStateTransitions(t, arbLog.newStates, StateContractClosed,
-		StateWaitingFullResolution)
+	assertStateTransitions(
+		t, arbLog.newStates, StateContractClosed,
+		StateWaitingFullResolution,
+	)
 
 	// htlcOutgoingContestResolver is now active and waiting for the HTLC to
 	// expire. It should not yet have passed it on for incubation.
@@ -591,12 +607,13 @@ func TestChannelArbitratorLocalForceClosePendingHtlc(t *testing.T) {
 		t.Fatalf("no response received")
 	}
 
-	// Notify resolver that output of the commitment has been spent.
-	notifier.confChan <- &chainntnfs.TxConfirmation{}
+	// Notify resolver that the HTLC output of the commitment has been
+	// spent.
+	notifier.spendChan <- &chainntnfs.SpendDetail{SpendingTx: closeTx}
 
 	// As this is our own commitment transaction, the HTLC will go through
-	// to the second level. Channel arbitrator should still not be marked as
-	// resolved.
+	// to the second level. Channel arbitrator should still not be marked
+	// as resolved.
 	select {
 	case <-resolved:
 		t.Fatalf("channel resolved prematurely")
@@ -604,13 +621,10 @@ func TestChannelArbitratorLocalForceClosePendingHtlc(t *testing.T) {
 	}
 
 	// Notify resolver that the second level transaction is spent.
-	notifier.spendChan <- &chainntnfs.SpendDetail{}
+	notifier.spendChan <- &chainntnfs.SpendDetail{SpendingTx: closeTx}
 
 	// At this point channel should be marked as resolved.
-
-	// It should transition StateWaitingFullResolution ->
-	// StateFullyResolved, but this isn't happening.
-	// assertStateTransitions(t, arbLog.newStates, StateFullyResolved)
+	assertStateTransitions(t, arbLog.newStates, StateFullyResolved)
 
 	select {
 	case <-resolved:

@@ -3,7 +3,7 @@ package lookout
 import (
 	"errors"
 
-	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/watchtower/blob"
 	"github.com/breez/lightninglib/watchtower/wtdb"
 	"github.com/btcsuite/btcd/blockchain"
@@ -11,6 +11,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcutil/txsort"
 )
 
 var (
@@ -60,7 +61,7 @@ func (p *JusticeDescriptor) commitToLocalInput() (*breachedInput, error) {
 
 	// Compute the witness script hash, which will be used to locate the
 	// input on the breaching commitment transaction.
-	toLocalWitnessHash, err := lnwallet.WitnessScriptHash(toLocalScript)
+	toLocalWitnessHash, err := input.WitnessScriptHash(toLocalScript)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func (p *JusticeDescriptor) commitToRemoteInput() (*breachedInput, error) {
 
 	// Compute the witness script hash from the to-remote pubkey, which will
 	// be used to locate the input on the breach commitment transaction.
-	toRemoteScriptHash, err := lnwallet.CommitScriptUnencumbered(
+	toRemoteScriptHash, err := input.CommitScriptUnencumbered(
 		toRemotePubKey,
 	)
 	if err != nil {
@@ -166,40 +167,41 @@ func (p *JusticeDescriptor) assembleJusticeTxn(txWeight int64,
 		})
 	}
 
-	// Using the total input amount and the transaction's weight, compute
-	// the sweep and reward amounts. This corresponds to the amount returned
-	// to the victim and the amount paid to the tower, respectively. To do
-	// so, the required transaction fee is subtracted from the total, and
-	// the remaining amount is divided according to the prenegotiated reward
-	// rate from the client's session info.
-	sweepAmt, rewardAmt, err := p.SessionInfo.ComputeSweepOutputs(
-		totalAmt, txWeight,
+	// Using the session's policy, compute the outputs that should be added
+	// to the justice transaction. In the case of an altruist sweep, there
+	// will be a single output paying back to the victim. Otherwise for a
+	// reward sweep, there will be two outputs, one of which pays back to
+	// the victim while the other gives a cut to the tower.
+	outputs, err := p.SessionInfo.Policy.ComputeJusticeTxOuts(
+		totalAmt, txWeight, p.JusticeKit.SweepAddress[:],
+		p.SessionInfo.RewardAddress,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(conner): abort/don't add if outputs are dusty
+	// Attach the computed txouts to the justice transaction.
+	justiceTxn.TxOut = outputs
 
-	// Add the sweep and reward outputs to the justice transaction.
-	justiceTxn.AddTxOut(&wire.TxOut{
-		PkScript: p.JusticeKit.SweepAddress[:],
-		Value:    int64(sweepAmt),
-	})
-	justiceTxn.AddTxOut(&wire.TxOut{
-		PkScript: p.SessionInfo.RewardAddress,
-		Value:    int64(rewardAmt),
-	})
-
-	// TODO(conner): apply and handle BIP69 sort
+	// Apply a BIP69 sort to the resulting transaction.
+	txsort.InPlaceSort(justiceTxn)
 
 	btx := btcutil.NewTx(justiceTxn)
 	if err := blockchain.CheckTransactionSanity(btx); err != nil {
 		return nil, err
 	}
 
+	// Since the transaction inputs could have been reordered as a result of the
+	// BIP69 sort, create an index mapping each prevout to it's new index.
+	inputIndex := make(map[wire.OutPoint]int)
+	for i, txIn := range justiceTxn.TxIn {
+		inputIndex[txIn.PreviousOutPoint] = i
+	}
+
 	// Attach each of the provided witnesses to the transaction.
-	for i, input := range inputs {
+	for _, input := range inputs {
+		// Lookup the input's new post-sort position.
+		i := inputIndex[input.outPoint]
 		justiceTxn.TxIn[i].Witness = input.witness
 
 		// Validate the reconstructed witnesses to ensure they are valid
@@ -226,23 +228,26 @@ func (p *JusticeDescriptor) assembleJusticeTxn(txWeight int64,
 func (p *JusticeDescriptor) CreateJusticeTxn() (*wire.MsgTx, error) {
 	var (
 		sweepInputs    = make([]*breachedInput, 0, 2)
-		weightEstimate lnwallet.TxWeightEstimator
+		weightEstimate input.TxWeightEstimator
 	)
-
-	// Add our reward address to the weight estimate.
-	weightEstimate.AddP2WKHOutput()
 
 	// Add the sweep address's contribution, depending on whether it is a
 	// p2wkh or p2wsh output.
 	switch len(p.JusticeKit.SweepAddress) {
-	case lnwallet.P2WPKHSize:
+	case input.P2WPKHSize:
 		weightEstimate.AddP2WKHOutput()
 
-	case lnwallet.P2WSHSize:
+	case input.P2WSHSize:
 		weightEstimate.AddP2WSHOutput()
 
 	default:
 		return nil, ErrUnknownSweepAddrType
+	}
+
+	// Add our reward address to the weight estimate if the policy's blob
+	// type specifies a reward output.
+	if p.SessionInfo.Policy.BlobType.Has(blob.FlagReward) {
+		weightEstimate.AddP2WKHOutput()
 	}
 
 	// Assemble the breached to-local output from the justice descriptor and
@@ -251,7 +256,7 @@ func (p *JusticeDescriptor) CreateJusticeTxn() (*wire.MsgTx, error) {
 	if err != nil {
 		return nil, err
 	}
-	weightEstimate.AddWitnessInput(lnwallet.ToLocalPenaltyWitnessSize)
+	weightEstimate.AddWitnessInput(input.ToLocalPenaltyWitnessSize)
 	sweepInputs = append(sweepInputs, toLocalInput)
 
 	// If the justice kit specifies that we have to sweep the to-remote
@@ -262,7 +267,7 @@ func (p *JusticeDescriptor) CreateJusticeTxn() (*wire.MsgTx, error) {
 		if err != nil {
 			return nil, err
 		}
-		weightEstimate.AddWitnessInput(lnwallet.P2WKHWitnessSize)
+		weightEstimate.AddWitnessInput(input.P2WKHWitnessSize)
 		sweepInputs = append(sweepInputs, toRemoteInput)
 	}
 
@@ -281,7 +286,7 @@ func (p *JusticeDescriptor) CreateJusticeTxn() (*wire.MsgTx, error) {
 func findTxOutByPkScript(txn *wire.MsgTx,
 	pkScript []byte) (uint32, *wire.TxOut, error) {
 
-	found, index := lnwallet.FindScriptOutputIndex(txn, pkScript)
+	found, index := input.FindScriptOutputIndex(txn, pkScript)
 	if !found {
 		return 0, nil, ErrOutputNotFound
 	}

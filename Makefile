@@ -4,11 +4,13 @@ ESCPKG := github.comi\/breez\/lightninglib
 BTCD_PKG := github.com/btcsuite/btcd
 GOVERALLS_PKG := github.com/mattn/goveralls
 LINT_PKG := gopkg.in/alecthomas/gometalinter.v2
+GOACC_PKG := github.com/ory/go-acc
 
 GO_BIN := ${GOPATH}/bin
 BTCD_BIN := $(GO_BIN)/btcd
 GOVERALLS_BIN := $(GO_BIN)/goveralls
 LINT_BIN := $(GO_BIN)/gometalinter.v2
+GOACC_BIN := $(GO_BIN)/go-acc
 
 BTCD_DIR :=${GOPATH}/src/$(BTCD_PKG)
 
@@ -20,6 +22,8 @@ BTCD_COMMIT := $(shell cat go.mod | \
 		tail -n1 | \
 		awk -F " " '{ print $$2 }' | \
 		awk -F "/" '{ print $$1 }')
+
+GOACC_COMMIT := ddc355013f90fea78d83d3a6c71f1d37ac07ecd5
 
 GOBUILD := GO111MODULE=on go build -v
 GOINSTALL := GO111MODULE=on go install -v
@@ -38,23 +42,6 @@ XARGS := xargs -L 1
 include make/testing_flags.mk
 
 DEV_TAGS := $(if ${tags},$(DEV_TAGS) ${tags},$(DEV_TAGS))
-
-COVER = for dir in $(GOLISTCOVER); do \
-		$(GOTEST) -tags="$(DEV_TAGS) $(LOG_TAGS)" \
-			-covermode=count \
-			-coverprofile=$$dir/profile.tmp $$dir; \
-		\
-		if [ $$? != 0 ] ; \
-		then \
-			exit 1; \
-		fi ; \
-		\
-		if [ -f $$dir/profile.tmp ]; then \
-			cat $$dir/profile.tmp | \
-				tail -n +2 >> profile.cov; \
-			$(RM) $$dir/profile.tmp; \
-		fi \
-	done
 
 LINT = $(LINT_BIN) \
 	--disable-all \
@@ -88,9 +75,16 @@ $(LINT_BIN):
 	@$(call print, "Fetching gometalinter.v2")
 	GO111MODULE=off go get -u $(LINT_PKG)
 
-btcd: 
+$(GOACC_BIN):
+	@$(call print, "Fetching go-acc")
+	go get -u -v $(GOACC_PKG)@$(GOACC_COMMIT)
+	$(GOINSTALL) $(GOACC_PKG)
+
+btcd:
 	@$(call print, "Installing btcd.")
-	GO111MODULE=on go get -v github.com/btcsuite/btcd/@$(BTCD_COMMIT)
+	GO111MODULE=on go get -v $(BTCD_PKG)@$(BTCD_COMMIT)
+	$(GOINSTALL) $(BTCD_PKG)
+	$(GOINSTALL) $(BTCD_PKG)/cmd/btcctl
 
 # ============
 # INSTALLATION
@@ -100,6 +94,11 @@ build:
 	@$(call print, "Building debug lnd and lncli.")
 	$(GOBUILD) -tags="$(DEV_TAGS)" -o lnd-debug $(LDFLAGS) $(PKG)/cmd/lnd
 	$(GOBUILD) -tags="$(DEV_TAGS)" -o lncli-debug $(LDFLAGS) $(PKG)/cmd/lncli
+
+build-itest:
+	@$(call print, "Building itest lnd and lncli.")
+	$(GOBUILD) -tags="$(ITEST_TAGS)" -o lnd-itest $(LDFLAGS) $(PKG)
+	$(GOBUILD) -tags="$(ITEST_TAGS)" -o lncli-itest $(LDFLAGS) $(PKG)/cmd/lncli
 
 install:
 	@$(call print, "Installing lnd and lncli.")
@@ -115,45 +114,46 @@ scratch: build
 
 check: unit itest
 
-itest-only: 
+itest-only:
 	@$(call print, "Running integration tests.")
 	$(ITEST)
 
-itest: btcd build itest-only
+itest: btcd build-itest itest-only
 
 unit: btcd
 	@$(call print, "Running unit tests.")
 	$(UNIT)
 
-unit-cover:
+unit-cover: $(GOACC_BIN)
 	@$(call print, "Running unit coverage tests.")
-	echo "mode: count" > profile.cov
-	$(COVER)
-		
+	$(GOACC_BIN) $$(go list ./... | grep -v lnrpc) -- -test.tags="$(DEV_TAGS) $(LOG_TAGS)"
+
 unit-race:
 	@$(call print, "Running unit race tests.")
 	env CGO_ENABLED=1 GORACE="history_size=7 halt_on_errors=1" $(UNIT_RACE)
 
 goveralls: $(GOVERALLS_BIN)
 	@$(call print, "Sending coverage report.")
-	$(GOVERALLS_BIN) -coverprofile=profile.cov -service=travis-ci
+	$(GOVERALLS_BIN) -coverprofile=coverage.txt -service=travis-ci
 
-travis-race: btcd unit-race
 
-travis-cover: btcd lint unit-cover goveralls
+travis-race: lint btcd unit-race
+
+travis-cover: lint btcd unit-cover goveralls
+
+travis-itest: lint itest
 
 # =============
 # FLAKE HUNTING
 # =============
 
-flakehunter: build
+flakehunter: build-itest
 	@$(call print, "Flake hunting integration tests.")
 	while [ $$? -eq 0 ]; do $(ITEST); done
 
 flake-unit:
 	@$(call print, "Flake hunting unit tests.")
-	GOTRACEBACK=all $(UNIT) -count=1
-	while [ $$? -eq 0 ]; do /bin/sh -c "GOTRACEBACK=all $(UNIT) -count=1"; done
+	while [ $$? -eq 0 ]; do GOTRACEBACK=all $(UNIT) -count=1; done
 
 # =========
 # UTILITIES
@@ -182,6 +182,7 @@ rpc:
 clean:
 	@$(call print, "Cleaning source.$(NC)")
 	$(RM) ./lnd-debug ./lncli-debug
+	$(RM) ./lnd-itest ./lncli-itest
 	$(RM) -r ./vendor .vendor-new
 
 
@@ -200,6 +201,7 @@ clean:
 	goveralls \
 	travis-race \
 	travis-cover \
+	travis-itest \
 	flakehunter \
 	flake-unit \
 	fmt \

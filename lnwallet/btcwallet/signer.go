@@ -1,6 +1,7 @@
 package btcwallet
 
 import (
+	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/btcsuite/btcd/btcec"
@@ -132,18 +133,18 @@ func (b *BtcWallet) fetchPrivKey(keyDesc *keychain.KeyDescriptor) (*btcec.Privat
 // maybeTweakPrivKey examines the single and double tweak parameters on the
 // passed sign descriptor and may perform a mapping on the passed private key
 // in order to utilize the tweaks, if populated.
-func maybeTweakPrivKey(signDesc *lnwallet.SignDescriptor,
+func maybeTweakPrivKey(signDesc *input.SignDescriptor,
 	privKey *btcec.PrivateKey) (*btcec.PrivateKey, error) {
 
 	var retPriv *btcec.PrivateKey
 	switch {
 
 	case signDesc.SingleTweak != nil:
-		retPriv = lnwallet.TweakPrivKey(privKey,
+		retPriv = input.TweakPrivKey(privKey,
 			signDesc.SingleTweak)
 
 	case signDesc.DoubleTweak != nil:
-		retPriv = lnwallet.DeriveRevocationPrivKey(privKey,
+		retPriv = input.DeriveRevocationPrivKey(privKey,
 			signDesc.DoubleTweak)
 
 	default:
@@ -158,7 +159,7 @@ func maybeTweakPrivKey(signDesc *lnwallet.SignDescriptor,
 //
 // This is a part of the WalletController interface.
 func (b *BtcWallet) SignOutputRaw(tx *wire.MsgTx,
-	signDesc *lnwallet.SignDescriptor) ([]byte, error) {
+	signDesc *input.SignDescriptor) ([]byte, error) {
 
 	witnessScript := signDesc.WitnessScript
 
@@ -180,9 +181,10 @@ func (b *BtcWallet) SignOutputRaw(tx *wire.MsgTx,
 	// TODO(roasbeef): generate sighash midstate if not present?
 
 	amt := signDesc.Output.Value
-	sig, err := txscript.RawTxInWitnessSignature(tx, signDesc.SigHashes,
-		signDesc.InputIndex, amt, witnessScript, signDesc.HashType,
-		privKey)
+	sig, err := txscript.RawTxInWitnessSignature(
+		tx, signDesc.SigHashes, signDesc.InputIndex, amt,
+		witnessScript, signDesc.HashType, privKey,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +200,7 @@ func (b *BtcWallet) SignOutputRaw(tx *wire.MsgTx,
 //
 // This is a part of the WalletController interface.
 func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
-	signDesc *lnwallet.SignDescriptor) (*lnwallet.InputScript, error) {
+	signDesc *input.SignDescriptor) (*input.Script, error) {
 
 	outputScript := signDesc.Output.PkScript
 	walletAddr, err := b.fetchOutputAddr(outputScript)
@@ -213,7 +215,7 @@ func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
 	}
 
 	var witnessProgram []byte
-	inputScript := &lnwallet.InputScript{}
+	inputScript := &input.Script{}
 
 	switch {
 
@@ -227,8 +229,9 @@ func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
 		// spend the p2sh output. The sigScript will contain only a
 		// single push of the p2wkh witness program corresponding to
 		// the matching public key of this address.
-		p2wkhAddr, err := btcutil.NewAddressWitnessPubKeyHash(pubKeyHash,
-			b.netParams)
+		p2wkhAddr, err := btcutil.NewAddressWitnessPubKeyHash(
+			pubKeyHash, b.netParams,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +247,7 @@ func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
 			return nil, err
 		}
 
-		inputScript.ScriptSig = sigScript
+		inputScript.SigScript = sigScript
 
 	// Otherwise, this is a regular p2wkh output, so we include the
 	// witness program itself as the subscript to generate the proper
@@ -267,7 +270,8 @@ func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
 	// TODO(roasbeef): adhere to passed HashType
 	witnessScript, err := txscript.WitnessSignature(tx, signDesc.SigHashes,
 		signDesc.InputIndex, signDesc.Output.Value, witnessProgram,
-		signDesc.HashType, privKey, true)
+		signDesc.HashType, privKey, true,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +283,7 @@ func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
 
 // A compile time check to ensure that BtcWallet implements the Signer
 // interface.
-var _ lnwallet.Signer = (*BtcWallet)(nil)
+var _ input.Signer = (*BtcWallet)(nil)
 
 // SignMessage attempts to sign a target message with the private key that
 // corresponds to the passed public key. If the target private key is unable to

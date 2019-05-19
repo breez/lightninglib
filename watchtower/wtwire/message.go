@@ -40,6 +40,13 @@ const (
 
 	// MsgStateUpdateReply identifies an encoded StateUpdateReply message.
 	MsgStateUpdateReply MessageType = 305
+
+	// MsgDeleteSession identifies an encoded DeleteSession message.
+	MsgDeleteSession MessageType = 306
+
+	// MsgDeleteSessionReply identifies an encoded DeleteSessionReply
+	// message.
+	MsgDeleteSessionReply MessageType = 307
 )
 
 // String returns a human readable description of the message type.
@@ -55,6 +62,10 @@ func (m MessageType) String() string {
 		return "MsgStateUpdate"
 	case MsgStateUpdateReply:
 		return "MsgStateUpdateReply"
+	case MsgDeleteSession:
+		return "MsgDeleteSession"
+	case MsgDeleteSessionReply:
+		return "MsgDeleteSessionReply"
 	case MsgError:
 		return "Error"
 	default:
@@ -88,7 +99,7 @@ func makeEmptyMessage(msgType MessageType) (Message, error) {
 
 	switch msgType {
 	case MsgInit:
-		msg = &Init{&lnwire.Init{}}
+		msg = &Init{}
 	case MsgCreateSession:
 		msg = &CreateSession{}
 	case MsgCreateSessionReply:
@@ -97,6 +108,10 @@ func makeEmptyMessage(msgType MessageType) (Message, error) {
 		msg = &StateUpdate{}
 	case MsgStateUpdateReply:
 		msg = &StateUpdateReply{}
+	case MsgDeleteSession:
+		msg = &DeleteSession{}
+	case MsgDeleteSessionReply:
+		msg = &DeleteSessionReply{}
 	case MsgError:
 		msg = &Error{}
 	default:

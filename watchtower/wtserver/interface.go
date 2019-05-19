@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/breez/lightninglib/watchtower/wtdb"
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/breez/lightninglib/watchtower/wtdb"
 )
 
 // Interface represents a simple, listen-only service that accepts watchtower
@@ -63,4 +63,8 @@ type DB interface {
 	// validates the update against the current SessionInfo stored under the
 	// update's session id..
 	InsertStateUpdate(*wtdb.SessionStateUpdate) (uint16, error)
+
+	// DeleteSession removes all data associated with a particular session
+	// id from the tower's database.
+	DeleteSession(wtdb.SessionID) error
 }

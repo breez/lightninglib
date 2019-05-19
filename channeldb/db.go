@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
-	"sync"
+	"time"
 
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/btcsuite/btcd/btcec"
@@ -88,6 +89,13 @@ var (
 			number:    7,
 			migration: migrateOptionalChannelCloseSummaryFields,
 		},
+		{
+			// The DB version that changes the gossiper's message
+			// store keys to account for the message's type and
+			// ShortChannelID.
+			number:    8,
+			migration: migrateGossipMessageStoreKeys,
+		},
 	}
 
 	// Big endian is the preferred byte order, due to cursor scans over
@@ -95,27 +103,29 @@ var (
 	byteOrder = binary.BigEndian
 )
 
-var bufPool = &sync.Pool{
-	New: func() interface{} { return new(bytes.Buffer) },
-}
-
 // DB is the primary datastore for the lnd daemon. The database stores
 // information related to nodes, routing data, open/closed channels, fee
 // schedules, and reputation data.
 type DB struct {
 	*bbolt.DB
 	dbPath string
+	graph  *ChannelGraph
 }
 
 // Open opens an existing channeldb. Any necessary schemas migrations due to
 // updates will take place as necessary.
-func Open(dbPath string) (*DB, error) {
+func Open(dbPath string, modifiers ...OptionModifier) (*DB, error) {
 	path := filepath.Join(dbPath, dbName)
 
 	if !fileExists(path) {
 		if err := createChannelDB(dbPath); err != nil {
 			return nil, err
 		}
+	}
+
+	opts := DefaultOptions()
+	for _, modifier := range modifiers {
+		modifier(&opts)
 	}
 
 	bdb, err := bbolt.Open(path, dbFilePermission, nil)
@@ -127,6 +137,9 @@ func Open(dbPath string) (*DB, error) {
 		DB:     bdb,
 		dbPath: dbPath,
 	}
+	chanDB.graph = newChannelGraph(
+		chanDB, opts.RejectCacheSize, opts.ChannelCacheSize,
+	)
 
 	// Synchronize the version of database and apply migrations if needed.
 	if err := chanDB.syncVersions(dbVersions); err != nil {
@@ -257,6 +270,9 @@ func createChannelDB(dbPath string) error {
 			return err
 		}
 		if _, err := edges.CreateBucket(channelPointBucket); err != nil {
+			return err
+		}
+		if _, err := edges.CreateBucket(zombieBucket); err != nil {
 			return err
 		}
 
@@ -407,6 +423,102 @@ func (d *DB) fetchNodeChannels(chainBucket *bbolt.Bucket) ([]*OpenChannel, error
 	return channels, nil
 }
 
+// FetchChannel attempts to locate a channel specified by the passed channel
+// point. If the channel cannot be found, then an error will be returned.
+func (d *DB) FetchChannel(chanPoint wire.OutPoint) (*OpenChannel, error) {
+	var (
+		targetChan      *OpenChannel
+		targetChanPoint bytes.Buffer
+	)
+
+	if err := writeOutpoint(&targetChanPoint, &chanPoint); err != nil {
+		return nil, err
+	}
+
+	// chanScan will traverse the following bucket structure:
+	//  * nodePub => chainHash => chanPoint
+	//
+	// At each level we go one further, ensuring that we're traversing the
+	// proper key (that's actually a bucket). By only reading the bucket
+	// structure and skipping fully decoding each channel, we save a good
+	// bit of CPU as we don't need to do things like decompress public
+	// keys.
+	chanScan := func(tx *bbolt.Tx) error {
+		// Get the bucket dedicated to storing the metadata for open
+		// channels.
+		openChanBucket := tx.Bucket(openChannelBucket)
+		if openChanBucket == nil {
+			return ErrNoActiveChannels
+		}
+
+		// Within the node channel bucket, are the set of node pubkeys
+		// we have channels with, we don't know the entire set, so
+		// we'll check them all.
+		return openChanBucket.ForEach(func(nodePub, v []byte) error {
+			// Ensure that this is a key the same size as a pubkey,
+			// and also that it leads directly to a bucket.
+			if len(nodePub) != 33 || v != nil {
+				return nil
+			}
+
+			nodeChanBucket := openChanBucket.Bucket(nodePub)
+			if nodeChanBucket == nil {
+				return nil
+			}
+
+			// The next layer down is all the chains that this node
+			// has channels on with us.
+			return nodeChanBucket.ForEach(func(chainHash, v []byte) error {
+				// If there's a value, it's not a bucket so
+				// ignore it.
+				if v != nil {
+					return nil
+				}
+
+				chainBucket := nodeChanBucket.Bucket(chainHash)
+				if chainBucket == nil {
+					return fmt.Errorf("unable to read "+
+						"bucket for chain=%x", chainHash[:])
+				}
+
+				// Finally we reach the leaf bucket that stores
+				// all the chanPoints for this node.
+				chanBucket := chainBucket.Bucket(
+					targetChanPoint.Bytes(),
+				)
+				if chanBucket == nil {
+					return nil
+				}
+
+				channel, err := fetchOpenChannel(
+					chanBucket, &chanPoint,
+				)
+				if err != nil {
+					return err
+				}
+
+				targetChan = channel
+				targetChan.Db = d
+
+				return nil
+			})
+		})
+	}
+
+	err := d.View(chanScan)
+	if err != nil {
+		return nil, err
+	}
+
+	if targetChan != nil {
+		return targetChan, nil
+	}
+
+	// If we can't find the channel, then we return with an error, as we
+	// have nothing to  backup.
+	return nil, ErrChannelNotFound
+}
+
 // FetchAllChannels attempts to retrieve all open channels currently stored
 // within the database, including pending open, fully open and channels waiting
 // for a closing transaction to confirm.
@@ -530,7 +642,7 @@ func fetchChannels(d *DB, pending, waitingClose bool) ([]*OpenChannel, error) {
 					// than Default, then it means it is
 					// waiting to be closed.
 					channelWaitingClose :=
-						channel.ChanStatus() != Default
+						channel.ChanStatus() != ChanStatusDefault
 
 					// Only include it if we requested
 					// channels with the same waitingClose
@@ -772,6 +884,191 @@ func (d *DB) PruneLinkNodes() error {
 	})
 }
 
+// ChannelShell is a shell of a channel that is meant to be used for channel
+// recovery purposes. It contains a minimal OpenChannel instance along with
+// addresses for that target node.
+type ChannelShell struct {
+	// NodeAddrs the set of addresses that this node has known to be
+	// reachable at in the past.
+	NodeAddrs []net.Addr
+
+	// Chan is a shell of an OpenChannel, it contains only the items
+	// required to restore the channel on disk.
+	Chan *OpenChannel
+}
+
+// RestoreChannelShells is a method that allows the caller to reconstruct the
+// state of an OpenChannel from the ChannelShell. We'll attempt to write the
+// new channel to disk, create a LinkNode instance with the passed node
+// addresses, and finally create an edge within the graph for the channel as
+// well. This method is idempotent, so repeated calls with the same set of
+// channel shells won't modify the database after the initial call.
+func (d *DB) RestoreChannelShells(channelShells ...*ChannelShell) error {
+	chanGraph := d.ChannelGraph()
+
+	// TODO(conner): find way to do this w/o accessing internal members?
+	chanGraph.cacheMu.Lock()
+	defer chanGraph.cacheMu.Unlock()
+
+	var chansRestored []uint64
+	err := d.Update(func(tx *bbolt.Tx) error {
+		for _, channelShell := range channelShells {
+			channel := channelShell.Chan
+
+			// When we make a channel, we mark that the channel has
+			// been restored, this will signal to other sub-systems
+			// to not attempt to use the channel as if it was a
+			// regular one.
+			channel.chanStatus |= ChanStatusRestored
+
+			// First, we'll attempt to create a new open channel
+			// and link node for this channel. If the channel
+			// already exists, then in order to ensure this method
+			// is idempotent, we'll continue to the next step.
+			channel.Db = d
+			err := syncNewChannel(
+				tx, channel, channelShell.NodeAddrs,
+			)
+			if err != nil {
+				return err
+			}
+
+			// Next, we'll create an active edge in the graph
+			// database for this channel in order to restore our
+			// partial view of the network.
+			//
+			// TODO(roasbeef): if we restore *after* the channel
+			// has been closed on chain, then need to inform the
+			// router that it should try and prune these values as
+			// we can detect them
+			edgeInfo := ChannelEdgeInfo{
+				ChannelID:    channel.ShortChannelID.ToUint64(),
+				ChainHash:    channel.ChainHash,
+				ChannelPoint: channel.FundingOutpoint,
+				Capacity:     channel.Capacity,
+			}
+
+			nodes := tx.Bucket(nodeBucket)
+			if nodes == nil {
+				return ErrGraphNotFound
+			}
+			selfNode, err := chanGraph.sourceNode(nodes)
+			if err != nil {
+				return err
+			}
+
+			// Depending on which pub key is smaller, we'll assign
+			// our roles as "node1" and "node2".
+			chanPeer := channel.IdentityPub.SerializeCompressed()
+			selfIsSmaller := bytes.Compare(
+				selfNode.PubKeyBytes[:], chanPeer,
+			) == -1
+			if selfIsSmaller {
+				copy(edgeInfo.NodeKey1Bytes[:], selfNode.PubKeyBytes[:])
+				copy(edgeInfo.NodeKey2Bytes[:], chanPeer)
+			} else {
+				copy(edgeInfo.NodeKey1Bytes[:], chanPeer)
+				copy(edgeInfo.NodeKey2Bytes[:], selfNode.PubKeyBytes[:])
+			}
+
+			// With the edge info shell constructed, we'll now add
+			// it to the graph.
+			err = chanGraph.addChannelEdge(tx, &edgeInfo)
+			if err != nil && err != ErrEdgeAlreadyExist {
+				return err
+			}
+
+			// Similarly, we'll construct a channel edge shell and
+			// add that itself to the graph.
+			chanEdge := ChannelEdgePolicy{
+				ChannelID:  edgeInfo.ChannelID,
+				LastUpdate: time.Now(),
+			}
+
+			// If their pubkey is larger, then we'll flip the
+			// direction bit to indicate that us, the "second" node
+			// is updating their policy.
+			if !selfIsSmaller {
+				chanEdge.ChannelFlags |= lnwire.ChanUpdateDirection
+			}
+
+			_, err = updateEdgePolicy(tx, &chanEdge)
+			if err != nil {
+				return err
+			}
+
+			chansRestored = append(chansRestored, edgeInfo.ChannelID)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, chanid := range chansRestored {
+		chanGraph.rejectCache.remove(chanid)
+		chanGraph.chanCache.remove(chanid)
+	}
+
+	return nil
+}
+
+// AddrsForNode consults the graph and channel database for all addresses known
+// to the passed node public key.
+func (d *DB) AddrsForNode(nodePub *btcec.PublicKey) ([]net.Addr, error) {
+	var (
+		linkNode  *LinkNode
+		graphNode LightningNode
+	)
+
+	dbErr := d.View(func(tx *bbolt.Tx) error {
+		var err error
+
+		linkNode, err = fetchLinkNode(tx, nodePub)
+		if err != nil {
+			return err
+		}
+
+		// We'll also query the graph for this peer to see if they have
+		// any addresses that we don't currently have stored within the
+		// link node database.
+		nodes := tx.Bucket(nodeBucket)
+		if nodes == nil {
+			return ErrGraphNotFound
+		}
+		compressedPubKey := nodePub.SerializeCompressed()
+		graphNode, err = fetchLightningNode(nodes, compressedPubKey)
+		if err != nil && err != ErrGraphNodeNotFound {
+			// If the node isn't found, then that's OK, as we still
+			// have the link node data.
+			return err
+		}
+
+		return nil
+	})
+	if dbErr != nil {
+		return nil, dbErr
+	}
+
+	// Now that we have both sources of addrs for this node, we'll use a
+	// map to de-duplicate any addresses between the two sources, and
+	// produce a final list of the combined addrs.
+	addrs := make(map[string]net.Addr)
+	for _, addr := range linkNode.Addresses {
+		addrs[addr.String()] = addr
+	}
+	for _, addr := range graphNode.Addresses {
+		addrs[addr.String()] = addr
+	}
+	dedupedAddrs := make([]net.Addr, 0, len(addrs))
+	for _, addr := range addrs {
+		dedupedAddrs = append(dedupedAddrs, addr)
+	}
+
+	return dedupedAddrs, nil
+}
+
 // syncVersions function is used for safe db version synchronization. It
 // applies migration functions to the current database and recovers the
 // previous state of db if at least one error/panic appeared during migration.
@@ -836,7 +1133,7 @@ func (d *DB) syncVersions(versions []version) error {
 
 // ChannelGraph returns a new instance of the directed channel graph.
 func (d *DB) ChannelGraph() *ChannelGraph {
-	return &ChannelGraph{d}
+	return d.graph
 }
 
 func getLatestDBVersion(versions []version) uint32 {

@@ -2,15 +2,11 @@ package wtwire
 
 import "github.com/breez/lightninglib/lnwire"
 
-// GlobalFeatures holds the globally advertised feature bits understood by
-// watchtower implementations.
-var GlobalFeatures map[lnwire.FeatureBit]string
-
-// LocalFeatures holds the locally advertised feature bits understood by
-// watchtower implementations.
-var LocalFeatures = map[lnwire.FeatureBit]string{
-	WtSessionsRequired: "wt-sessions-required",
-	WtSessionsOptional: "wt-sessions-optional",
+// FeatureNames holds a mapping from each feature bit understood by this
+// implementation to its common name.
+var FeatureNames = map[lnwire.FeatureBit]string{
+	WtSessionsRequired: "wt-sessions",
+	WtSessionsOptional: "wt-sessions",
 }
 
 const (

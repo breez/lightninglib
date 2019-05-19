@@ -5,8 +5,8 @@ import (
 
 	"reflect"
 
-	"github.com/go-errors/errors"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/go-errors/errors"
 )
 
 // TestWaitingProofStore tests add/get/remove functions of the waiting proof

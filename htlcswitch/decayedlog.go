@@ -8,9 +8,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/coreos/bbolt"
 	"github.com/lightningnetwork/lightning-onion"
-	"github.com/breez/lightninglib/chainntnfs"
 )
 
 const (

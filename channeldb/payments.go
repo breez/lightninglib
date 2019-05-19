@@ -6,8 +6,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/coreos/bbolt"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/coreos/bbolt"
 )
 
 var (

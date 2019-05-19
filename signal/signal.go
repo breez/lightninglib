@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sync/atomic"
+	"syscall"
 )
 
 var (
@@ -30,7 +31,14 @@ var (
 )
 
 func init() {
-	signal.Notify(interruptChannel, os.Interrupt)
+	signalsToCatch := []os.Signal{
+		os.Interrupt,
+		os.Kill,
+		syscall.SIGABRT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT,
+	}
+	signal.Notify(interruptChannel, signalsToCatch...)
 }
 
 //Start starts the signal go routine and make it usable again.
@@ -82,8 +90,8 @@ func mainInterruptHandler() {
 
 	for {
 		select {
-		case <-interruptChannel:
-			log.Infof("Received SIGINT (Ctrl+C).")
+		case signal := <-interruptChannel:
+			log.Infof("Received %v", signal)
 			shutdown()
 
 		case <-shutdownRequestChannel:

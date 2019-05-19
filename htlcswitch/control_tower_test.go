@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/btcsuite/fastsha256"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/btcsuite/fastsha256"
 )
 
 func genHtlc() (*lnwire.UpdateAddHTLC, error) {

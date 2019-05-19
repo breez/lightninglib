@@ -3,9 +3,9 @@ package htlcswitch
 import (
 	"errors"
 
-	"github.com/coreos/bbolt"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/coreos/bbolt"
 )
 
 var (

@@ -8,9 +8,10 @@ import (
 	"testing/quick"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/watchtower/wtwire"
-	"github.com/davecgh/go-spew/spew"
 )
 
 func randRawFeatureVector(r *rand.Rand) *lnwire.RawFeatureVector {
@@ -21,6 +22,12 @@ func randRawFeatureVector(r *rand.Rand) *lnwire.RawFeatureVector {
 		}
 	}
 	return featureVec
+}
+
+func randChainHash(r *rand.Rand) chainhash.Hash {
+	var hash chainhash.Hash
+	r.Read(hash[:])
+	return hash
 }
 
 // TestWatchtowerWireProtocol uses the testing/quick package to create a series
@@ -73,7 +80,7 @@ func TestWatchtowerWireProtocol(t *testing.T) {
 		wtwire.MsgInit: func(v []reflect.Value, r *rand.Rand) {
 			req := wtwire.NewInitMessage(
 				randRawFeatureVector(r),
-				randRawFeatureVector(r),
+				randChainHash(r),
 			)
 
 			v[0] = reflect.ValueOf(*req)
@@ -116,6 +123,18 @@ func TestWatchtowerWireProtocol(t *testing.T) {
 		{
 			msgType: wtwire.MsgStateUpdateReply,
 			scenario: func(m wtwire.StateUpdateReply) bool {
+				return mainScenario(&m)
+			},
+		},
+		{
+			msgType: wtwire.MsgDeleteSession,
+			scenario: func(m wtwire.DeleteSession) bool {
+				return mainScenario(&m)
+			},
+		},
+		{
+			msgType: wtwire.MsgDeleteSessionReply,
+			scenario: func(m wtwire.DeleteSessionReply) bool {
 				return mainScenario(&m)
 			},
 		},
