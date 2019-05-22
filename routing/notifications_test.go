@@ -15,6 +15,7 @@ import (
 	"github.com/breez/lightninglib/lnwallet"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing/chainview"
+	"github.com/breez/lightninglib/routing/route"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -460,9 +461,9 @@ func TestEdgeUpdateNotification(t *testing.T) {
 
 	// Create lookup map for notifications we are intending to receive. Entries
 	// are removed from the map when the anticipated notification is received.
-	var waitingFor = map[Vertex]int{
-		Vertex(node1.PubKeyBytes): 1,
-		Vertex(node2.PubKeyBytes): 2,
+	var waitingFor = map[route.Vertex]int{
+		route.Vertex(node1.PubKeyBytes): 1,
+		route.Vertex(node2.PubKeyBytes): 2,
 	}
 
 	node1Pub, err := node1.PubKey()
@@ -486,7 +487,7 @@ func TestEdgeUpdateNotification(t *testing.T) {
 			}
 
 			edgeUpdate := ntfn.ChannelEdgeUpdates[0]
-			nodeVertex := NewVertex(edgeUpdate.AdvertisingNode)
+			nodeVertex := route.NewVertex(edgeUpdate.AdvertisingNode)
 
 			if idx, ok := waitingFor[nodeVertex]; ok {
 				switch idx {
@@ -630,9 +631,9 @@ func TestNodeUpdateNotification(t *testing.T) {
 
 	// Create lookup map for notifications we are intending to receive. Entries
 	// are removed from the map when the anticipated notification is received.
-	var waitingFor = map[Vertex]int{
-		Vertex(node1.PubKeyBytes): 1,
-		Vertex(node2.PubKeyBytes): 2,
+	var waitingFor = map[route.Vertex]int{
+		route.Vertex(node1.PubKeyBytes): 1,
+		route.Vertex(node2.PubKeyBytes): 2,
 	}
 
 	// Exactly two notifications should be sent, each corresponding to the
@@ -649,7 +650,7 @@ func TestNodeUpdateNotification(t *testing.T) {
 			}
 
 			nodeUpdate := ntfn.NodeUpdates[0]
-			nodeVertex := NewVertex(nodeUpdate.IdentityKey)
+			nodeVertex := route.NewVertex(nodeUpdate.IdentityKey)
 			if idx, ok := waitingFor[nodeVertex]; ok {
 				switch idx {
 				case 1:

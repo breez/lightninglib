@@ -1,17 +1,17 @@
 package wtclient
 
 import (
+	"github.com/breez/lightninglib/input"
+	"github.com/breez/lightninglib/lnwallet"
+	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/watchtower/blob"
+	"github.com/breez/lightninglib/watchtower/wtdb"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcutil/txsort"
-	"github.com/breez/lightninglib/input"
-	"github.com/breez/lightninglib/lnwallet"
-	"github.com/breez/lightninglib/lnwire"
-	"github.com/breez/lightninglib/watchtower/blob"
-	"github.com/breez/lightninglib/watchtower/wtdb"
 )
 
 // backupTask is an internal struct for computing the justice transaction for a

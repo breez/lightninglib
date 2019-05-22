@@ -167,8 +167,8 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 			defaultLitecoinStaticFeePerKW, 0,
 		)
 	default:
-		return nil, nil, fmt.Errorf("Default routing policy for "+
-			"chain %v is unknown", registeredChains.PrimaryChain())
+		return nil, nil, fmt.Errorf("Default routing policy for chain %v is "+
+			"unknown", registeredChains.PrimaryChain())
 	}
 
 	walletConfig := &btcwallet.Config{
@@ -178,7 +178,6 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 		RecoveryWindow: recoveryWindow,
 		DataDir:        homeChainConfig.ChainDir,
 		NetParams:      activeNetParams.Params,
-		FeeEstimator:   cc.feeEstimator,
 		CoinType:       activeNetParams.CoinType,
 		Wallet:         wallet,
 	}
@@ -278,6 +277,25 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 			cleanUp()
 			return nil, nil, err
 		}
+
+		// If the user provided an API for fee estimation, activate it now.
+		if cfg.NeutrinoMode.FeeURL != "" {
+			ltndLog.Infof("Using API fee estimator!")
+
+			estimator := lnwallet.NewWebAPIFeeEstimator(
+				lnwallet.SparseConfFeeSource{
+					URL: cfg.NeutrinoMode.FeeURL,
+				},
+				defaultBitcoinStaticFeePerKW,
+			)
+
+			if err := estimator.Start(); err != nil {
+				cleanUp()
+				return nil, nil, err
+			}
+			cc.feeEstimator = estimator
+		}
+
 		walletConfig.ChainSource = chain.NewNeutrinoClient(
 			activeNetParams.Params, neutrinoCS,
 		)
@@ -310,10 +328,15 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 			rpcPort -= 2
 			bitcoindHost = fmt.Sprintf("%v:%d",
 				bitcoindMode.RPCHost, rpcPort)
-			if cfg.Bitcoin.Active && cfg.Bitcoin.RegTest {
+			if (cfg.Bitcoin.Active && cfg.Bitcoin.RegTest) ||
+				(cfg.Litecoin.Active && cfg.Litecoin.RegTest) {
 				conn, err := net.Dial("tcp", bitcoindHost)
 				if err != nil || conn == nil {
-					rpcPort = 18443
+					if cfg.Bitcoin.Active && cfg.Bitcoin.RegTest {
+						rpcPort = 18443
+					} else if cfg.Litecoin.Active && cfg.Litecoin.RegTest {
+						rpcPort = 19443
+					}
 					bitcoindHost = fmt.Sprintf("%v:%d",
 						bitcoindMode.RPCHost,
 						rpcPort)
@@ -336,8 +359,8 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 		}
 
 		if err := bitcoindConn.Start(); err != nil {
-			return nil, nil, fmt.Errorf("unable to connect to "+
-				"bitcoind: %v", err)
+			return nil, nil, fmt.Errorf("unable to connect to bitcoind: "+
+				"%v", err)
 		}
 
 		cc.chainNotifier = bitcoindnotify.New(
@@ -374,7 +397,7 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 			if err := cc.feeEstimator.Start(); err != nil {
 				return nil, nil, err
 			}
-		} else if cfg.Litecoin.Active {
+		} else if cfg.Litecoin.Active && !cfg.Litecoin.RegTest {
 			ltndLog.Infof("Initializing litecoind backed fee estimator")
 
 			// Finally, we'll re-initialize the fee estimator, as
@@ -543,16 +566,10 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 	lnWallet, err := lnwallet.NewLightningWallet(walletCfg)
 	if err != nil {
 		fmt.Printf("unable to create wallet: %v\n", err)
-		if cleanUp != nil {
-			cleanUp()
-		}
 		return nil, nil, err
 	}
 	if err := lnWallet.Startup(); err != nil {
 		fmt.Printf("unable to start wallet: %v\n", err)
-		if cleanUp != nil {
-			cleanUp()
-		}
 		return nil, nil, err
 	}
 

@@ -1,5 +1,3 @@
-// +build dev
-
 package wtserver_test
 
 import (
@@ -8,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcutil"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/watchtower/blob"
 	"github.com/breez/lightninglib/watchtower/wtdb"
 	"github.com/breez/lightninglib/watchtower/wtmock"
 	"github.com/breez/lightninglib/watchtower/wtserver"
 	"github.com/breez/lightninglib/watchtower/wtwire"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcutil"
 )
 
 var (
@@ -29,6 +27,8 @@ var (
 	addrScript, _ = txscript.PayToAddrScript(addr)
 
 	testnetChainHash = *chaincfg.TestNet3Params.GenesisHash
+
+	rewardType = (blob.FlagCommitOutputs | blob.FlagReward).Type()
 )
 
 // randPubKey generates a new secp keypair, and returns the public key.
@@ -51,7 +51,7 @@ func initServer(t *testing.T, db wtserver.DB,
 	t.Helper()
 
 	if db == nil {
-		db = wtdb.NewMockDB()
+		db = wtmock.NewTowerDB()
 	}
 
 	s, err := wtserver.New(&wtserver.Config{
@@ -152,16 +152,17 @@ func TestServerOnlyAcceptOnePeer(t *testing.T) {
 }
 
 type createSessionTestCase struct {
-	name        string
-	initMsg     *wtwire.Init
-	createMsg   *wtwire.CreateSession
-	expReply    *wtwire.CreateSessionReply
-	expDupReply *wtwire.CreateSessionReply
+	name            string
+	initMsg         *wtwire.Init
+	createMsg       *wtwire.CreateSession
+	expReply        *wtwire.CreateSessionReply
+	expDupReply     *wtwire.CreateSessionReply
+	sendStateUpdate bool
 }
 
 var createSessionTests = []createSessionTestCase{
 	{
-		name: "reject duplicate session create",
+		name: "duplicate session create",
 		initMsg: wtwire.NewInitMessage(
 			lnwire.NewRawFeatureVector(),
 			testnetChainHash,
@@ -175,10 +176,56 @@ var createSessionTests = []createSessionTestCase{
 		},
 		expReply: &wtwire.CreateSessionReply{
 			Code: wtwire.CodeOK,
+			Data: []byte{},
+		},
+		expDupReply: &wtwire.CreateSessionReply{
+			Code: wtwire.CodeOK,
+			Data: []byte{},
+		},
+	},
+	{
+		name: "duplicate session create after use",
+		initMsg: wtwire.NewInitMessage(
+			lnwire.NewRawFeatureVector(),
+			testnetChainHash,
+		),
+		createMsg: &wtwire.CreateSession{
+			BlobType:     blob.TypeDefault,
+			MaxUpdates:   1000,
+			RewardBase:   0,
+			RewardRate:   0,
+			SweepFeeRate: 1,
+		},
+		expReply: &wtwire.CreateSessionReply{
+			Code: wtwire.CodeOK,
+			Data: []byte{},
+		},
+		expDupReply: &wtwire.CreateSessionReply{
+			Code:        wtwire.CreateSessionCodeAlreadyExists,
+			LastApplied: 1,
+			Data:        []byte{},
+		},
+		sendStateUpdate: true,
+	},
+	{
+		name: "duplicate session create reward",
+		initMsg: wtwire.NewInitMessage(
+			lnwire.NewRawFeatureVector(),
+			testnetChainHash,
+		),
+		createMsg: &wtwire.CreateSession{
+			BlobType:     rewardType,
+			MaxUpdates:   1000,
+			RewardBase:   0,
+			RewardRate:   0,
+			SweepFeeRate: 1,
+		},
+		expReply: &wtwire.CreateSessionReply{
+			Code: wtwire.CodeOK,
 			Data: addrScript,
 		},
 		expDupReply: &wtwire.CreateSessionReply{
-			Code: wtwire.CreateSessionCodeAlreadyExists,
+			Code: wtwire.CodeOK,
 			Data: addrScript,
 		},
 	},
@@ -249,6 +296,18 @@ func testServerCreateSession(t *testing.T, i int, test createSessionTestCase) {
 	// continue to the next test.
 	if test.expDupReply == nil {
 		return
+	}
+
+	if test.sendStateUpdate {
+		peer = wtmock.NewMockPeer(localPub, peerPub, nil, 0)
+		connect(t, s, peer, test.initMsg, timeoutDuration)
+		update := &wtwire.StateUpdate{
+			SeqNum:     1,
+			IsComplete: 1,
+		}
+		sendMsg(t, update, peer, timeoutDuration)
+
+		assertConnClosed(t, peer, 2*timeoutDuration)
 	}
 
 	// Simulate a peer with the same session id connection to the server
@@ -626,7 +685,7 @@ func testServerStateUpdates(t *testing.T, test stateUpdateTestCase) {
 // checking that the proper error is returned when the session doesn't exist and
 // that a successful deletion does not disrupt other sessions.
 func TestServerDeleteSession(t *testing.T) {
-	db := wtdb.NewMockDB()
+	db := wtmock.NewTowerDB()
 
 	localPub := randPubKey(t)
 
@@ -705,7 +764,7 @@ func TestServerDeleteSession(t *testing.T) {
 			send: createSession,
 			recv: &wtwire.CreateSessionReply{
 				Code: wtwire.CodeOK,
-				Data: addrScript,
+				Data: []byte{},
 			},
 			assert: func(t *testing.T) {
 				// Both peers should have sessions.

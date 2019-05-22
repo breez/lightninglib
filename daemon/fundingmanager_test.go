@@ -17,6 +17,7 @@ import (
 
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/breez/lightninglib/discovery"
 	"github.com/breez/lightninglib/htlcswitch"
 	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
@@ -287,7 +288,9 @@ func createTestFundingManager(t *testing.T, privKey *btcec.PrivateKey,
 		SignMessage: func(pubKey *btcec.PublicKey, msg []byte) (*btcec.Signature, error) {
 			return testSig, nil
 		},
-		SendAnnouncement: func(msg lnwire.Message) chan error {
+		SendAnnouncement: func(msg lnwire.Message,
+			_ ...discovery.OptionalMsgField) chan error {
+
 			errChan := make(chan error, 1)
 			select {
 			case sentAnnouncements <- msg:
@@ -412,7 +415,9 @@ func recreateAliceFundingManager(t *testing.T, alice *testNode) {
 			msg []byte) (*btcec.Signature, error) {
 			return testSig, nil
 		},
-		SendAnnouncement: func(msg lnwire.Message) chan error {
+		SendAnnouncement: func(msg lnwire.Message,
+			_ ...discovery.OptionalMsgField) chan error {
+
 			errChan := make(chan error, 1)
 			select {
 			case aliceAnnounceChan <- msg:
@@ -1167,13 +1172,13 @@ func TestFundingManagerRestartBehavior(t *testing.T) {
 	recreateAliceFundingManager(t, alice)
 
 	// Intentionally make the channel announcements fail
-	alice.fundingMgr.cfg.SendAnnouncement =
-		func(msg lnwire.Message) chan error {
-			errChan := make(chan error, 1)
-			errChan <- fmt.Errorf("intentional error in " +
-				"SendAnnouncement")
-			return errChan
-		}
+	alice.fundingMgr.cfg.SendAnnouncement = func(msg lnwire.Message,
+		_ ...discovery.OptionalMsgField) chan error {
+
+		errChan := make(chan error, 1)
+		errChan <- fmt.Errorf("intentional error in SendAnnouncement")
+		return errChan
+	}
 
 	fundingLockedAlice := assertFundingMsgSent(
 		t, alice.msgChan, "FundingLocked",

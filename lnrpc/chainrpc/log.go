@@ -1,8 +1,8 @@
 package chainrpc
 
 import (
-	"github.com/btcsuite/btclog"
 	"github.com/breez/lightninglib/build"
+	"github.com/btcsuite/btclog"
 )
 
 // log is a logger that is initialized with no output filters.  This

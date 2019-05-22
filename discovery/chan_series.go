@@ -5,7 +5,7 @@ import (
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
-	"github.com/breez/lightninglib/routing"
+	"github.com/breez/lightninglib/routing/route"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
@@ -247,7 +247,7 @@ func (c *ChanSeries) FetchChanAnns(chain chainhash.Hash,
 	// We'll use this map to ensure we don't send the same node
 	// announcement more than one time as one node may have many channel
 	// anns we'll need to send.
-	nodePubsSent := make(map[routing.Vertex]struct{})
+	nodePubsSent := make(map[route.Vertex]struct{})
 
 	chanAnns := make([]lnwire.Message, 0, len(channels)*3)
 	for _, channel := range channels {

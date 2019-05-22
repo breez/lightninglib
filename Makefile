@@ -97,7 +97,7 @@ build:
 
 build-itest:
 	@$(call print, "Building itest lnd and lncli.")
-	$(GOBUILD) -tags="$(ITEST_TAGS)" -o lnd-itest $(LDFLAGS) $(PKG)
+	$(GOBUILD) -tags="$(ITEST_TAGS)" -o lnd-itest $(LDFLAGS) $(PKG)/cmd/lnd
 	$(GOBUILD) -tags="$(ITEST_TAGS)" -o lncli-itest $(LDFLAGS) $(PKG)/cmd/lncli
 
 install:

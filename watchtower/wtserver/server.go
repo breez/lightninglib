@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/watchtower/wtdb"
+	"github.com/breez/lightninglib/watchtower/wtwire"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/connmgr"
 	"github.com/btcsuite/btcutil"
-	"github.com/breez/lightninglib/lnwire"
-	"github.com/breez/lightninglib/watchtower/wtdb"
-	"github.com/breez/lightninglib/watchtower/wtwire"
 )
 
 var (
@@ -55,6 +55,10 @@ type Config struct {
 
 	// ChainHash identifies the network that the server is watching.
 	ChainHash chainhash.Hash
+
+	// NoAckCreateSession causes the server to not reply to create session
+	// requests, this should only be used for testing.
+	NoAckCreateSession bool
 
 	// NoAckUpdates causes the server to not acknowledge state updates, this
 	// should only be used for testing.
@@ -283,12 +287,12 @@ func (s *Server) handleClient(peer Peer) {
 // error code.
 type connFailure struct {
 	ID   wtdb.SessionID
-	Code uint16
+	Code wtwire.ErrorCode
 }
 
 // Error displays the SessionID and Code that caused the connection failure.
 func (f *connFailure) Error() string {
-	return fmt.Sprintf("connection with %s failed with code=%v",
+	return fmt.Sprintf("connection with %s failed with code=%s",
 		f.ID, f.Code,
 	)
 }

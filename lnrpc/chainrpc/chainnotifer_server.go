@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/lnrpc"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )

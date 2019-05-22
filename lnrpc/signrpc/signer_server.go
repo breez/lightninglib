@@ -10,12 +10,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnrpc"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"

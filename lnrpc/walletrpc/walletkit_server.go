@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/btcsuite/btcd/wire"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lnrpc/signrpc"
 	"github.com/breez/lightninglib/lnwallet"
+	"github.com/btcsuite/btcd/wire"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"

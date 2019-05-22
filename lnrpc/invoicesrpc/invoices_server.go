@@ -11,10 +11,10 @@ import (
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 
-	"github.com/btcsuite/btcutil"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/lntypes"
+	"github.com/btcsuite/btcutil"
 )
 
 const (

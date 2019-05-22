@@ -333,7 +333,7 @@ var listUnspentCommand = cli.Command{
 				"to be MaxInt32, otherwise max_confs remains " +
 				"zero. An error is returned if the value is " +
 				"true and both min_confs and max_confs are " +
-				"non-zero. (defualt: false)",
+				"non-zero. (default: false)",
 		},
 	},
 	Action: actionDecorator(listUnspent),
@@ -844,7 +844,7 @@ var closeChannelCommand = cli.Command{
 	To view which funding_txids/output_indexes can be used for a channel close,
 	see the channel_point values within the listchannels command output.
 	The format for a channel_point is 'funding_txid:output_index'.`,
-	ArgsUsage: "funding_txid [output_index [time_limit]]",
+	ArgsUsage: "funding_txid [output_index]",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "funding_txid",
@@ -855,15 +855,9 @@ var closeChannelCommand = cli.Command{
 			Usage: "the output index for the funding output of the funding " +
 				"transaction",
 		},
-		cli.StringFlag{
-			Name: "time_limit",
-			Usage: "a relative deadline afterwhich the attempt should be " +
-				"abandoned",
-		},
 		cli.BoolFlag{
-			Name: "force",
-			Usage: "after the time limit has passed, attempt an " +
-				"uncooperative closure",
+			Name:  "force",
+			Usage: "attempt an uncooperative closure",
 		},
 		cli.BoolFlag{
 			Name:  "block",

@@ -21,6 +21,7 @@ import (
 	"github.com/breez/lightninglib/lntest"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/routing"
+	"github.com/breez/lightninglib/routing/route"
 	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -146,9 +147,6 @@ func (r *mockGraphSource) AddEdge(info *channeldb.ChannelEdgeInfo) error {
 		return errors.New("info already exist")
 	}
 
-	// Usually, the capacity is fetched in the router from the funding txout.
-	// Since the mockGraphSource can't access the txout, assign a default value.
-	info.Capacity = maxBtcFundingAmount
 	r.infos[info.ChannelID] = *info
 	return nil
 }
@@ -275,7 +273,7 @@ func (r *mockGraphSource) GetChannelByID(chanID lnwire.ShortChannelID) (
 }
 
 func (r *mockGraphSource) FetchLightningNode(
-	nodePub routing.Vertex) (*channeldb.LightningNode, error) {
+	nodePub route.Vertex) (*channeldb.LightningNode, error) {
 
 	for _, node := range r.nodes {
 		if bytes.Equal(nodePub[:], node.PubKeyBytes[:]) {
@@ -288,7 +286,7 @@ func (r *mockGraphSource) FetchLightningNode(
 
 // IsStaleNode returns true if the graph source has a node announcement for the
 // target node with a more recent timestamp.
-func (r *mockGraphSource) IsStaleNode(nodePub routing.Vertex, timestamp time.Time) bool {
+func (r *mockGraphSource) IsStaleNode(nodePub route.Vertex, timestamp time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -315,7 +313,7 @@ func (r *mockGraphSource) IsStaleNode(nodePub routing.Vertex, timestamp time.Tim
 
 // IsPublicNode determines whether the given vertex is seen as a public node in
 // the graph from the graph's source node's point of view.
-func (r *mockGraphSource) IsPublicNode(node routing.Vertex) (bool, error) {
+func (r *mockGraphSource) IsPublicNode(node route.Vertex) (bool, error) {
 	for _, info := range r.infos {
 		if !bytes.Equal(node[:], info.NodeKey1Bytes[:]) &&
 			!bytes.Equal(node[:], info.NodeKey2Bytes[:]) {
@@ -724,7 +722,7 @@ func createTestCtx(startHeight uint32) (*testCtx, func(), error) {
 	broadcastedMessage := make(chan msgWithSenders, 10)
 	gossiper := New(Config{
 		Notifier: notifier,
-		Broadcast: func(senders map[routing.Vertex]struct{},
+		Broadcast: func(senders map[route.Vertex]struct{},
 			msgs ...lnwire.Message) error {
 
 			for _, msg := range msgs {
@@ -744,17 +742,16 @@ func createTestCtx(startHeight uint32) (*testCtx, func(), error) {
 			c := make(chan struct{})
 			return c
 		},
-		Router:                    router,
-		TrickleDelay:              trickleDelay,
-		RetransmitDelay:           retransmitDelay,
-		ProofMatureDelta:          proofMatureDelta,
-		WaitingProofStore:         waitingProofStore,
-		MessageStore:              newMockMessageStore(),
-		RotateTicker:              ticker.NewForce(DefaultSyncerRotationInterval),
-		HistoricalSyncTicker:      ticker.NewForce(DefaultHistoricalSyncInterval),
-		ActiveSyncerTimeoutTicker: ticker.NewForce(DefaultActiveSyncerTimeout),
-		NumActiveSyncers:          3,
-		AnnSigner:                 &mockSigner{nodeKeyPriv1},
+		Router:               router,
+		TrickleDelay:         trickleDelay,
+		RetransmitDelay:      retransmitDelay,
+		ProofMatureDelta:     proofMatureDelta,
+		WaitingProofStore:    waitingProofStore,
+		MessageStore:         newMockMessageStore(),
+		RotateTicker:         ticker.NewForce(DefaultSyncerRotationInterval),
+		HistoricalSyncTicker: ticker.NewForce(DefaultHistoricalSyncInterval),
+		NumActiveSyncers:     3,
+		AnnSigner:            &mockSigner{nodeKeyPriv1},
 	}, nodeKeyPub1)
 
 	if err := gossiper.Start(); err != nil {
@@ -789,7 +786,7 @@ func TestProcessAnnouncement(t *testing.T) {
 	defer cleanup()
 
 	assertSenderExistence := func(sender *btcec.PublicKey, msg msgWithSenders) {
-		if _, ok := msg.senders[routing.NewVertex(sender)]; !ok {
+		if _, ok := msg.senders[route.NewVertex(sender)]; !ok {
 			t.Fatalf("sender=%x not present in %v",
 				sender.SerializeCompressed(), spew.Sdump(msg))
 		}
@@ -1483,20 +1480,19 @@ func TestSignatureAnnouncementRetryAtStartup(t *testing.T) {
 	// the message to the peer.
 	ctx.gossiper.Stop()
 	gossiper := New(Config{
-		Notifier:                  ctx.gossiper.cfg.Notifier,
-		Broadcast:                 ctx.gossiper.cfg.Broadcast,
-		NotifyWhenOnline:          ctx.gossiper.reliableSender.cfg.NotifyWhenOnline,
-		NotifyWhenOffline:         ctx.gossiper.reliableSender.cfg.NotifyWhenOffline,
-		Router:                    ctx.gossiper.cfg.Router,
-		TrickleDelay:              trickleDelay,
-		RetransmitDelay:           retransmitDelay,
-		ProofMatureDelta:          proofMatureDelta,
-		WaitingProofStore:         ctx.gossiper.cfg.WaitingProofStore,
-		MessageStore:              ctx.gossiper.cfg.MessageStore,
-		RotateTicker:              ticker.NewForce(DefaultSyncerRotationInterval),
-		HistoricalSyncTicker:      ticker.NewForce(DefaultHistoricalSyncInterval),
-		ActiveSyncerTimeoutTicker: ticker.NewForce(DefaultActiveSyncerTimeout),
-		NumActiveSyncers:          3,
+		Notifier:             ctx.gossiper.cfg.Notifier,
+		Broadcast:            ctx.gossiper.cfg.Broadcast,
+		NotifyWhenOnline:     ctx.gossiper.reliableSender.cfg.NotifyWhenOnline,
+		NotifyWhenOffline:    ctx.gossiper.reliableSender.cfg.NotifyWhenOffline,
+		Router:               ctx.gossiper.cfg.Router,
+		TrickleDelay:         trickleDelay,
+		RetransmitDelay:      retransmitDelay,
+		ProofMatureDelta:     proofMatureDelta,
+		WaitingProofStore:    ctx.gossiper.cfg.WaitingProofStore,
+		MessageStore:         ctx.gossiper.cfg.MessageStore,
+		RotateTicker:         ticker.NewForce(DefaultSyncerRotationInterval),
+		HistoricalSyncTicker: ticker.NewForce(DefaultHistoricalSyncInterval),
+		NumActiveSyncers:     3,
 	}, ctx.gossiper.selfKey)
 	if err != nil {
 		t.Fatalf("unable to recreate gossiper: %v", err)
@@ -1992,7 +1988,7 @@ func TestDeDuplicatedAnnouncements(t *testing.T) {
 	if len(announcements.nodeAnnouncements) != 2 {
 		t.Fatal("node announcement not replaced in batch")
 	}
-	nodeID := routing.NewVertex(nodeKeyPriv2.PubKey())
+	nodeID := route.NewVertex(nodeKeyPriv2.PubKey())
 	stored, ok := announcements.nodeAnnouncements[nodeID]
 	if !ok {
 		t.Fatalf("node announcement not found in batch")
@@ -3267,17 +3263,20 @@ func TestSendChannelUpdateReliably(t *testing.T) {
 }
 
 func sendLocalMsg(t *testing.T, ctx *testCtx, msg lnwire.Message,
-	localPub *btcec.PublicKey) {
+	localPub *btcec.PublicKey, optionalMsgFields ...OptionalMsgField) {
 
 	t.Helper()
 
+	var err error
 	select {
-	case err := <-ctx.gossiper.ProcessLocalAnnouncement(msg, localPub):
-		if err != nil {
-			t.Fatalf("unable to process channel msg: %v", err)
-		}
+	case err = <-ctx.gossiper.ProcessLocalAnnouncement(
+		msg, localPub, optionalMsgFields...,
+	):
 	case <-time.After(2 * time.Second):
 		t.Fatal("did not process local announcement")
+	}
+	if err != nil {
+		t.Fatalf("unable to process channel msg: %v", err)
 	}
 }
 
@@ -3480,6 +3479,61 @@ out:
 			return
 		}
 	}
+}
+
+// TestProcessChannelAnnouncementOptionalMsgFields ensures that the gossiper can
+// properly handled optional message fields provided by the caller when
+// processing a channel announcement.
+func TestProcessChannelAnnouncementOptionalMsgFields(t *testing.T) {
+	t.Parallel()
+
+	// We'll start by creating our test context and a set of test channel
+	// announcements.
+	ctx, cleanup, err := createTestCtx(0)
+	if err != nil {
+		t.Fatalf("unable to create test context: %v", err)
+	}
+	defer cleanup()
+
+	chanAnn1 := createAnnouncementWithoutProof(100)
+	chanAnn2 := createAnnouncementWithoutProof(101)
+	localKey := nodeKeyPriv1.PubKey()
+
+	// assertOptionalMsgFields is a helper closure that ensures the optional
+	// message fields were set as intended.
+	assertOptionalMsgFields := func(chanID lnwire.ShortChannelID,
+		capacity btcutil.Amount, channelPoint wire.OutPoint) {
+
+		t.Helper()
+
+		edge, _, _, err := ctx.router.GetChannelByID(chanID)
+		if err != nil {
+			t.Fatalf("unable to get channel by id: %v", err)
+		}
+		if edge.Capacity != capacity {
+			t.Fatalf("expected capacity %v, got %v", capacity,
+				edge.Capacity)
+		}
+		if edge.ChannelPoint != channelPoint {
+			t.Fatalf("expected channel point %v, got %v",
+				channelPoint, edge.ChannelPoint)
+		}
+	}
+
+	// We'll process the first announcement without any optional fields. We
+	// should see the channel's capacity and outpoint have a zero value.
+	sendLocalMsg(t, ctx, chanAnn1, localKey)
+	assertOptionalMsgFields(chanAnn1.ShortChannelID, 0, wire.OutPoint{})
+
+	// Providing the capacity and channel point as optional fields should
+	// propagate them all the way down to the router.
+	capacity := btcutil.Amount(1000)
+	channelPoint := wire.OutPoint{Index: 1}
+	sendLocalMsg(
+		t, ctx, chanAnn2, localKey, ChannelCapacity(capacity),
+		ChannelPoint(channelPoint),
+	)
+	assertOptionalMsgFields(chanAnn2.ShortChannelID, capacity, channelPoint)
 }
 
 func assertMessage(t *testing.T, expected, got lnwire.Message) {

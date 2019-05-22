@@ -3,10 +3,9 @@ package wtdb
 import (
 	"errors"
 
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/watchtower/wtpolicy"
+	"github.com/btcsuite/btcd/btcec"
 )
 
 var (
@@ -30,6 +29,15 @@ var (
 	// LastApplied value greater than any allocated sequence number.
 	ErrUnallocatedLastApplied = errors.New("tower echoed last appiled " +
 		"greater than allocated seqnum")
+
+	// ErrNoReservedKeyIndex signals that a client session could not be
+	// created because no session key index was reserved.
+	ErrNoReservedKeyIndex = errors.New("key index not reserved")
+
+	// ErrIncorrectKeyIndex signals that the client session could not be
+	// created because session key index differs from the reserved key
+	// index.
+	ErrIncorrectKeyIndex = errors.New("incorrect key index")
 )
 
 // ClientSession encapsulates a SessionInfo returned from a successful
@@ -57,14 +65,17 @@ type ClientSession struct {
 	// tower with TowerID.
 	Tower *Tower
 
-	// SessionKeyDesc is the key descriptor used to derive the client's
+	// KeyIndex is the index of key locator used to derive the client's
 	// session key so that it can authenticate with the tower to update its
-	// session.
-	SessionKeyDesc keychain.KeyLocator
+	// session. In order to rederive the private key, the key locator should
+	// use the keychain.KeyFamilyTowerSession key family.
+	KeyIndex uint32
 
 	// SessionPrivKey is the ephemeral secret key used to connect to the
 	// watchtower.
-	// TODO(conner): remove after HD keys
+	//
+	// NOTE: This value is not serialized. It is derived using the KeyIndex
+	// on startup to avoid storing private keys on disk.
 	SessionPrivKey *btcec.PrivateKey
 
 	// Policy holds the negotiated session parameters.
@@ -105,6 +116,6 @@ type CommittedUpdate struct {
 
 	// EncryptedBlob is a ciphertext containing the sweep information for
 	// exacting justice if the commitment transaction matching the breach
-	// hint is braodcast.
+	// hint is broadcast.
 	EncryptedBlob []byte
 }

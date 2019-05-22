@@ -5,7 +5,7 @@ require (
 	github.com/NebulousLabs/fastrand v0.0.0-20180208210444-3cf7173006a0 // indirect
 	github.com/NebulousLabs/go-upnp v0.0.0-20180202185039-29b680b06c82
 	github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2
-	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
+	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/breez/lightninglib/queue v1.0.0
 	github.com/breez/lightninglib/ticker v1.0.0
 	github.com/btcsuite/btcd v0.0.0-20190426011420-63f50db2f70a
@@ -13,11 +13,15 @@ require (
 	github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d
 	github.com/btcsuite/btcwallet v0.0.0-20190424224017-9d95f76e99a7
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
+	github.com/btcsuite/go-flags v0.0.0-20150116065318-6c288d648c1c // indirect
+	github.com/codahale/chacha20 v0.0.0-20151107025005-ec07b4f69a3f // indirect
+	github.com/codahale/chacha20poly1305 v0.0.0-20151127064032-f8a5c4830182 // indirect
 	github.com/coreos/bbolt v1.3.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-errors/errors v1.0.1
 	github.com/golang/protobuf v1.2.0
-	github.com/grpc-ecosystem/grpc-gateway v1.5.1
+	github.com/grpc-ecosystem/grpc-gateway v0.0.0-20170724004829-f2862b476edc
+	github.com/howeyc/gopass v0.0.0-20170109162249-bf9dde6d0d2c // indirect
 	github.com/jackpal/gateway v1.0.5
 	github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad
 	github.com/jessevdk/go-flags v1.4.0
@@ -31,7 +35,7 @@ require (
 	github.com/juju/version v0.0.0-20180108022336-b64dbd566305 // indirect
 	github.com/kkdai/bstream v0.0.0-20181106074824-b3251f7901ec
 	github.com/lightninglabs/neutrino v0.0.0-20190426010803-a655679fe131
-	github.com/lightningnetwork/lightning-onion v0.0.0-20180605012408-ac4d9da8f1d6
+	github.com/lightningnetwork/lightning-onion v0.0.0-20190430041606-751fb4dd8b72
 	github.com/ltcsuite/ltcd v0.0.0-20190101042124-f37f8bf35796
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
 	github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af // indirect

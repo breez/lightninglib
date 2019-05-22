@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/watchtower/wtdb"
 	"github.com/breez/lightninglib/watchtower/wtserver"
 	"github.com/breez/lightninglib/watchtower/wtwire"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
 // retryInterval is the default duration we will wait between attempting to

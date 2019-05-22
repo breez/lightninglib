@@ -3,11 +3,11 @@ package wtmock
 import (
 	"sync"
 
+	"github.com/breez/lightninglib/input"
+	"github.com/breez/lightninglib/keychain"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/breez/lightninglib/input"
-	"github.com/breez/lightninglib/keychain"
 )
 
 // MockSigner is an input.Signer that allows one to add arbitrary private keys

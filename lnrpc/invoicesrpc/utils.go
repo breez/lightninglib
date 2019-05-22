@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnrpc"
 	"github.com/breez/lightninglib/zpay32"
+	"github.com/btcsuite/btcd/chaincfg"
 )
 
 // CreateRPCInvoice creates an *lnrpc.Invoice from the *channeldb.Invoice.

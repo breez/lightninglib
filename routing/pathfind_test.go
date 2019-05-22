@@ -15,9 +15,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/breez/lightninglib/channeldb"
 	"github.com/breez/lightninglib/lnwire"
+	"github.com/breez/lightninglib/routing/route"
 	"github.com/breez/lightninglib/zpay32"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -163,7 +165,7 @@ func parseTestGraph(path string) (*testGraphInstance, error) {
 		return nil, err
 	}
 
-	aliasMap := make(map[string]Vertex)
+	aliasMap := make(map[string]route.Vertex)
 	var source *channeldb.LightningNode
 
 	// First we insert all the nodes within the graph as vertexes.
@@ -303,22 +305,26 @@ type testChannelPolicy struct {
 	MaxHTLC     lnwire.MilliSatoshi
 	FeeBaseMsat lnwire.MilliSatoshi
 	FeeRate     lnwire.MilliSatoshi
+	LastUpdate  time.Time
+	Disabled    bool
 }
 
 type testChannelEnd struct {
 	Alias string
-	testChannelPolicy
+	*testChannelPolicy
 }
 
 func defaultTestChannelEnd(alias string, capacity btcutil.Amount) *testChannelEnd {
 	return &testChannelEnd{
 		Alias: alias,
-		testChannelPolicy: testChannelPolicy{
+		testChannelPolicy: &testChannelPolicy{
 			Expiry:      144,
 			MinHTLC:     lnwire.MilliSatoshi(1000),
 			MaxHTLC:     lnwire.NewMSatFromSatoshis(capacity),
 			FeeBaseMsat: lnwire.MilliSatoshi(1000),
 			FeeRate:     lnwire.MilliSatoshi(1),
+			LastUpdate:  testTime,
+			Disabled:    false,
 		},
 	}
 }
@@ -337,11 +343,11 @@ func symmetricTestChannel(alias1 string, alias2 string, capacity btcutil.Amount,
 		Capacity: capacity,
 		Node1: &testChannelEnd{
 			Alias:             alias1,
-			testChannelPolicy: *policy,
+			testChannelPolicy: policy,
 		},
 		Node2: &testChannelEnd{
 			Alias:             alias2,
-			testChannelPolicy: *policy,
+			testChannelPolicy: policy,
 		},
 		ChannelID: id,
 	}
@@ -361,7 +367,7 @@ type testGraphInstance struct {
 	// aliasMap is a map from a node's alias to its public key. This type is
 	// provided in order to allow easily look up from the human memorable alias
 	// to an exact node's public key.
-	aliasMap map[string]Vertex
+	aliasMap map[string]route.Vertex
 
 	// privKeyMap maps a node alias to its private key. This is used to be
 	// able to mock a remote node's signing behaviour.
@@ -390,7 +396,7 @@ func createTestGraphFromChannels(testChannels []*testChannel) (*testGraphInstanc
 		return nil, err
 	}
 
-	aliasMap := make(map[string]Vertex)
+	aliasMap := make(map[string]route.Vertex)
 	privKeyMap := make(map[string]*btcec.PrivateKey)
 
 	nodeIndex := byte(0)
@@ -490,45 +496,56 @@ func createTestGraphFromChannels(testChannels []*testChannel) (*testGraphInstanc
 			return nil, err
 		}
 
-		var msgFlags lnwire.ChanUpdateMsgFlags
-		if testChannel.Node1.MaxHTLC != 0 {
-			msgFlags = 1
-		}
-		edgePolicy := &channeldb.ChannelEdgePolicy{
-			SigBytes:                  testSig.Serialize(),
-			MessageFlags:              msgFlags,
-			ChannelFlags:              0,
-			ChannelID:                 channelID,
-			LastUpdate:                testTime,
-			TimeLockDelta:             testChannel.Node1.Expiry,
-			MinHTLC:                   testChannel.Node1.MinHTLC,
-			MaxHTLC:                   testChannel.Node1.MaxHTLC,
-			FeeBaseMSat:               testChannel.Node1.FeeBaseMsat,
-			FeeProportionalMillionths: testChannel.Node1.FeeRate,
-		}
-		if err := graph.UpdateEdgePolicy(edgePolicy); err != nil {
-			return nil, err
-		}
-
-		msgFlags = 0
-		if testChannel.Node2.MaxHTLC != 0 {
-			msgFlags = 1
-		}
-		edgePolicy = &channeldb.ChannelEdgePolicy{
-			SigBytes:                  testSig.Serialize(),
-			MessageFlags:              msgFlags,
-			ChannelFlags:              lnwire.ChanUpdateDirection,
-			ChannelID:                 channelID,
-			LastUpdate:                testTime,
-			TimeLockDelta:             testChannel.Node2.Expiry,
-			MinHTLC:                   testChannel.Node2.MinHTLC,
-			MaxHTLC:                   testChannel.Node2.MaxHTLC,
-			FeeBaseMSat:               testChannel.Node2.FeeBaseMsat,
-			FeeProportionalMillionths: testChannel.Node2.FeeRate,
+		if testChannel.Node1.testChannelPolicy != nil {
+			var msgFlags lnwire.ChanUpdateMsgFlags
+			if testChannel.Node1.MaxHTLC != 0 {
+				msgFlags |= lnwire.ChanUpdateOptionMaxHtlc
+			}
+			var channelFlags lnwire.ChanUpdateChanFlags
+			if testChannel.Node1.Disabled {
+				channelFlags |= lnwire.ChanUpdateDisabled
+			}
+			edgePolicy := &channeldb.ChannelEdgePolicy{
+				SigBytes:                  testSig.Serialize(),
+				MessageFlags:              msgFlags,
+				ChannelFlags:              channelFlags,
+				ChannelID:                 channelID,
+				LastUpdate:                testChannel.Node1.LastUpdate,
+				TimeLockDelta:             testChannel.Node1.Expiry,
+				MinHTLC:                   testChannel.Node1.MinHTLC,
+				MaxHTLC:                   testChannel.Node1.MaxHTLC,
+				FeeBaseMSat:               testChannel.Node1.FeeBaseMsat,
+				FeeProportionalMillionths: testChannel.Node1.FeeRate,
+			}
+			if err := graph.UpdateEdgePolicy(edgePolicy); err != nil {
+				return nil, err
+			}
 		}
 
-		if err := graph.UpdateEdgePolicy(edgePolicy); err != nil {
-			return nil, err
+		if testChannel.Node2.testChannelPolicy != nil {
+			var msgFlags lnwire.ChanUpdateMsgFlags
+			if testChannel.Node2.MaxHTLC != 0 {
+				msgFlags |= lnwire.ChanUpdateOptionMaxHtlc
+			}
+			channelFlags := lnwire.ChanUpdateDirection
+			if testChannel.Node2.Disabled {
+				channelFlags |= lnwire.ChanUpdateDisabled
+			}
+			edgePolicy := &channeldb.ChannelEdgePolicy{
+				SigBytes:                  testSig.Serialize(),
+				MessageFlags:              msgFlags,
+				ChannelFlags:              channelFlags,
+				ChannelID:                 channelID,
+				LastUpdate:                testChannel.Node2.LastUpdate,
+				TimeLockDelta:             testChannel.Node2.Expiry,
+				MinHTLC:                   testChannel.Node2.MinHTLC,
+				MaxHTLC:                   testChannel.Node2.MaxHTLC,
+				FeeBaseMSat:               testChannel.Node2.FeeBaseMsat,
+				FeeProportionalMillionths: testChannel.Node2.FeeRate,
+			}
+			if err := graph.UpdateEdgePolicy(edgePolicy); err != nil {
+				return nil, err
+			}
 		}
 
 		channelID++
@@ -595,7 +612,7 @@ func TestFindLowestFeePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to fetch source node: %v", err)
 	}
-	sourceVertex := Vertex(sourceNode.PubKeyBytes)
+	sourceVertex := route.Vertex(sourceNode.PubKeyBytes)
 
 	const (
 		startingHeight = 100
@@ -632,8 +649,8 @@ func TestFindLowestFeePath(t *testing.T) {
 	}
 }
 
-func getAliasFromPubKey(pubKey Vertex,
-	aliases map[string]Vertex) string {
+func getAliasFromPubKey(pubKey route.Vertex,
+	aliases map[string]route.Vertex) string {
 
 	for alias, key := range aliases {
 		if key == pubKey {
@@ -735,7 +752,7 @@ func testBasicGraphPathFindingCase(t *testing.T, graphInstance *testGraphInstanc
 	if err != nil {
 		t.Fatalf("unable to fetch source node: %v", err)
 	}
-	sourceVertex := Vertex(sourceNode.PubKeyBytes)
+	sourceVertex := route.Vertex(sourceNode.PubKeyBytes)
 
 	const (
 		startingHeight = 100
@@ -790,19 +807,22 @@ func testBasicGraphPathFindingCase(t *testing.T, graphInstance *testGraphInstanc
 	// Next, we'll assert that the "next hop" field in each route payload
 	// properly points to the channel ID that the HTLC should be forwarded
 	// along.
-	hopPayloads := route.ToHopPayloads()
-	if len(hopPayloads) != expectedHopCount {
+	sphinxPath, err := route.ToSphinxPath()
+	if err != nil {
+		t.Fatalf("unable to make sphinx path: %v", err)
+	}
+	if sphinxPath.TrueRouteLength() != expectedHopCount {
 		t.Fatalf("incorrect number of hop payloads: expected %v, got %v",
-			expectedHopCount, len(hopPayloads))
+			expectedHopCount, sphinxPath.TrueRouteLength())
 	}
 
 	// Hops should point to the next hop
 	for i := 0; i < len(expectedHops)-1; i++ {
 		var expectedHop [8]byte
 		binary.BigEndian.PutUint64(expectedHop[:], route.Hops[i+1].ChannelID)
-		if !bytes.Equal(hopPayloads[i].NextAddress[:], expectedHop[:]) {
+		if !bytes.Equal(sphinxPath[i].HopData.NextAddress[:], expectedHop[:]) {
 			t.Fatalf("first hop has incorrect next hop: expected %x, got %x",
-				expectedHop[:], hopPayloads[i].NextAddress)
+				expectedHop[:], sphinxPath[i].HopData.NextAddress)
 		}
 	}
 
@@ -810,9 +830,9 @@ func testBasicGraphPathFindingCase(t *testing.T, graphInstance *testGraphInstanc
 	// to indicate it's the exit hop.
 	var exitHop [8]byte
 	lastHopIndex := len(expectedHops) - 1
-	if !bytes.Equal(hopPayloads[lastHopIndex].NextAddress[:], exitHop[:]) {
+	if !bytes.Equal(sphinxPath[lastHopIndex].HopData.NextAddress[:], exitHop[:]) {
 		t.Fatalf("first hop has incorrect next hop: expected %x, got %x",
-			exitHop[:], hopPayloads[lastHopIndex].NextAddress)
+			exitHop[:], sphinxPath[lastHopIndex].HopData.NextAddress)
 	}
 
 	var expectedTotalFee lnwire.MilliSatoshi
@@ -904,7 +924,7 @@ func TestPathFindingWithAdditionalEdges(t *testing.T) {
 		TimeLockDelta:             9,
 	}
 
-	additionalEdges := map[Vertex][]*channeldb.ChannelEdgePolicy{
+	additionalEdges := map[route.Vertex][]*channeldb.ChannelEdgePolicy{
 		graph.aliasMap["songoku"]: {songokuToDoge},
 	}
 
@@ -990,7 +1010,7 @@ func TestKShortestPathFinding(t *testing.T) {
 func TestNewRoute(t *testing.T) {
 
 	var sourceKey [33]byte
-	sourceVertex := Vertex(sourceKey)
+	sourceVertex := route.Vertex(sourceKey)
 
 	const (
 		startingHeight = 100
@@ -1132,7 +1152,7 @@ func TestNewRoute(t *testing.T) {
 		}}
 
 	for _, testCase := range testCases {
-		assertRoute := func(t *testing.T, route *Route) {
+		assertRoute := func(t *testing.T, route *route.Route) {
 			if route.TotalAmount != testCase.expectedTotalAmount {
 				t.Errorf("Expected total amount is be %v"+
 					", but got %v instead",
@@ -1278,7 +1298,7 @@ func TestPathNotAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to parse bytes: %v", err)
 	}
-	var unknownNode Vertex
+	var unknownNode route.Vertex
 	copy(unknownNode[:], unknownNodeBytes)
 
 	_, err = findPath(
@@ -1836,7 +1856,6 @@ func TestPathFindSpecExample(t *testing.T) {
 	}
 
 	// We'll now request a route from A -> B -> C.
-	ctx.router.routeCache = make(map[routeTuple][]*Route)
 	routes, err = ctx.router.FindRoutes(
 		source.PubKeyBytes, carol, amt, noRestrictions, 100,
 	)
@@ -1966,7 +1985,7 @@ func TestPathFindSpecExample(t *testing.T) {
 	}
 }
 
-func assertExpectedPath(t *testing.T, aliasMap map[string]Vertex,
+func assertExpectedPath(t *testing.T, aliasMap map[string]route.Vertex,
 	path []*channeldb.ChannelEdgePolicy, nodeAliases ...string) {
 
 	if len(path) != len(nodeAliases) {
@@ -1986,9 +2005,9 @@ func assertExpectedPath(t *testing.T, aliasMap map[string]Vertex,
 func TestNewRouteFromEmptyHops(t *testing.T) {
 	t.Parallel()
 
-	var source Vertex
-	_, err := NewRouteFromHops(0, 0, source, []*Hop{})
-	if err != ErrNoRouteHopsProvided {
+	var source route.Vertex
+	_, err := route.NewRouteFromHops(0, 0, source, []*route.Hop{})
+	if err != route.ErrNoRouteHopsProvided {
 		t.Fatalf("expected empty hops error: instead got: %v", err)
 	}
 }
@@ -2038,7 +2057,7 @@ func TestRestrictOutgoingChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to fetch source node: %v", err)
 	}
-	sourceVertex := Vertex(sourceNode.PubKeyBytes)
+	sourceVertex := route.Vertex(sourceNode.PubKeyBytes)
 
 	const (
 		startingHeight = 100
@@ -2132,10 +2151,10 @@ func testCltvLimit(t *testing.T, limit uint32, expectedChannel uint64) {
 	if err != nil {
 		t.Fatalf("unable to fetch source node: %v", err)
 	}
-	sourceVertex := Vertex(sourceNode.PubKeyBytes)
+	sourceVertex := route.Vertex(sourceNode.PubKeyBytes)
 
 	ignoredEdges := make(map[EdgeLocator]struct{})
-	ignoredVertexes := make(map[Vertex]struct{})
+	ignoredVertexes := make(map[route.Vertex]struct{})
 
 	paymentAmt := lnwire.NewMSatFromSatoshis(100)
 	target := testGraphInstance.aliasMap["target"]

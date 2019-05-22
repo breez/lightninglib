@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/breez/lightninglib/lnwallet"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
@@ -77,11 +76,6 @@ type Config struct {
 	// the wallet and do things such as rescanning, sending transactions,
 	// notifications for received funds, etc.
 	ChainSource chain.Interface
-
-	// FeeEstimator is an instance of the fee estimator interface which
-	// will be used by the wallet to dynamically set transaction fees when
-	// crafting transactions.
-	FeeEstimator lnwallet.FeeEstimator
 
 	// NetParams is the net parameters for the target chain.
 	NetParams *chaincfg.Params

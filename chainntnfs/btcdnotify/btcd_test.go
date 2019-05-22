@@ -7,10 +7,10 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/integration/rpctest"
 	"github.com/breez/lightninglib/chainntnfs"
 	"github.com/breez/lightninglib/channeldb"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/integration/rpctest"
 )
 
 var (

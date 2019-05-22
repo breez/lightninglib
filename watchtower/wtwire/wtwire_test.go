@@ -8,10 +8,10 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/watchtower/wtwire"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func randRawFeatureVector(r *rand.Rand) *lnwire.RawFeatureVector {

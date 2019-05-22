@@ -19,7 +19,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
@@ -27,6 +26,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	// Blank import to set up profiling HTTP handlers.
+	_ "net/http/pprof"
 
 	"gopkg.in/macaroon-bakery.v2/bakery"
 
@@ -161,10 +163,10 @@ func LndMain(args []string, deps Dependencies) error {
 	case cfg.Bitcoin.MainNet || cfg.Litecoin.MainNet:
 		network = "mainnet"
 
-	case cfg.Bitcoin.SimNet:
+	case cfg.Bitcoin.SimNet || cfg.Litecoin.SimNet:
 		network = "simnet"
 
-	case cfg.Bitcoin.RegTest:
+	case cfg.Bitcoin.RegTest || cfg.Litecoin.RegTest:
 		network = "regtest"
 	}
 

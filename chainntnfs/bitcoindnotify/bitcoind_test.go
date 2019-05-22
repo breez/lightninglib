@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/breez/lightninglib/chainntnfs"
+	"github.com/breez/lightninglib/channeldb"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/integration/rpctest"
 	"github.com/btcsuite/btcwallet/chain"
-	"github.com/breez/lightninglib/chainntnfs"
-	"github.com/breez/lightninglib/channeldb"
 )
 
 var (

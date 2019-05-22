@@ -7,12 +7,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcd/wire"
-	"github.com/btcsuite/btcutil"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/breez/lightninglib/input"
 	"github.com/breez/lightninglib/keychain"
 	"github.com/breez/lightninglib/lnwallet"
@@ -21,6 +15,12 @@ import (
 	"github.com/breez/lightninglib/watchtower/wtdb"
 	"github.com/breez/lightninglib/watchtower/wtmock"
 	"github.com/breez/lightninglib/watchtower/wtpolicy"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const csvDelay uint32 = 144

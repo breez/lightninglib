@@ -3,11 +3,8 @@ package contractcourt
 import (
 	"bytes"
 	"crypto/sha256"
-	"math"
-	"math/rand"
-	"reflect"
+	"fmt"
 	"testing"
-	"testing/quick"
 	"time"
 
 	"github.com/breez/lightninglib/chainntnfs"
@@ -228,13 +225,31 @@ func TestChainWatcherRemoteUnilateralClosePendingCommit(t *testing.T) {
 	}
 }
 
-// dlpTestCase is a speical struct that we'll use to generate randomized test
+// dlpTestCase is a special struct that we'll use to generate randomized test
 // cases for the main TestChainWatcherDataLossProtect test. This struct has a
 // special Generate method that will generate a random state number, and a
 // broadcast state number which is greater than that state number.
 type dlpTestCase struct {
 	BroadcastStateNum uint8
 	NumUpdates        uint8
+}
+
+func executeStateTransitions(t *testing.T, htlcAmount lnwire.MilliSatoshi,
+	aliceChannel, bobChannel *lnwallet.LightningChannel,
+	numUpdates uint8) error {
+
+	for i := 0; i < int(numUpdates); i++ {
+		addFakeHTLC(
+			t, htlcAmount, uint64(i), aliceChannel, bobChannel,
+		)
+
+		err := lnwallet.ForceStateTransition(aliceChannel, bobChannel)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // TestChainWatcherDataLossProtect tests that if we've lost data (and are
@@ -254,7 +269,7 @@ func TestChainWatcherDataLossProtect(t *testing.T) {
 	// was broadcast, while numUpdates is the actual number of updates
 	// we'll execute. Both of these will be random 8-bit values generated
 	// by testing/quick.
-	dlpScenario := func(testCase dlpTestCase) bool {
+	dlpScenario := func(t *testing.T, testCase dlpTestCase) bool {
 		// First, we'll create two channels which already have
 		// established a commitment contract between themselves.
 		aliceChannel, bobChannel, cleanUp, err := lnwallet.CreateTestChannels()
@@ -294,19 +309,13 @@ func TestChainWatcherDataLossProtect(t *testing.T) {
 		// new HTLC to add to the commitment, and then lock in a state
 		// transition.
 		const htlcAmt = 1000
-		for i := 0; i < int(testCase.NumUpdates); i++ {
-			addFakeHTLC(
-				t, 1000, uint64(i), aliceChannel, bobChannel,
-			)
-
-			err := lnwallet.ForceStateTransition(
-				aliceChannel, bobChannel,
-			)
-			if err != nil {
-				t.Errorf("unable to trigger state "+
-					"transition: %v", err)
-				return false
-			}
+		err = executeStateTransitions(
+			t, htlcAmt, aliceChannel, bobChannel, testCase.NumUpdates,
+		)
+		if err != nil {
+			t.Errorf("unable to trigger state "+
+				"transition: %v", err)
+			return false
 		}
 
 		// We'll request a new channel event subscription from Alice's
@@ -369,43 +378,195 @@ func TestChainWatcherDataLossProtect(t *testing.T) {
 		}
 	}
 
-	// For our first scenario, we'll ensure that if we're on state 1, and
-	// the remote party broadcasts state 2 and we don't have a pending
-	// commit for them, then we'll properly detect this as a DLP scenario.
-	if !dlpScenario(dlpTestCase{
-		BroadcastStateNum: 2,
-		NumUpdates:        1,
-	}) {
-		t.Fatalf("DLP test case failed at state 1!")
+	testCases := []dlpTestCase{
+		// For our first scenario, we'll ensure that if we're on state 1,
+		// and the remote party broadcasts state 2 and we don't have a
+		// pending commit for them, then we'll properly detect this as a
+		// DLP scenario.
+		{
+			BroadcastStateNum: 2,
+			NumUpdates:        1,
+		},
+
+		// We've completed a single update, but the remote party broadcasts
+		// a state that's 5 states byeond our best known state. We've lost
+		// data, but only partially, so we should enter a DLP secnario.
+		{
+			BroadcastStateNum: 6,
+			NumUpdates:        1,
+		},
+
+		// Similar to the case above, but we've done more than one
+		// update.
+		{
+			BroadcastStateNum: 6,
+			NumUpdates:        3,
+		},
+
+		// We've done zero updates, but our channel peer broadcasts a
+		// state beyond our knowledge.
+		{
+			BroadcastStateNum: 10,
+			NumUpdates:        0,
+		},
+	}
+	for _, testCase := range testCases {
+		testName := fmt.Sprintf("num_updates=%v,broadcast_state_num=%v",
+			testCase.NumUpdates, testCase.BroadcastStateNum)
+
+		testCase := testCase
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			if !dlpScenario(t, testCase) {
+				t.Fatalf("test %v failed", testName)
+			}
+		})
+	}
+}
+
+// TestChainWatcherLocalForceCloseDetect tests we're able to always detect our
+// commitment output based on only the outputs present on the transaction.
+func TestChainWatcherLocalForceCloseDetect(t *testing.T) {
+	t.Parallel()
+
+	// localForceCloseScenario is the primary test we'll use to execut eout
+	// table driven tests. We'll assert that for any number of state
+	// updates, and if the commitment transaction has our output or not,
+	// we're able to properly detect a local force close.
+	localForceCloseScenario := func(t *testing.T, numUpdates uint8,
+		remoteOutputOnly, localOutputOnly bool) bool {
+
+		// First, we'll create two channels which already have
+		// established a commitment contract between themselves.
+		aliceChannel, bobChannel, cleanUp, err := lnwallet.CreateTestChannels()
+		if err != nil {
+			t.Fatalf("unable to create test channels: %v", err)
+		}
+		defer cleanUp()
+
+		// With the channels created, we'll now create a chain watcher
+		// instance which will be watching for any closes of Alice's
+		// channel.
+		aliceNotifier := &mockNotifier{
+			spendChan: make(chan *chainntnfs.SpendDetail),
+		}
+		aliceChainWatcher, err := newChainWatcher(chainWatcherConfig{
+			chanState:           aliceChannel.State(),
+			notifier:            aliceNotifier,
+			signer:              aliceChannel.Signer,
+			extractStateNumHint: lnwallet.GetStateNumHint,
+		})
+		if err != nil {
+			t.Fatalf("unable to create chain watcher: %v", err)
+		}
+		if err := aliceChainWatcher.Start(); err != nil {
+			t.Fatalf("unable to start chain watcher: %v", err)
+		}
+		defer aliceChainWatcher.Stop()
+
+		// We'll execute a number of state transitions based on the
+		// randomly selected number from testing/quick. We do this to
+		// get more coverage of various state hint encodings beyond 0
+		// and 1.
+		const htlcAmt = 1000
+		err = executeStateTransitions(
+			t, htlcAmt, aliceChannel, bobChannel, numUpdates,
+		)
+		if err != nil {
+			t.Errorf("unable to trigger state "+
+				"transition: %v", err)
+			return false
+		}
+
+		// We'll request a new channel event subscription from Alice's
+		// chain watcher so we can be notified of our fake close below.
+		chanEvents := aliceChainWatcher.SubscribeChannelEvents()
+
+		// Next, we'll obtain Alice's commitment transaction and
+		// trigger a force close. This should cause her to detect a
+		// local force close, and dispatch a local close event.
+		aliceCommit := aliceChannel.State().LocalCommitment.CommitTx
+
+		// Since this is Alice's commitment, her output is always first
+		// since she's the one creating the HTLCs (lower balance). In
+		// order to simulate the commitment only having the remote
+		// party's output, we'll remove Alice's output.
+		if remoteOutputOnly {
+			aliceCommit.TxOut = aliceCommit.TxOut[1:]
+		}
+		if localOutputOnly {
+			aliceCommit.TxOut = aliceCommit.TxOut[:1]
+		}
+
+		aliceTxHash := aliceCommit.TxHash()
+		aliceSpend := &chainntnfs.SpendDetail{
+			SpenderTxHash: &aliceTxHash,
+			SpendingTx:    aliceCommit,
+		}
+		aliceNotifier.spendChan <- aliceSpend
+
+		// We should get a local force close event from Alice as she
+		// should be able to detect the close based on the commitment
+		// outputs.
+		select {
+		case <-chanEvents.LocalUnilateralClosure:
+			return true
+
+		case <-time.After(time.Second * 5):
+			t.Errorf("didn't get local for close for state #%v",
+				numUpdates)
+			return false
+		}
 	}
 
-	// For the remainder of the tests, we'll perform 10 iterations with
-	// random values. We limit this number as set up of each test can take
-	// time, and also it doing up to 255 state transitions may cause the
-	// test to hang for a long time.
-	//
-	// TODO(roasbeef): speed up execution
-	err := quick.Check(dlpScenario, &quick.Config{
-		MaxCount: 10,
-		Values: func(v []reflect.Value, rand *rand.Rand) {
-			// stateNum will be the random number of state updates
-			// we execute during the scenario.
-			stateNum := uint8(rand.Int31())
-
-			// From this state number, we'll draw a random number
-			// between the state and 255, ensuring that it' at
-			// least one state beyond the target stateNum.
-			broadcastRange := rand.Int31n(int32(math.MaxUint8 - stateNum))
-			broadcastNum := uint8(stateNum + 1 + uint8(broadcastRange))
-
-			testCase := dlpTestCase{
-				BroadcastStateNum: broadcastNum,
-				NumUpdates:        stateNum,
-			}
-			v[0] = reflect.ValueOf(testCase)
+	// For our test cases, we'll ensure that we test having a remote output
+	// present and absent with non or some number of updates in the channel.
+	testCases := []struct {
+		numUpdates       uint8
+		remoteOutputOnly bool
+		localOutputOnly  bool
+	}{
+		{
+			numUpdates:       0,
+			remoteOutputOnly: true,
 		},
-	})
-	if err != nil {
-		t.Fatalf("DLP test case failed: %v", err)
+		{
+			numUpdates:       0,
+			remoteOutputOnly: false,
+		},
+		{
+			numUpdates:      0,
+			localOutputOnly: true,
+		},
+		{
+			numUpdates:       20,
+			remoteOutputOnly: false,
+		},
+		{
+			numUpdates:       20,
+			remoteOutputOnly: true,
+		},
+		{
+			numUpdates:      20,
+			localOutputOnly: true,
+		},
+	}
+	for _, testCase := range testCases {
+		testName := fmt.Sprintf(
+			"num_updates=%v,remote_output=%v,local_output=%v",
+			testCase.numUpdates, testCase.remoteOutputOnly,
+			testCase.localOutputOnly,
+		)
+
+		testCase := testCase
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			localForceCloseScenario(
+				t, testCase.numUpdates, testCase.remoteOutputOnly,
+				testCase.localOutputOnly,
+			)
+		})
 	}
 }

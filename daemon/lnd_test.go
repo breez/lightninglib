@@ -576,10 +576,20 @@ func calcStaticFee(numHTLCs int) btcutil.Amount {
 func completePaymentRequests(ctx context.Context, client lnrpc.LightningClient,
 	paymentRequests []string, awaitResponse bool) error {
 
-	ctx, cancel := context.WithCancel(ctx)
+	// We start by getting the current state of the client's channels. This
+	// is needed to ensure the payments actually have been committed before
+	// we return.
+	ctxt, _ := context.WithTimeout(ctx, defaultTimeout)
+	req := &lnrpc.ListChannelsRequest{}
+	listResp, err := client.ListChannels(ctxt, req)
+	if err != nil {
+		return err
+	}
+
+	ctxc, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	payStream, err := client.SendPayment(ctx)
+	payStream, err := client.SendPayment(ctxc)
 	if err != nil {
 		return err
 	}
@@ -605,11 +615,40 @@ func completePaymentRequests(ctx context.Context, client lnrpc.LightningClient,
 					resp.PaymentError)
 			}
 		}
-	} else {
-		// We are not waiting for feedback in the form of a response, but we
-		// should still wait long enough for the server to receive and handle
-		// the send before cancelling the request.
-		time.Sleep(200 * time.Millisecond)
+
+		return nil
+	}
+
+	// We are not waiting for feedback in the form of a response, but we
+	// should still wait long enough for the server to receive and handle
+	// the send before cancelling the request. We wait for the number of
+	// updates to one of our channels has increased before we return.
+	err = lntest.WaitPredicate(func() bool {
+		ctxt, _ = context.WithTimeout(ctx, defaultTimeout)
+		newListResp, err := client.ListChannels(ctxt, req)
+		if err != nil {
+			return false
+		}
+
+		for _, c1 := range listResp.Channels {
+			for _, c2 := range newListResp.Channels {
+				if c1.ChannelPoint != c2.ChannelPoint {
+					continue
+				}
+
+				// If this channel has an increased numbr of
+				// updates, we assume the payments are
+				// committed, and we can return.
+				if c2.NumUpdates > c1.NumUpdates {
+					return true
+				}
+			}
+		}
+
+		return false
+	}, time.Second*15)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -3483,13 +3522,10 @@ func testSphinxReplayPersistence(net *lntest.NetworkHarness, t *harnessTest) {
 
 	// Construct the response we expect after sending a duplicate packet
 	// that fails due to sphinx replay detection.
-	replayErr := fmt.Sprintf("unable to route payment to destination: "+
-		"TemporaryChannelFailure: unable to de-obfuscate onion failure, "+
-		"htlc with hash(%x): unable to retrieve onion failure",
-		invoiceResp.RHash)
-
-	if resp.PaymentError != replayErr {
-		t.Fatalf("received payment error: %v", resp.PaymentError)
+	replayErr := "TemporaryChannelFailure"
+	if !strings.Contains(resp.PaymentError, replayErr) {
+		t.Fatalf("received payment error: %v, expected %v",
+			resp.PaymentError, replayErr)
 	}
 
 	// Since the payment failed, the balance should still be left
@@ -4625,7 +4661,7 @@ func testSendToRouteErrorPropagation(net *lntest.NetworkHarness, t *harnessTest)
 }
 
 // testUnannouncedChannels checks unannounced channels are not returned by
-// describeGraph RPC request unless explicity asked for.
+// describeGraph RPC request unless explicitly asked for.
 func testUnannouncedChannels(net *lntest.NetworkHarness, t *harnessTest) {
 	ctxb := context.Background()
 
@@ -7931,7 +7967,7 @@ func testDataLossProtection(net *lntest.NetworkHarness, t *harnessTest) {
 	// the channel, but it will already be closed. Carol should resend the
 	// information Dave needs to sweep his funds.
 	if err := restartDave(); err != nil {
-		t.Fatalf("unabel to restart Eve: %v", err)
+		t.Fatalf("unable to restart Eve: %v", err)
 	}
 
 	// Dave should sweep his funds.
@@ -7945,16 +7981,25 @@ func testDataLossProtection(net *lntest.NetworkHarness, t *harnessTest) {
 	mineBlocks(t, net, 1, 1)
 	assertNodeNumChannels(t, dave, 0)
 
-	ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
-	daveBalResp, err := dave.WalletBalance(ctxt, balReq)
-	if err != nil {
-		t.Fatalf("unable to get dave's balance: %v", err)
-	}
+	err = lntest.WaitNoError(func() error {
+		ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
+		daveBalResp, err := dave.WalletBalance(ctxt, balReq)
+		if err != nil {
+			return fmt.Errorf("unable to get dave's balance: %v",
+				err)
+		}
 
-	daveBalance := daveBalResp.ConfirmedBalance
-	if daveBalance <= daveStartingBalance {
-		t.Fatalf("expected dave to have balance above %d, intead had %v",
-			daveStartingBalance, daveBalance)
+		daveBalance := daveBalResp.ConfirmedBalance
+		if daveBalance <= daveStartingBalance {
+			return fmt.Errorf("expected dave to have balance "+
+				"above %d, intead had %v", daveStartingBalance,
+				daveBalance)
+		}
+
+		return nil
+	}, time.Second*15)
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -9418,7 +9463,8 @@ func testMultiHopHtlcLocalTimeout(net *lntest.NetworkHarness, t *harnessTest) {
 
 	// We'll now mine enough blocks to trigger Bob's broadcast of his
 	// commitment transaction due to the fact that the HTLC is about to
-	// timeout.
+	// timeout. With the default outgoing broadcast delta of zero, this will
+	// be the same height as the htlc expiry height.
 	numBlocks := uint32(finalCltvDelta - defaultOutgoingBroadcastDelta)
 	if _, err := net.Miner.Node.Generate(numBlocks); err != nil {
 		t.Fatalf("unable to generate blocks: %v", err)
@@ -9455,8 +9501,9 @@ func testMultiHopHtlcLocalTimeout(net *lntest.NetworkHarness, t *harnessTest) {
 		t.Fatalf("htlc mismatch: %v", predErr)
 	}
 
-	// We'll mine defaultCSV blocks in order to generate the sweep transaction
-	// of Bob's funding output.
+	// We'll mine defaultCSV blocks in order to generate the sweep
+	// transaction of Bob's funding output. This will also bring us to the
+	// maturity height of the htlc tx output.
 	if _, err := net.Miner.Node.Generate(defaultCSV); err != nil {
 		t.Fatalf("unable to generate blocks: %v", err)
 	}
@@ -9464,15 +9511,6 @@ func testMultiHopHtlcLocalTimeout(net *lntest.NetworkHarness, t *harnessTest) {
 	_, err = waitForTxInMempool(net.Miner.Node, minerMempoolTimeout)
 	if err != nil {
 		t.Fatalf("unable to find bob's funding output sweep tx: %v", err)
-	}
-
-	// We'll now mine the remaining blocks to cause the HTLC itself to
-	// timeout.
-	_, err = net.Miner.Node.Generate(
-		defaultOutgoingBroadcastDelta - defaultCSV,
-	)
-	if err != nil {
-		t.Fatalf("unable to generate blocks: %v", err)
 	}
 
 	// The second layer HTLC timeout transaction should now have been
@@ -13044,6 +13082,36 @@ func testSweepAllCoins(net *lntest.NetworkHarness, t *harnessTest) {
 		t.Fatalf("unable to send coins to eve: %v", err)
 	}
 
+	// Ensure that we can't send coins to our own Pubkey.
+	info, err := ainz.GetInfo(ctxt, &lnrpc.GetInfoRequest{})
+	if err != nil {
+		t.Fatalf("unable to get node info: %v", err)
+	}
+
+	sweepReq := &lnrpc.SendCoinsRequest{
+		Addr:    info.IdentityPubkey,
+		SendAll: true,
+	}
+	_, err = ainz.SendCoins(ctxt, sweepReq)
+	if err == nil {
+		t.Fatalf("expected SendCoins to users own pubkey to fail")
+	}
+
+	// Ensure that we can't send coins to another users Pubkey.
+	info, err = net.Alice.GetInfo(ctxt, &lnrpc.GetInfoRequest{})
+	if err != nil {
+		t.Fatalf("unable to get node info: %v", err)
+	}
+
+	sweepReq = &lnrpc.SendCoinsRequest{
+		Addr:    info.IdentityPubkey,
+		SendAll: true,
+	}
+	_, err = ainz.SendCoins(ctxt, sweepReq)
+	if err == nil {
+		t.Fatalf("expected SendCoins to Alices pubkey to fail")
+	}
+
 	// With the two coins above mined, we'll now instruct ainz to sweep all
 	// the coins to an external address not under its control.
 	// We will first attempt to send the coins to addresses that are not
@@ -13053,7 +13121,7 @@ func testSweepAllCoins(net *lntest.NetworkHarness, t *harnessTest) {
 
 	// Send coins to a testnet3 address.
 	ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
-	sweepReq := &lnrpc.SendCoinsRequest{
+	sweepReq = &lnrpc.SendCoinsRequest{
 		Addr:    "tb1qfc8fusa98jx8uvnhzavxccqlzvg749tvjw82tg",
 		SendAll: true,
 	}

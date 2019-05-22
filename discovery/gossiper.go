@@ -16,10 +16,12 @@ import (
 	"github.com/breez/lightninglib/lnwire"
 	"github.com/breez/lightninglib/multimutex"
 	"github.com/breez/lightninglib/routing"
+	"github.com/breez/lightninglib/routing/route"
 	"github.com/breez/lightninglib/ticker"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/davecgh/go-spew/spew"
 )
 
@@ -34,12 +36,49 @@ var (
 	ErrGossipSyncerNotFound = errors.New("gossip syncer not found")
 )
 
+// optionalMsgFields is a set of optional message fields that external callers
+// can provide that serve useful when processing a specific network
+// announcement.
+type optionalMsgFields struct {
+	capacity     *btcutil.Amount
+	channelPoint *wire.OutPoint
+}
+
+// apply applies the optional fields within the functional options.
+func (f *optionalMsgFields) apply(optionalMsgFields ...OptionalMsgField) {
+	for _, optionalMsgField := range optionalMsgFields {
+		optionalMsgField(f)
+	}
+}
+
+// OptionalMsgField is a functional option parameter that can be used to provide
+// external information that is not included within a network message but serves
+// useful when processing it.
+type OptionalMsgField func(*optionalMsgFields)
+
+// ChannelCapacity is an optional field that lets the gossiper know of the
+// capacity of a channel.
+func ChannelCapacity(capacity btcutil.Amount) OptionalMsgField {
+	return func(f *optionalMsgFields) {
+		f.capacity = &capacity
+	}
+}
+
+// ChannelPoint is an optional field that lets the gossiper know of the outpoint
+// of a channel.
+func ChannelPoint(op wire.OutPoint) OptionalMsgField {
+	return func(f *optionalMsgFields) {
+		f.channelPoint = &op
+	}
+}
+
 // networkMsg couples a routing related wire message with the peer that
 // originally sent it.
 type networkMsg struct {
-	peer   lnpeer.Peer
-	source *btcec.PublicKey
-	msg    lnwire.Message
+	peer              lnpeer.Peer
+	source            *btcec.PublicKey
+	msg               lnwire.Message
+	optionalMsgFields *optionalMsgFields
 
 	isRemote bool
 
@@ -93,7 +132,7 @@ type Config struct {
 	// that the daemon is connected to. If supplied, the exclude parameter
 	// indicates that the target peer should be excluded from the
 	// broadcast.
-	Broadcast func(skips map[routing.Vertex]struct{},
+	Broadcast func(skips map[route.Vertex]struct{},
 		msg ...lnwire.Message) error
 
 	// NotifyWhenOnline is a function that allows the gossiper to be
@@ -268,12 +307,11 @@ func New(cfg Config, selfKey *btcec.PublicKey) *AuthenticatedGossiper {
 		channelMtx:              multimutex.NewMutex(),
 		recentRejects:           make(map[uint64]struct{}),
 		syncMgr: newSyncManager(&SyncManagerCfg{
-			ChainHash:                 cfg.ChainHash,
-			ChanSeries:                cfg.ChanSeries,
-			RotateTicker:              cfg.RotateTicker,
-			HistoricalSyncTicker:      cfg.HistoricalSyncTicker,
-			ActiveSyncerTimeoutTicker: cfg.ActiveSyncerTimeoutTicker,
-			NumActiveSyncers:          cfg.NumActiveSyncers,
+			ChainHash:            cfg.ChainHash,
+			ChanSeries:           cfg.ChanSeries,
+			RotateTicker:         cfg.RotateTicker,
+			HistoricalSyncTicker: cfg.HistoricalSyncTicker,
+			NumActiveSyncers:     cfg.NumActiveSyncers,
 		}),
 	}
 
@@ -305,7 +343,7 @@ func (d *AuthenticatedGossiper) SynchronizeNode(syncPeer lnpeer.Peer) error {
 	// We'll use this map to ensure we don't send the same node
 	// announcement more than one time as one node may have many channel
 	// anns we'll need to send.
-	nodePubsSent := make(map[routing.Vertex]struct{})
+	nodePubsSent := make(map[route.Vertex]struct{})
 
 	// As peers are expecting channel announcements before node
 	// announcements, we first retrieve the initial announcement, as well as
@@ -573,13 +611,17 @@ func (d *AuthenticatedGossiper) ProcessRemoteAnnouncement(msg lnwire.Message,
 // entire channel announcement and update messages will be re-constructed and
 // broadcast to the rest of the network.
 func (d *AuthenticatedGossiper) ProcessLocalAnnouncement(msg lnwire.Message,
-	source *btcec.PublicKey) chan error {
+	source *btcec.PublicKey, optionalFields ...OptionalMsgField) chan error {
+
+	optionalMsgFields := &optionalMsgFields{}
+	optionalMsgFields.apply(optionalFields...)
 
 	nMsg := &networkMsg{
-		msg:      msg,
-		isRemote: false,
-		source:   source,
-		err:      make(chan error, 1),
+		msg:               msg,
+		optionalMsgFields: optionalMsgFields,
+		isRemote:          false,
+		source:            source,
+		err:               make(chan error, 1),
 	}
 
 	select {
@@ -614,14 +656,14 @@ type msgWithSenders struct {
 	msg lnwire.Message
 
 	// sender is the set of peers that sent us this message.
-	senders map[routing.Vertex]struct{}
+	senders map[route.Vertex]struct{}
 }
 
 // mergeSyncerMap is used to merge the set of senders of a particular message
 // with peers that we have an active GossipSyncer with. We do this to ensure
 // that we don't broadcast messages to any peers that we have active gossip
 // syncers for.
-func (m *msgWithSenders) mergeSyncerMap(syncers map[routing.Vertex]*GossipSyncer) {
+func (m *msgWithSenders) mergeSyncerMap(syncers map[route.Vertex]*GossipSyncer) {
 	for peerPub := range syncers {
 		m.senders[peerPub] = struct{}{}
 	}
@@ -642,7 +684,7 @@ type deDupedAnnouncements struct {
 	channelUpdates map[channelUpdateID]msgWithSenders
 
 	// nodeAnnouncements are identified by the Vertex field.
-	nodeAnnouncements map[routing.Vertex]msgWithSenders
+	nodeAnnouncements map[route.Vertex]msgWithSenders
 
 	sync.Mutex
 }
@@ -664,7 +706,7 @@ func (d *deDupedAnnouncements) reset() {
 	// appropriate key points to the corresponding lnwire.Message.
 	d.channelAnnouncements = make(map[lnwire.ShortChannelID]msgWithSenders)
 	d.channelUpdates = make(map[channelUpdateID]msgWithSenders)
-	d.nodeAnnouncements = make(map[routing.Vertex]msgWithSenders)
+	d.nodeAnnouncements = make(map[route.Vertex]msgWithSenders)
 }
 
 // addMsg adds a new message to the current batch. If the message is already
@@ -682,13 +724,13 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 	// Channel announcements are identified by the short channel id field.
 	case *lnwire.ChannelAnnouncement:
 		deDupKey := msg.ShortChannelID
-		sender := routing.NewVertex(message.source)
+		sender := route.NewVertex(message.source)
 
 		mws, ok := d.channelAnnouncements[deDupKey]
 		if !ok {
 			mws = msgWithSenders{
 				msg:     msg,
-				senders: make(map[routing.Vertex]struct{}),
+				senders: make(map[route.Vertex]struct{}),
 			}
 			mws.senders[sender] = struct{}{}
 
@@ -704,7 +746,7 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 	// Channel updates are identified by the (short channel id,
 	// channelflags) tuple.
 	case *lnwire.ChannelUpdate:
-		sender := routing.NewVertex(message.source)
+		sender := route.NewVertex(message.source)
 		deDupKey := channelUpdateID{
 			msg.ShortChannelID,
 			msg.ChannelFlags,
@@ -730,7 +772,7 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 		if oldTimestamp < msg.Timestamp {
 			mws = msgWithSenders{
 				msg:     msg,
-				senders: make(map[routing.Vertex]struct{}),
+				senders: make(map[route.Vertex]struct{}),
 			}
 
 			// We'll mark the sender of the message in the
@@ -753,8 +795,8 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 	// Node announcements are identified by the Vertex field.  Use the
 	// NodeID to create the corresponding Vertex.
 	case *lnwire.NodeAnnouncement:
-		sender := routing.NewVertex(message.source)
-		deDupKey := routing.Vertex(msg.NodeID)
+		sender := route.NewVertex(message.source)
+		deDupKey := route.Vertex(msg.NodeID)
 
 		// We do the same for node announcements as we did for channel
 		// updates, as they also carry a timestamp.
@@ -773,7 +815,7 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 		if oldTimestamp < msg.Timestamp {
 			mws = msgWithSenders{
 				msg:     msg,
-				senders: make(map[routing.Vertex]struct{}),
+				senders: make(map[route.Vertex]struct{}),
 			}
 
 			mws.senders[sender] = struct{}{}
@@ -1097,7 +1139,7 @@ func (d *AuthenticatedGossiper) InitSyncState(syncPeer lnpeer.Peer) {
 // PruneSyncState is called by outside sub-systems once a peer that we were
 // previously connected to has been disconnected. In this case we can stop the
 // existing GossipSyncer assigned to the peer and free up resources.
-func (d *AuthenticatedGossiper) PruneSyncState(peer routing.Vertex) {
+func (d *AuthenticatedGossiper) PruneSyncState(peer route.Vertex) {
 	d.syncMgr.PruneSyncState(peer)
 }
 
@@ -1604,6 +1646,17 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			AuthProof:        proof,
 			Features:         featureBuf.Bytes(),
 			ExtraOpaqueData:  msg.ExtraOpaqueData,
+		}
+
+		// If there were any optional message fields provided, we'll
+		// include them in its serialized disk representation now.
+		if nMsg.optionalMsgFields != nil {
+			if nMsg.optionalMsgFields.capacity != nil {
+				edge.Capacity = *nMsg.optionalMsgFields.capacity
+			}
+			if nMsg.optionalMsgFields.channelPoint != nil {
+				edge.ChannelPoint = *nMsg.optionalMsgFields.channelPoint
+			}
 		}
 
 		// We will add the edge to the channel router. If the nodes

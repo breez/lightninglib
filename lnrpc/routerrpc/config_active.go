@@ -3,9 +3,9 @@
 package routerrpc
 
 import (
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/breez/lightninglib/macaroons"
 	"github.com/breez/lightninglib/routing"
+	"github.com/btcsuite/btcd/chaincfg"
 )
 
 // Config is the main configuration file for the router RPC server. It contains
